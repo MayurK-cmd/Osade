@@ -1,42 +1,42 @@
 # todo
 
 ## M0 — complete
-The three-process spine, verified end to end against real herdr.
-See `docs/adr/0001-no-embedded-terminal-in-m0.md`.
+The three-process spine, verified end to end against real herdr. See git history and
+`docs/adr/0001-no-embedded-terminal-in-m0.md`.
 
-## M1 — complete
-- [x] Full `deriveStatus` table, rows 1–14, row-by-row and property tested
-- [x] §20.1 lint boundaries wired, with `test/unit/lint-rules.test.ts` proving each one fires
-- [x] Verify plan derived from evidence, `needsReview` until a human confirms (§10.1)
-- [x] Verify runner: `verify` lane, run rows written before the command, head+tail log capping
-- [x] Failure loop closed: first required failure stops the run and the tail goes to the agent
-- [x] Gates: §14.1 list, payload bound at request and re-checked at execution, edit-and-approve
-      re-hashing, 24h expiry that is not a denial, policy downgrades recorded
-- [x] Turn checkpoints + undo, scratch-index capture, stash-and-label, gate over 20 files
-- [x] Gate card at the top of the ledger; verify plan review UI
-- [x] 4 tasks in parallel on one repo, no cross-talk
-- [x] **M1 acceptance**: `implementing → verifying → verify_failed → implementing →
-      awaiting_review` against real herdr, unattended, with the commit blocked until approved
+## M1 — in progress (§21)
+- [x] Full `deriveStatus` table, rows 1–14, with row-by-row and property tests
+- [x] §20.1 lint boundaries wired, and `test/unit/lint-rules.test.ts` proves each one fires
+      (flat config *replaces* rule options, so a duplicated rule name silently drops
+      selectors — that failure is invisible without the test)
+- [x] Verify plan derived from evidence: package.json scripts + lockfile, Cargo, pyproject,
+      go.mod, with CI as corroboration and `needsReview` until a human confirms (§10.1)
+- [x] Verify runner: `verify` lane, one `verify_run` row per step written *before* the command
+      so §6 row 8 reads `verifying`, head+tail log capping, failure-loop prompt (§10.2)
+- [x] Gates: the §14.1 list, payload hashing bound at request **and** re-checked at execution,
+      edit-and-approve re-hashing, 24h expiry that is not a denial, policy downgrades recorded
+      as `policy:<name>`
+- [x] Migration 2: `verify_plan`, `task_lane`, repo verification policy, mirror paths
+- [x] Failure loop wired end to end: first required failure stops the run and the tail goes
+      back into the agent lane
+- [x] Turn checkpoints + undo — scratch-index capture that leaves HEAD and the index untouched,
+      stash-and-label undo, gate over 20 files (12 tests against real git)
+- [x] Gate card at the top of the ledger: approve / deny / edit-and-approve, public writes
+      called out, verification state shown
+- [x] Verify plan review UI — steps with source and evidence, required toggles, and `Run`
+      disabled until the plan is confirmed (§10.1)
+- [x] 4 tasks in parallel on one repo, no cross-talk (found and fixed a repo-registration race)
+- [ ] M1 acceptance run: drive the full implementing → verifying → verify_failed → implementing
+      → awaiting_review loop against real herdr
 
-`pnpm check` — 133 tests. `pnpm test:e2e` — 12 tests, 4 consecutive clean runs.
-
-## Next — M2 (§21)
-- [ ] Issue import → task
-- [ ] Triage task type (§12): reproduce, bisect, failing test — terminates without a PR
-- [ ] scm polling with ETags and rate-limit backoff, fork-aware push, gated PR open
-- [ ] `review_changes_requested` loops back into the agent lane
-
-**M2 acceptance:** import a real issue from a repo you maintain; land one PR through the gate;
-run one triage task that produces a reproduction and no PR.
+**M1 acceptance (§21):** a task runs `implementing → verifying → verify_failed → implementing
+→ awaiting_review` without a human touching it, and the commit is blocked until approved.
 
 ## Carried debt
-- [ ] Electron app builds, typechecks and lints; still not launched against a live daemon
+- [ ] Electron app builds and typechecks; not yet launched end to end against a live daemon
 - [ ] `osade` CLI has no tests
-- [ ] `VerifyRunner` recovers exit codes by echoing a sentinel into the lane. It works against
-      real herdr (proved in the M1 acceptance), but it is still the weakest seam. Revisit if
-      herdr ever exposes a run-and-report method.
-- [ ] `deriveVerifyPlan` records CI config as corroboration but does not parse workflow YAML;
-      §13.2 rates CI the strongest evidence there is, so M3 should read it properly
+- [ ] `VerifyRunner` recovers exit codes by echoing a sentinel into the lane — works, but it is
+      the weakest seam in M1. Revisit if herdr ever exposes a run-and-report method.
 
 ## Release blockers (THIRD-PARTY-NOTICES.md)
 - [ ] fetch herdr's LICENSE + NOTICE from the pinned tag into vendor/herdr/0.8.2-p20/
@@ -48,11 +48,13 @@ run one triage task that produces a reproduction and no PR.
       Windows rather than `Start-Process`, which cannot execute npm shims (PRD-DELTA #13a.2)
 - [ ] `events.subscribe` replays the ring buffer despite starting at `current_sequence()`
       (PRD-DELTA #5)
-- [ ] `worktree.remove` closes the workspace before deleting the directory, so a failed delete
-      leaves an unaddressable workspace and the retry reports `workspace_not_found` instead of
-      the real error (PRD-DELTA #13a.3)
 
 ## Repo hygiene (PRD-DELTA #14)
 - [ ] move herdr's AGENTS.md, .github/ and .agents/skills/herdr-* under backend/
 - [ ] decide backend/: submodule, vendored at a pinned tag, or fetched by script
 - [ ] add a security contact to docs/SECURITY.md, or enable private vulnerability reporting
+
+## Final check (don't touch this, let this be like this)
+- [ ] inside .agents/ write for every coding agent possible - .codex, .claude, .agy, .kiro, .opencode - already .pi/ and .zed/ is there
+- [ ] app works end to end
+- [ ] remove name herdr to osade-backend

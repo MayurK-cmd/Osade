@@ -4,7 +4,11 @@ import { openDb } from './db/index.js';
 import { Checkpoints } from './domain/checkpoints.js';
 import { Gates } from './domain/gates.js';
 import { LaunchTask } from './domain/launch-task.js';
+import { Triage } from './domain/triage.js';
 import { VerifyRunner } from './domain/verify-run.js';
+import { ScmClient } from './scm/client.js';
+import { ScmPoller } from './scm/poller.js';
+import { ScmWrites } from './scm/writes.js';
 import { HerdrClient } from './herdr/client.js';
 import { assertNoDrift, HerdrDriftError } from './herdr/drift-check.js';
 import { HerdrEventSubscriber } from './herdr/event-subscriber.js';
@@ -81,11 +85,27 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
     onWarning(`herdr event subscriber did not start: ${err.message}`);
   });
 
+  // §11 — GitHub. The token reaches us over the spawn handshake and is held in memory only
+  // (§2.1); nothing writes it to disk.
+  const scm = new ScmClient({ token: process.env.OSADE_GITHUB_TOKEN, now: options.now, onWarning });
+  const scmWrites = new ScmWrites(db, scm, gates, { now: options.now, onWarning });
+  const triage = new Triage(db, launcher, { now: options.now });
+  const poller = new ScmPoller(db, scm, {
+    now: options.now,
+    onWarning,
+    // §21 M2 — a reviewer's requested changes go back to the agent, like a verify failure.
+    sendToAgent: (taskId, text) => launcher.prompt(taskId, text, false),
+  });
+  poller.start();
+
   const server = await startDaemonServer({
     db,
     launcher,
     gates,
     verifier,
+    triage,
+    scmWrites,
+    poller,
     port: options.port,
     now: options.now,
     onWarning,
@@ -97,6 +117,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
     ...server,
     dbPath: paths.db,
     async close() {
+      poller.stop();
       subscriber.stop();
       await server.close();
       db.close();

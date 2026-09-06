@@ -12,6 +12,7 @@
     "@osade/contract": "workspace:*",
     "@trpc/server": "^11.18.0",
     "better-sqlite3": "^11.7.0",
+    "octokit": "^4.1.4",
     "ws": "^8.21.3",
     "zod": "^3.24.1"
   },

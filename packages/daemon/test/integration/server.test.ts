@@ -9,7 +9,10 @@ import type { ServerMessage } from '@osade/contract';
 import { openDb, type Db } from '../../src/db/index.js';
 import type { Gates } from '../../src/domain/gates.js';
 import type { LaunchTask } from '../../src/domain/launch-task.js';
+import type { Triage } from '../../src/domain/triage.js';
 import type { VerifyRunner } from '../../src/domain/verify-run.js';
+import type { ScmPoller } from '../../src/scm/poller.js';
+import type { ScmWrites } from '../../src/scm/writes.js';
 import { startDaemonServer, type RunningDaemon } from '../../src/server/index.js';
 
 const NOW = 1_756_000_000_000;
@@ -33,6 +36,9 @@ function seedTask(id = 't1'): void {
 const stubLauncher = {} as LaunchTask;
 const stubGates = {} as Gates;
 const stubVerifier = {} as VerifyRunner;
+const stubTriage = {} as Triage;
+const stubScmWrites = {} as ScmWrites;
+const stubPoller = {} as ScmPoller;
 
 beforeEach(async () => {
   home = mkdtempSync(join(tmpdir(), 'osade-test-'));
@@ -43,6 +49,9 @@ beforeEach(async () => {
     launcher: stubLauncher,
     gates: stubGates,
     verifier: stubVerifier,
+    triage: stubTriage,
+    scmWrites: stubScmWrites,
+    poller: stubPoller,
     now: () => NOW,
   });
 });

@@ -9,7 +9,10 @@ import { deriveStatus } from '../domain/derive-status.js';
 import type { Gates } from '../domain/gates.js';
 import type { LaunchTask } from '../domain/launch-task.js';
 import { deriveVerifyPlan, type VerifyStep } from '../domain/verify-plan.js';
+import type { Triage, TriageKind } from '../domain/triage.js';
 import type { VerifyRunner } from '../domain/verify-run.js';
+import type { ScmPoller } from '../scm/poller.js';
+import type { ScmWrites } from '../scm/writes.js';
 
 /**
  * The tRPC router — OSADE.md §5.5.
@@ -23,6 +26,9 @@ export interface DaemonContext {
   launcher: LaunchTask;
   gates: Gates;
   verifier: VerifyRunner;
+  triage: Triage;
+  scmWrites: ScmWrites;
+  poller: ScmPoller;
   now: () => number;
 }
 
@@ -251,6 +257,111 @@ export const appRouter = t.router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
       }
       return { ok: true as const };
+    }),
+
+  // ── GitHub (§11) and triage (§12) ────────────────────────────────────────
+
+  /** §11.1 — the issue list for a watched repo. Candidates, not tasks. */
+  issueList: t.procedure
+    .input(z.object({ repoId: z.string() }))
+    .output(
+      z.array(
+        z.object({
+          number: z.number().int(),
+          title: z.string(),
+          body: z.string(),
+          url: z.string(),
+        }),
+      ),
+    )
+    .query(({ ctx, input }) => ctx.poller.pollIssues(input.repoId)),
+
+  /**
+   * §12 — import an issue as a task.
+   *
+   * `triage` makes it a task that terminates in an artifact rather than a PR. That path is the
+   * wedge, so it is a first-class option here rather than a mode discovered later.
+   */
+  issueImport: t.procedure
+    .input(
+      z.object({
+        repoPath: z.string().min(1),
+        issue: z.object({
+          number: z.number().int(),
+          title: z.string(),
+          body: z.string(),
+          url: z.string(),
+        }),
+        triage: z
+          .enum(['reproduce', 'bisect', 'failing-test', 'duplicate-check', 'verify-pr-claim'])
+          .optional(),
+      }),
+    )
+    .output(z.object({ taskId: TaskId }))
+    .mutation(async ({ ctx, input }) => {
+      const taskId = await ctx.triage.importIssue(input.repoPath, input.issue, {
+        triage: input.triage as TriageKind | undefined,
+      });
+      return { taskId };
+    }),
+
+  /** Forces a PR refresh without waiting out the 30s interval. */
+  scmRefresh: t.procedure
+    .input(z.object({ taskId: TaskId }))
+    .output(z.object({ refreshed: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const facts = getTaskFacts(ctx.db, input.taskId);
+      const prNumber = facts?.scm?.pr_number;
+      if (prNumber == null) return { refreshed: false };
+      return { refreshed: await ctx.poller.refreshPr(input.taskId, prNumber) };
+    }),
+
+  /**
+   * §11.3 — what would happen if this task opened a PR.
+   *
+   * Shown *before* asking for approval: §11.3 says check permissions before offering the
+   * action, not after.
+   */
+  prPlan: t.procedure
+    .input(z.object({ taskId: TaskId }))
+    .output(
+      z.object({ viaFork: z.boolean(), head: z.string(), target: z.string(), base: z.string() }),
+    )
+    .query(async ({ ctx, input }) => {
+      try {
+        const plan = await ctx.scmWrites.planFork(input.taskId);
+        return {
+          viaFork: plan.viaFork,
+          head: plan.head,
+          target: `${plan.prOwner}/${plan.prRepo}`,
+          base: plan.prBase,
+        };
+      } catch (err) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: (err as Error).message });
+      }
+    }),
+
+  /** §11.2 — requests a gate for opening a PR. Nothing is written until it is approved. */
+  prOpenRequest: t.procedure
+    .input(
+      z.object({
+        taskId: TaskId,
+        title: z.string().min(1),
+        body: z.string(),
+        draft: z.boolean().optional(),
+      }),
+    )
+    .output(z.object({ gateId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const plan = await ctx.scmWrites.planFork(input.taskId);
+      const payload = {
+        title: input.title,
+        body: input.body,
+        head: plan.head,
+        base: plan.prBase,
+        draft: input.draft ?? false,
+      };
+      return { gateId: ctx.scmWrites.requestGate(input.taskId, 'gate.pr_open', payload) };
     }),
 });
 

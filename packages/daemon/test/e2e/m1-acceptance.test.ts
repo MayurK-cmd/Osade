@@ -204,17 +204,32 @@ describe.skipIf(!E2E)('M1 acceptance — the failure loop turns once, for real',
   it('THE LOOP: the failure reached the agent, and the agent fixed it', async () => {
     // `verifier.run` already sent the tail into the agent lane via sendToAgent (§10.2).
     // Nothing below touches the agent — this is the "without a human touching it" clause.
-    await waitFor(
-      () => {
-        try {
-          return readFileSync(join(worktree, 'answer.txt'), 'utf8').trim() === '42';
-        } catch {
-          return false;
-        }
-      },
-      240_000,
-      'the agent to fix the failing test from the verification output alone',
-    );
+    //
+    // This step depends on a real agent choosing to act, so it is the one place in the suite
+    // that can fail for reasons outside Osade. When it does, say which: whether the prompt was
+    // delivered is Osade's problem; what the agent did with it is not.
+    try {
+      await waitFor(
+        () => {
+          try {
+            return readFileSync(join(worktree, 'answer.txt'), 'utf8').trim() === '42';
+          } catch {
+            return false;
+          }
+        },
+        240_000,
+        'the agent to fix the failing test from the verification output alone',
+      );
+    } catch (err) {
+      const transcript = (await launcher.readTranscript(taskId, 120))?.text ?? '(unavailable)';
+      const delivery = warnings.filter((w) => w.includes('verification failure'));
+      throw new Error(
+        `${(err as Error).message}\n\n` +
+          `Delivery warnings: ${delivery.length === 0 ? '(none — the prompt was sent)' : delivery.join('; ')}\n` +
+          `All warnings: ${warnings.join('; ') || '(none)'}\n\n` +
+          `Agent pane, last 120 lines:\n${transcript}`,
+      );
+    }
 
     // …and the agent went back to work when it was told, which is §6 row 11.
     const fact = getAgentFact(db, taskId)!;
