@@ -65,11 +65,45 @@ describe('§10.1 — the plan is derived from evidence, not guesses', () => {
     expect(plan.steps.every((s) => s.required)).toBe(true);
   });
 
-  it('cites CI as corroboration — §13.2 rates it definitionally true', async () => {
-    write('package.json', JSON.stringify({ scripts: { test: 'vitest' } }));
-    write('.github/workflows/ci.yml', 'name: ci\n');
+  it('prefers what CI runs over what a manifest implies — §13.2 rates CI definitionally true', async () => {
+    write('package.json', JSON.stringify({ scripts: { test: 'vitest', lint: 'eslint .' } }));
+    write('pnpm-lock.yaml', '');
+    write(
+      '.github/workflows/ci.yml',
+      [
+        'name: ci',
+        'on:',
+        '  pull_request:',
+        'jobs:',
+        '  check:',
+        '    runs-on: ubuntu-latest',
+        '    steps:',
+        '      - uses: actions/checkout@v4',
+        '      - run: pnpm install --frozen-lockfile',
+        '      - name: unit tests',
+        '        run: pnpm run test',
+        '',
+      ].join('\n'),
+    );
+
     const plan = await deriveVerifyPlan(root);
-    expect(plan.steps[0]!.evidence).toContain('.github/workflows/ci.yml');
+    const test = plan.steps.find((s) => s.cmd === 'pnpm run test')!;
+
+    expect(test.source).toBe('ci');
+    expect(test.evidence).toContain('.github/workflows/ci.yml');
+    // The same check inferred from package.json is not added a second time.
+    expect(plan.steps.filter((s) => s.cmd === 'pnpm run test')).toHaveLength(1);
+    // What CI does not cover still comes from the manifest.
+    expect(plan.steps.find((s) => s.name === 'lint')?.source).toBe('manifest');
+    // Installing dependencies is not a check.
+    expect(plan.steps.some((s) => s.cmd.includes('install'))).toBe(false);
+  });
+
+  it('notes other CI systems as corroboration without pretending to parse them', async () => {
+    write('package.json', JSON.stringify({ scripts: { test: 'vitest' } }));
+    write('Makefile', 'test:\n\tvitest\n');
+    const plan = await deriveVerifyPlan(root);
+    expect(plan.steps[0]!.evidence).toContain('Makefile');
   });
 
   it('build is derived but not required — a failing build gates, a missing one does not', async () => {

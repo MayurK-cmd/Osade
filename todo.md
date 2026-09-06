@@ -28,34 +28,48 @@ awaiting_review` against real herdr, unattended, commit blocked until approved.
       artifact on disk with non-removable agent disclosure
 - [x] `review_changes_requested` loops back into the agent lane, once on the transition
 - [x] PR-open flow in the renderer, showing the fork plan before asking for anything
-- [x] **M2 acceptance** against recorded GitHub: import → gate → PR → poll → review loop, plus
-      a triage task that produces no PR
-
-`pnpm check` — 183 tests. `pnpm test:e2e` — 12 tests.
-
-## The one M2 step that needs you
 - [ ] Run `docs/M2-ACCEPTANCE.md` against a real repo with your own GitHub token. Everything
       Osade owns is proved against a recorded GitHub; what that cannot prove is that GitHub
       behaves as recorded.
 
-## Next — M3, repository skills (§13)
+## M3 — repository skills (§13), built
 The actual novelty. Everything else is assembly.
 
-- [ ] Miner: extract → cluster → verify, three bounded passes, each a separate model call
-- [ ] Evidence enforcement — a convention with zero `convention_evidence` rows is rejected at
-      write time (§13.1 INVARIANT)
-- [ ] Weighted inputs (§13.2): closed-unmerged PRs and `changes_requested` threads rate
-      highest, CI config is definitionally true
-- [ ] `CONTEXT.md` injection per agent, capped at 40 rules and ~2000 tokens
-- [ ] Incremental re-mine, 180-day decay from `active` back to `candidate`
-- [ ] Parse workflow YAML properly — §13.2 rates CI the strongest evidence there is, and
-      `deriveVerifyPlan` currently only notes that CI exists
+- [x] Miner: extract → cluster → verify, three bounded passes, each a separate model call.
+      Every §13.4 threshold is enforced *between* passes — the model proposes, the code decides
+- [x] Evidence enforcement — a convention with zero `convention_evidence` rows is rejected at
+      write time (§13.1 INVARIANT), and a cited URL that was not in the pass's input is dropped
+      before it can become evidence
+- [x] Weighted inputs (§13.2), as code: rejections and `changes_requested` rate highest, CI is
+      definitionally true and needs only one observation
+- [x] `CONTEXT.md` injection per agent, capped at 40 rules and ~2000 tokens, ranked by
+      confidence × recency, overflow reported rather than dropped
+- [x] Incremental re-mine with re-confirmation instead of duplication; 180-day decay from
+      `active` back to `candidate`, run *before* a mine rather than after
+- [x] Parse workflow YAML properly — pull-request workflows become the verify plan, ahead of
+      anything inferred from a manifest; unresolvable steps are reported, never guessed
+      (PRD-DELTA #18)
+- [x] The model port itself (PRD-DELTA #17): Anthropic Messages API, key from the environment
+      and never on disk, mining optional by construction
+- [x] §13.6 instrumentation: `task_injection` records what each launch injected, and the
+      comparison can report that conventions made things worse
+- [x] Candidate/active promotion UI with the evidence beside the toggle (§13.4)
 
-**M3 acceptance (§13.6):** N ≥ 10 comparable tasks with and without injected conventions on
-the same repo; report review rounds to merge and first-round acceptance. **If the number does
-not move, the feature is wrong and should be redesigned, not shipped.**
+- [ ] Run `docs/M3-ACCEPTANCE.md` on a repo with a real review history, with your own keys.
+      **M3 acceptance (§13.6):** N ≥ 10 comparable tasks with and without injected conventions
+      on the same repo. **If the number does not move, the feature is wrong and should be
+      redesigned, not shipped.** Nothing in the test suite can answer this one.
 
 ## Carried debt
+- [ ] Mining has never run against a live GitHub or a live model — every pass is proved against
+      fixtures. The first real run is `docs/M3-ACCEPTANCE.md` step 1
+- [ ] Near-duplicate rule matching is content-word overlap within a category. Deliberately dumb
+      (a fourth model call would have no way to check its work), but it will miss a paraphrase
+      that shares few words with the original
+- [ ] `mineRepo` is a single long-running mutation. A 300-PR first run holds one HTTP request
+      open for minutes; the UI shows no progress until it returns. `mine_run` already carries
+      the bookkeeping to make this a background job with a polled status
+- [ ] §13.4 says re-mine "weekly, or on demand". Only on demand is wired — nothing schedules it
 - [ ] Electron app builds, typechecks and lints; still not launched against a live daemon
 - [ ] `osade` CLI has no tests
 - [ ] `VerifyRunner` recovers exit codes by echoing a sentinel into the lane. Proved against

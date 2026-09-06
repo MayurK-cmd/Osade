@@ -9,6 +9,8 @@ import { VerifyRunner } from './domain/verify-run.js';
 import { ScmClient } from './scm/client.js';
 import { ScmPoller } from './scm/poller.js';
 import { ScmWrites } from './scm/writes.js';
+import { AnthropicModel, hasApiKey } from './knowledge/anthropic-model.js';
+import { Knowledge } from './knowledge/service.js';
 import { HerdrClient } from './herdr/client.js';
 import { assertNoDrift, HerdrDriftError } from './herdr/drift-check.js';
 import { HerdrEventSubscriber } from './herdr/event-subscriber.js';
@@ -98,6 +100,14 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
   });
   poller.start();
 
+  // §13 — the conventions miner. Optional by construction: no model key means no mining, and a
+  // daemon without one serves everything else normally rather than failing to boot.
+  const model = hasApiKey() ? new AnthropicModel({ onWarning }) : null;
+  if (!model) {
+    onInfo('mining is unavailable: no OSADE_ANTHROPIC_API_KEY in the environment');
+  }
+  const knowledge = new Knowledge(db, scm, model, { now: options.now, onWarning });
+
   const server = await startDaemonServer({
     db,
     launcher,
@@ -106,6 +116,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
     triage,
     scmWrites,
     poller,
+    knowledge,
     port: options.port,
     now: options.now,
     onWarning,

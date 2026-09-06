@@ -12,6 +12,8 @@ import {
   type HerdrMethodParams,
 } from '../herdr/client.js';
 import type { HerdrEventSubscriber } from '../herdr/event-subscriber.js';
+import { Conventions } from '../knowledge/conventions.js';
+import { renderContextFile } from '../knowledge/context-file.js';
 import { worktreePathFor } from '../paths.js';
 import { agentEntry, hasCapability } from './agent-catalog.js';
 import type { Checkpoints } from './checkpoints.js';
@@ -177,8 +179,11 @@ export class LaunchTask {
     if (!task) throw new Error(`unknown task ${taskId}`);
 
     const repo = this.#db.prepare('SELECT * FROM repo WHERE id = ?').get(task.repo_id) as {
+      id: string;
       path: string;
       default_agent: string | null;
+      gh_owner: string | null;
+      gh_name: string | null;
     };
 
     const agentId = task.agent_id ?? repo.default_agent ?? this.#defaultAgent;
@@ -243,7 +248,7 @@ export class LaunchTask {
 
       // 5. Render the launch context (§8.2 step 5, §13.5). Always written, because it is the
       //    delivery mechanism whenever system-prompt args are unavailable.
-      const contextPath = await this.#writeContext(task.worktree_path, task.intent, task.base_sha);
+      const contextPath = await this.#writeContext(task, repo);
 
       // 7. Build args from the catalog. herdr picks the executable itself (§8.1).
       const args = this.#agentStartArgs(entry);
@@ -707,28 +712,72 @@ export class LaunchTask {
   /**
    * §8.2 step 5 / §13.5 — render the launch context into the worktree.
    *
-   * Minimal in M0; the conventions miner fills it out in M3, capped at 40 rules and ~2000
-   * tokens because a 200-rule context file is worse than none.
+   * The active conventions for this repo go in here, capped at 40 rules and ~2000 tokens by
+   * `renderContextFile`. A repo that has never been mined simply has no rules section: mining is
+   * a separate, explicit action (§13.4), and launching must never block on it.
    */
-  async #writeContext(worktreePath: string, intent: string, baseSha: string): Promise<string> {
-    const dir = join(worktreePath, '.osade');
+  async #writeContext(
+    task: { id: string; worktree_path: string; intent: string; base_ref: string; base_sha: string },
+    repo: { id: string; path: string; gh_owner: string | null; gh_name: string | null },
+  ): Promise<string> {
+    const dir = join(task.worktree_path, '.osade');
     const path = join(dir, 'CONTEXT.md');
-    const body = [
-      '# Working in this repository through Osade',
-      '',
-      '## What you are working on',
-      `- ${intent}`,
-      `- base: ${baseSha}`,
-      '',
-      '## Rules',
-      '- Work only inside this worktree.',
-      '- Do not push, open a pull request, or comment on GitHub. Those actions are gated and',
-      '  performed by Osade after human approval.',
-      '',
-    ].join('\n');
+
+    const { injected, overflow } = new Conventions(this.#db).forInjection(repo.id);
+    const rendered = renderContextFile({
+      repoSlug:
+        repo.gh_owner && repo.gh_name ? `${repo.gh_owner}/${repo.gh_name}` : basename(repo.path),
+      intent: task.intent,
+      baseRef: task.base_ref,
+      baseSha: task.base_sha,
+      conventions: injected,
+      verifySteps: this.#verifyStepsFor(repo.id),
+      overflow,
+    });
+
+    if (rendered.omitted > 0) {
+      this.#onWarning(
+        `${rendered.omitted} active convention(s) did not fit the context budget and were not injected`,
+      );
+    }
+
+    // §13.6 — instrument it from day one. Which side of the comparison this task falls on is
+    // only knowable now: by the time its PR merges, the repo's conventions will have changed.
+    this.#db
+      .prepare(
+        `INSERT INTO task_injection (task_id, rule_count, omitted, injected_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(task_id) DO UPDATE SET
+           rule_count = excluded.rule_count,
+           omitted = excluded.omitted,
+           injected_at = excluded.injected_at`,
+      )
+      .run(task.id, rendered.included, rendered.omitted, this.#now());
+
     await mkdir(dir, { recursive: true });
-    await writeFile(path, body, 'utf8');
+    await writeFile(path, rendered.body, 'utf8');
     return path;
+  }
+
+  /**
+   * The verification the agent will actually be held to.
+   *
+   * Only a **confirmed** plan is named here. §10.1 is explicit that an inferred command is never
+   * run silently the first time, and telling an agent to satisfy commands that will not run is
+   * the same mistake wearing a different hat — it spends the agent's attention on a guess.
+   */
+  #verifyStepsFor(repoId: string): { name: string; cmd: string }[] {
+    const row = this.#db
+      .prepare('SELECT steps_json, needs_review FROM verify_plan WHERE repo_id = ?')
+      .get(repoId) as { steps_json: string; needs_review: number } | undefined;
+    if (!row || row.needs_review !== 0) return [];
+
+    try {
+      const steps = JSON.parse(row.steps_json) as { name: string; cmd: string }[];
+      return steps.map((s) => ({ name: s.name, cmd: s.cmd }));
+    } catch {
+      return [];
+    }
   }
 
   /**

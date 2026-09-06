@@ -1,7 +1,16 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
-import { TaskId, TaskStatus, TaskView, isNeedsYou } from '@osade/contract';
+import {
+  ConventionImpact,
+  ConventionView,
+  MineResultView,
+  MineStatus,
+  TaskId,
+  TaskStatus,
+  TaskView,
+  isNeedsYou,
+} from '@osade/contract';
 
 import type { Db } from '../db/index.js';
 import { getTask, getTaskFacts, listTaskFacts } from '../db/task-repo.js';
@@ -11,6 +20,7 @@ import type { LaunchTask } from '../domain/launch-task.js';
 import { deriveVerifyPlan, type VerifyStep } from '../domain/verify-plan.js';
 import type { Triage, TriageKind } from '../domain/triage.js';
 import type { VerifyRunner } from '../domain/verify-run.js';
+import type { Knowledge } from '../knowledge/service.js';
 import type { ScmPoller } from '../scm/poller.js';
 import type { ScmWrites } from '../scm/writes.js';
 
@@ -29,6 +39,8 @@ export interface DaemonContext {
   triage: Triage;
   scmWrites: ScmWrites;
   poller: ScmPoller;
+  /** §13 — absent when no model is configured. Mining is optional; everything else is not. */
+  knowledge?: Knowledge | null;
   now: () => number;
 }
 
@@ -363,6 +375,88 @@ export const appRouter = t.router({
       };
       return { gateId: ctx.scmWrites.requestGate(input.taskId, 'gate.pr_open', payload) };
     }),
+
+  // ── §13 repository conventions ─────────────────────────────────────────────
+
+  /** What is known about this repo, and whether more can be learned right now. */
+  mineStatus: t.procedure
+    .input(z.object({ repoId: z.string() }))
+    .output(MineStatus)
+    .query(({ ctx, input }) => {
+      const knowledge = requireKnowledge(ctx);
+      const availability = knowledge.availability(input.repoId);
+      const rules = knowledge.list(input.repoId);
+      return {
+        available: availability.available,
+        reason: availability.reason,
+        running: knowledge.isRunning(input.repoId),
+        lastRun: knowledge.lastRun(input.repoId),
+        activeRules: rules.filter((r) => r.lifecycle === 'active').length,
+        candidateRules: rules.filter((r) => r.lifecycle === 'candidate').length,
+      };
+    }),
+
+  /**
+   * §13.4 — mining is always explicit. It spends GitHub quota and model tokens, so nothing
+   * starts it on its own and no task launch waits on it.
+   */
+  mineRepo: t.procedure
+    .input(z.object({ repoId: z.string(), full: z.boolean().optional() }))
+    .output(MineResultView)
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await requireKnowledge(ctx).mine(input.repoId, { full: input.full });
+      } catch (err) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: (err as Error).message });
+      }
+    }),
+
+  /** §13.6 — the measurable claim. Reports what it measured, including bad news. */
+  conventionImpact: t.procedure
+    .input(z.object({ repoId: z.string() }))
+    .output(ConventionImpact)
+    .query(async ({ ctx, input }) => {
+      try {
+        return await requireKnowledge(ctx).measure(input.repoId);
+      } catch (err) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: (err as Error).message });
+      }
+    }),
+
+  conventionList: t.procedure
+    .input(z.object({ repoId: z.string() }))
+    .output(z.array(ConventionView))
+    .query(({ ctx, input }) => requireKnowledge(ctx).list(input.repoId)),
+
+  /** §13.4 — one-click confirmation. The renderer shows the evidence beside the toggle. */
+  conventionConfirm: t.procedure
+    .input(z.object({ id: z.string() }))
+    .output(z.object({ confirmed: z.boolean() }))
+    .mutation(({ ctx, input }) => ({
+      confirmed: requireKnowledge(ctx).confirm(input.id),
+    })),
+
+  conventionReject: t.procedure
+    .input(z.object({ id: z.string(), reason: z.string().min(1) }))
+    .output(z.object({ ok: z.literal(true) }))
+    .mutation(({ ctx, input }) => {
+      requireKnowledge(ctx).reject(input.id, input.reason);
+      return { ok: true as const };
+    }),
 });
+
+/**
+ * Mining is optional: a daemon with no model or no token configured serves every other procedure
+ * normally. Saying so plainly beats a null dereference three frames down.
+ */
+function requireKnowledge(ctx: DaemonContext): Knowledge {
+  if (!ctx.knowledge) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: 'this daemon has no knowledge service configured',
+    });
+  }
+  return ctx.knowledge;
+}
 
 export type AppRouter = typeof appRouter;

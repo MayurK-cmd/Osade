@@ -216,6 +216,84 @@ ALTER TABLE repo ADD COLUMN verify_override_reason TEXT;
 ALTER TABLE repo ADD COLUMN mirror_paths_json TEXT;
 `;
 
+/**
+ * M3 — repository conventions (§13).
+ *
+ * **Naming deviation, deliberate.** §5.3 specifies `convention.status`. This calls the column
+ * `lifecycle` instead, because §20.1's mechanical rule is "no column named `status`, anywhere"
+ * and that blanket form is what makes §6 unbreakable — a rule with one carve-out is a rule
+ * someone widens later. A convention's lifecycle is genuinely durable data (mined, confirmed,
+ * retired) rather than something derived, so only the *name* was in tension, and renaming costs
+ * nothing while keeping the invariant enforceable by a linter rather than by memory.
+ * Recorded as PRD-DELTA #16.
+ */
+const M003_CONVENTIONS = `
+CREATE TABLE convention (
+  id            TEXT PRIMARY KEY,
+  repo_id       TEXT NOT NULL REFERENCES repo(id) ON DELETE CASCADE,
+  category      TEXT NOT NULL,
+  -- Imperative, one sentence. §13.5 injects these verbatim.
+  rule_text     TEXT NOT NULL,
+  rationale     TEXT,
+  confidence    REAL NOT NULL,
+  -- 'candidate' | 'active' | 'retired' | 'rejected'  (§5.3 calls this 'status'; see above)
+  lifecycle     TEXT NOT NULL,
+  mined_at      INTEGER NOT NULL,
+  last_confirmed_at INTEGER,
+  retired_reason TEXT
+);
+CREATE INDEX convention_repo_idx ON convention(repo_id, lifecycle);
+
+-- §13.1 INVARIANT: a convention with zero evidence rows is not a convention. The foreign key
+-- makes evidence deletable only with its rule; the write path rejects unciteable rules.
+CREATE TABLE convention_evidence (
+  id            TEXT PRIMARY KEY,
+  convention_id TEXT NOT NULL REFERENCES convention(id) ON DELETE CASCADE,
+  -- 'merged_pr' | 'rejected_pr' | 'review_comment' | 'doc' | 'ci_config'
+  kind          TEXT NOT NULL,
+  url           TEXT NOT NULL,
+  excerpt       TEXT,
+  observed_at   INTEGER NOT NULL
+);
+CREATE INDEX convention_evidence_idx ON convention_evidence(convention_id);
+
+-- §13.4 — incremental re-mining needs to know how far it got.
+CREATE TABLE mine_run (
+  id          TEXT PRIMARY KEY,
+  repo_id     TEXT NOT NULL REFERENCES repo(id) ON DELETE CASCADE,
+  started_at  INTEGER NOT NULL,
+  finished_at INTEGER,
+  -- The newest PR considered, so the next run starts after it.
+  high_water_pr INTEGER,
+  observations INTEGER NOT NULL DEFAULT 0,
+  candidates  INTEGER NOT NULL DEFAULT 0,
+  error       TEXT
+);
+CREATE INDEX mine_run_repo_idx ON mine_run(repo_id, started_at);
+`;
+
+/**
+ * M3 — the measurement §13.6 demands.
+ *
+ * "This feature exists to move one number: **review rounds to merge.** Instrument it from day
+ * one." A comparison needs to know which side of the line each task fell on, and that is only
+ * knowable at launch — by the time a PR merges, the conventions have changed. So the count is
+ * recorded when the context file is written.
+ *
+ * A separate table rather than a column on `task`, for the same reason `task_lane` is separate:
+ * it exists only for tasks that were actually launched, and a row that appears later is cleaner
+ * than a column that is null until it is not.
+ */
+const M004_INJECTION = `
+CREATE TABLE task_injection (
+  task_id     TEXT PRIMARY KEY REFERENCES task(id) ON DELETE CASCADE,
+  rule_count  INTEGER NOT NULL,
+  -- Rules that were active but did not fit the §13.5 budget.
+  omitted     INTEGER NOT NULL DEFAULT 0,
+  injected_at INTEGER NOT NULL
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     id: 1,
@@ -226,5 +304,15 @@ export const MIGRATIONS: readonly Migration[] = [
     id: 2,
     name: 'verify plan, task lanes, repo verification policy',
     sql: M002_VERIFY,
+  },
+  {
+    id: 3,
+    name: 'repository conventions, evidence, mine runs',
+    sql: M003_CONVENTIONS,
+  },
+  {
+    id: 4,
+    name: 'convention injection, recorded per launch for §13.6',
+    sql: M004_INJECTION,
   },
 ];

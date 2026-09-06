@@ -619,3 +619,70 @@ Against OSADE.md §21's six checkboxes:
 
 Nothing here changes §6's derived-status invariant, §5.4's single event path, or
 §2's three-process shape. The spine holds; the seams are where the work is.
+
+---
+
+## 16. WRONG — `convention.status` cannot be called `status`
+
+§5.3's schema gives the conventions table a `status` column. §20.1's mechanical
+rule is "no column named `status`, anywhere", enforced by
+`test/integration/cdc.test.ts` sweeping every table in the schema.
+
+The two cannot both hold, and the tie goes to §20.1. A convention's lifecycle is
+genuinely durable data — mined, confirmed, retired — so §6's derived-status
+invariant was never actually at stake here; only the *name* collided. But the
+blanket form of the rule is what makes §6 unbreakable, and a rule with one
+carve-out is a rule someone widens later. Renaming costs nothing.
+
+**Corrected:** the column is `convention.lifecycle`, with the same four values
+(`candidate` | `active` | `retired` | `rejected`). The contract type is
+`ConventionLifecycle`. Nothing else changes.
+
+---
+
+## 17. GAP — §13.4 needs a model, and OSADE.md never says where one comes from
+
+§13.4 specifies three model calls per mining run and says nothing about who
+makes them. Every other model in Osade is an *agent* — a process herdr owns,
+authenticated however the user already authenticated it. The miner is the first
+place the daemon itself needs inference.
+
+**Resolved:** a `ModelPort` interface with one method, backed by the Anthropic
+Messages API over plain `fetch`. Two consequences worth recording:
+
+- **The key follows the §2.1 token discipline.** Read from
+  `OSADE_ANTHROPIC_API_KEY` (or `ANTHROPIC_API_KEY`) at each use site, held in
+  memory, never written to `~/.osade/`. Read at the use site rather than
+  snapshotted at import, per §20.1.
+- **Mining is optional by construction.** A daemon with no key serves every
+  other procedure normally and reports *why* mining is unavailable rather than
+  failing at the moment someone presses the button.
+
+Per-pass models, since extraction runs once per pull request and clustering runs
+once per candidate: Haiku for extract, Sonnet for cluster and verify. This is
+the difference between mining a repository for cents and for tens of dollars.
+
+---
+
+## 18. GAP — §13.2 rates CI highest but nothing parsed it
+
+§13.2 rates CI config "mechanically enforced, so it is definitionally true" —
+the strongest evidence in the table — and §10.1 derives verification from
+evidence. Until M3, `deriveVerifyPlan` only recorded that a workflow file
+*existed*.
+
+**Resolved:** workflows are parsed with a real YAML parser (`yaml`), and what
+they run becomes the verify plan, ahead of anything inferred from a manifest.
+Two limits are deliberate:
+
+- **Only pull-request-triggered workflows count.** A nightly job is not what a
+  contribution is judged against.
+- **Unresolvable steps are skipped and reported, never guessed.** A `run:`
+  containing `${{ matrix.node }}` has no meaning outside the runner, and
+  inventing one produces a verify step that fails for reasons the agent cannot
+  fix. `VerifyPlan.skippedCiSteps` carries them so the review can see the plan
+  is partial.
+
+One trap worth naming: in YAML 1.1 the key `on` parses as the boolean `true`,
+which is why hand-rolled workflow readers so often see no triggers at all. Both
+spellings are accepted.

@@ -1,6 +1,8 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { ciVerifySteps, readWorkflows } from './ci-workflows.js';
+
 /**
  * Deriving a verification plan — OSADE.md §10.1.
  *
@@ -31,6 +33,12 @@ export interface VerifyPlan {
   steps: VerifyStep[];
   /** True until a human has looked at it. §10.1 — never run an inferred plan silently. */
   needsReview: boolean;
+  /**
+   * Commands the project's CI runs that Osade declined to run locally — multi-line scripts and
+   * anything depending on runner context. Surfaced so the review can see the plan is partial
+   * rather than believing CI had nothing more to say.
+   */
+  skippedCiSteps?: { cmd: string; reason: string; where: string }[];
 }
 
 const DEFAULT_TIMEOUT_SEC = 600;
@@ -140,21 +148,9 @@ async function fromGo(root: string): Promise<VerifyStep[]> {
   ];
 }
 
-/**
- * CI config is the strongest evidence there is: §13.2 rates it "mechanically enforced, so it
- * is definitionally true". Parsing every workflow YAML properly is M3 work; for now this
- * records that CI exists so the UI can say so, and marks the plan as needing review.
- */
-async function ciEvidence(root: string): Promise<string[]> {
+/** Other CI systems, which are noted as corroboration but not yet parsed. */
+async function otherCiEvidence(root: string): Promise<string[]> {
   const found: string[] = [];
-  const workflows = await readdir(join(root, '.github', 'workflows')).catch(
-    () => [] as string[],
-  );
-  for (const file of workflows) {
-    if (file.endsWith('.yml') || file.endsWith('.yaml')) {
-      found.push(`.github/workflows/${file}`);
-    }
-  }
   for (const file of ['justfile', 'Makefile', 'Taskfile.yml', '.gitlab-ci.yml']) {
     if ((await readText(join(root, file))) != null) found.push(file);
   }
@@ -162,27 +158,53 @@ async function ciEvidence(root: string): Promise<string[]> {
 }
 
 /**
+ * The name of the thing a command checks, for deduplication.
+ *
+ * `pnpm run test`, `pnpm test` and `npm run test` are the same check written three ways, and a
+ * plan that runs all three wastes minutes on every single verification.
+ */
+function checkKey(cmd: string): string {
+  return cmd
+    .trim()
+    .replace(/^(npm|pnpm|yarn|bun)\s+(run\s+)?/, '')
+    .replace(/\s+--?\S+/g, '')
+    .trim();
+}
+
+/**
  * Derives a plan for a repository.
  *
+ * CI first: §13.2 rates it "mechanically enforced, so it is definitionally true", so a command
+ * the project's own pull-request workflow runs beats one inferred from a manifest. Manifest
+ * steps then fill in what CI does not cover — an unparseable or partial workflow must not leave
+ * a repo with no plan at all.
+ *
  * Returns `needsReview: true` whenever any step was inferred rather than chosen by a human —
- * which on a first run is always. §10.1: never run an inferred command silently the first time.
+ * which on a first run is always, CI-sourced or not. A command that passes on GitHub's runner
+ * can still fail on a laptop, and §10.1 is explicit: never run an inferred command silently the
+ * first time.
  */
 export async function deriveVerifyPlan(repoRoot: string): Promise<VerifyPlan> {
-  const steps = [
+  const workflows = await readWorkflows(repoRoot);
+  const ci = ciVerifySteps(workflows);
+
+  const inferred = [
     ...(await fromPackageJson(repoRoot)),
     ...(await fromCargo(repoRoot)),
     ...(await fromPython(repoRoot)),
     ...(await fromGo(repoRoot)),
   ];
 
-  const ci = await ciEvidence(repoRoot);
-  if (ci.length > 0 && steps.length > 0) {
-    // Not a step of its own: it raises confidence in the steps we already found, and the UI
-    // shows it as corroboration.
-    steps[0] = { ...steps[0]!, evidence: `${steps[0]!.evidence} (CI: ${ci.join(', ')})` };
+  const covered = new Set(ci.steps.map((s) => checkKey(s.cmd)));
+  const steps = [...ci.steps, ...inferred.filter((s) => !covered.has(checkKey(s.cmd)))];
+
+  const other = await otherCiEvidence(repoRoot);
+  if (other.length > 0 && steps.length > 0) {
+    // Not a step of its own: it corroborates the steps already found, and the UI shows it.
+    steps[0] = { ...steps[0]!, evidence: `${steps[0]!.evidence} (also: ${other.join(', ')})` };
   }
 
-  return { steps, needsReview: steps.length > 0 };
+  return { steps, needsReview: steps.length > 0, skippedCiSteps: ci.skipped };
 }
 
 /** A plan the user has edited or confirmed. Stored per repo; the override is recorded. */

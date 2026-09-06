@@ -606,7 +606,10 @@ CREATE TABLE convention (
   rule_text     TEXT NOT NULL,             -- imperative, one sentence
   rationale     TEXT,
   confidence    REAL NOT NULL,             -- 0..1
-  status        TEXT NOT NULL,             -- 'candidate'|'active'|'retired'|'rejected'
+  -- Corrected 2026-09-06 per PRD-DELTA #16: was `status`. §20.1's rule is "no column named
+  -- status, anywhere", and the blanket form is what makes §6 unbreakable. A convention's
+  -- lifecycle is genuinely durable data, so only the name collided.
+  lifecycle     TEXT NOT NULL,             -- 'candidate'|'active'|'retired'|'rejected'
   mined_at      INTEGER NOT NULL,
   last_confirmed_at INTEGER,
   retired_reason TEXT
@@ -1202,6 +1205,17 @@ interface VerifyStep {
 The plan is **shown to the user and editable** before first use, stored per repo. Never run an
 inferred command silently the first time.
 
+Corrected 2026-09-06 per PRD-DELTA #18: CI comes first, and it is actually parsed. §13.2 rates CI
+"mechanically enforced, so it is definitionally true", so a command the project's own
+pull-request workflow runs beats one inferred from a manifest; manifest steps then fill in what
+CI does not cover, and the same check is never added twice under two spellings. Two limits are
+deliberate. **Only pull-request-triggered workflows count** — a nightly job is not what a
+contribution is judged against. **Unresolvable steps are skipped and reported, never guessed** —
+a `run:` containing a matrix expression has no meaning outside the runner, and inventing one
+produces a step that fails for reasons the agent cannot fix; `VerifyPlan.skippedCiSteps` carries
+them so the review can see the plan is partial. A CI-sourced plan is still `needsReview`: a
+command that passes on GitHub's runner can fail on a laptop.
+
 ### 10.2 Running
 
 Runs execute in the task worktree, in the `verify` lane (a herdr tab), so the user can watch and
@@ -1324,12 +1338,48 @@ mega-prompt.
    predicts what happened, `confidence` goes up; if merged PRs routinely violate it, mark
    `rejected`. Store the confidence.
 
-Rules land as `status='candidate'`. Promotion to `active` requires either confidence ≥ 0.8 or
-one-click human confirmation in the UI. Show the evidence next to the toggle.
+**The model proposes; the code decides.** Corrected 2026-09-06: every threshold above is
+enforced *between* the passes rather than asked for in a prompt — a prompt that says "a rule
+needs three observations" is a suggestion, a filter that counts them is a guarantee. Three
+things follow, and they are the difference between this pipeline and a wrapper around a
+question:
 
-**Re-mine incrementally.** Weekly, or on demand, mining only PRs newer than
-`last_confirmed_at`. Conventions decay: an `active` rule not re-confirmed in 180 days drops to
-`candidate`.
+- **Only cited URLs survive.** An observation whose URL was not in that pass's input is dropped
+  before it can become evidence. A fabricated permalink would satisfy §13.1's letter and destroy
+  its purpose.
+- **The held-out sample is held out of *extraction*, not merely of verification.** Testing a
+  rule against the very comments that produced it measures nothing. Rejected PRs are never held
+  out: §13.2 rates them the strongest signal there is and there are far fewer of them.
+- **A contradicted rule is written as `rejected`, not dropped.** Knowing a rule was considered
+  and disproved is worth more than mining it again next week.
+
+Rules land as `lifecycle='candidate'` (PRD-DELTA #16). Promotion to `active` requires either
+confidence ≥ 0.8 or one-click human confirmation in the UI. Show the evidence next to the
+toggle.
+
+Confidence combines §13.2's weights with §13.4's verification: half the strongest source's
+weight, half how broadly it was observed, multiplied by how the held-out sample behaved. The
+floor matters — a rule the sample could not confirm lands below the 0.8 bar and therefore waits
+for a human. A rule nobody checked should not start steering agents on its own. CI is the
+exception: a workflow that runs a job is not a claim about the project, it *is* the project.
+
+**Re-mine incrementally.** Weekly, or on demand, mining only PRs newer than the last completed
+run's high-water mark. Only *completed* runs advance it, or a crash halfway would skip the PRs
+it never reached, forever. A re-mine that sees a rule again **re-confirms** it — matching on
+content-word overlap within a category — rather than depositing a paraphrase beside it, because
+duplicates would fill the §13.5 budget and `last_confirmed_at` would never advance on the
+original. Conventions decay: an `active` rule not re-confirmed in 180 days drops to `candidate`.
+Decay runs *before* a mining run, not after, so a stale rule is not quietly renewed by a run
+that never saw fresh evidence for it.
+
+**Where the model comes from** (added 2026-09-06 per PRD-DELTA #17). The miner is the only place
+the daemon itself needs inference; every other model in Osade is an agent herdr owns. It calls
+the Anthropic Messages API through a one-method `ModelPort`, with the key read from
+`OSADE_ANTHROPIC_API_KEY` at the use site and held in memory only — the same discipline §2.1
+gives the GitHub token. **Mining is optional by construction:** a daemon with no key serves
+everything else normally and reports why mining is unavailable rather than failing when someone
+presses the button. Mining is also always explicit — it spends GitHub quota and model tokens, so
+nothing starts it on its own and no task launch ever waits on it.
 
 ### 13.5 Injection
 
@@ -1359,11 +1409,28 @@ worse than none — it dilutes attention and every rule competes with the actual
 than 40 rules are active, rank by confidence × recency and surface the overflow in the UI
 rather than the prompt.
 
+Corrected 2026-09-06: the cap is enforced in the renderer, not requested of the caller. Rules are
+ranked by confidence × recency (recency halving every 90 days), truncated to whatever fits the
+token budget after the non-negotiable sections — the task, the base, the verification, and the
+gate boundaries — and what did not fit is *returned to the caller* rather than dropped in
+silence. Verification is named here only when the plan has been **confirmed**: §10.1 says an
+inferred command is never run silently, and telling an agent to satisfy commands that will not
+run is the same mistake wearing a different hat.
+
 ### 13.6 The measurable claim
 
 This feature exists to move one number: **review rounds to merge.** Instrument it from day one.
 `scm_fact` already carries enough to compute it. The M3 acceptance criterion is a real
 comparison on real tasks, not a vibe.
+
+Corrected 2026-09-06: `scm_fact` carries the PR, but not which side of the comparison a task
+fell on — that is only knowable at launch, because by the time a PR merges the repo's
+conventions have moved on. So `task_injection` records how many rules each launch actually
+injected, written when the context file is. Rounds are then counted from GitHub's own review
+record rather than from anything Osade stored, and a PR whose reviews cannot be read is reported
+as unreadable rather than folded into either arm: no review and no data are not the same
+observation. The comparison is built to be able to return bad news — below §21's N ≥ 10 per arm
+it refuses a verdict and says so.
 
 ---
 

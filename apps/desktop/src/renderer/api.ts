@@ -6,6 +6,13 @@
  * renderer never computes status.
  */
 
+import type {
+  ConventionImpact,
+  ConventionView,
+  MineResultView,
+  MineStatus,
+} from '@osade/contract';
+
 let cachedBase: string | null = null;
 
 async function base(): Promise<string> {
@@ -64,6 +71,24 @@ export interface PlanStep {
 }
 
 export const api = {
+  mineStatus: (repoId: string) =>
+    call('query', 'mineStatus', { repoId }) as Promise<MineStatus>,
+
+  mineRepo: (repoId: string, full?: boolean) =>
+    call('mutation', 'mineRepo', { repoId, full }) as Promise<MineResultView>,
+
+  conventionList: (repoId: string) =>
+    call('query', 'conventionList', { repoId }) as Promise<ConventionView[]>,
+
+  conventionConfirm: (id: string) =>
+    call('mutation', 'conventionConfirm', { id }) as Promise<{ confirmed: boolean }>,
+
+  conventionReject: (id: string, reason: string) =>
+    call('mutation', 'conventionReject', { id, reason }) as Promise<{ ok: true }>,
+
+  conventionImpact: (repoId: string) =>
+    call('query', 'conventionImpact', { repoId }) as Promise<ConventionImpact>,
+
   gateDecide: (gateId: string, decision: 'approve' | 'deny') =>
     call('mutation', 'gateDecide', { gateId, decision }) as Promise<{ ok: true }>,
 
