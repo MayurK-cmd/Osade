@@ -38,6 +38,21 @@ async function call(kind: 'query' | 'mutation', path: string, input?: unknown): 
   return body.result?.data;
 }
 
+export interface Issue {
+  number: number;
+  title: string;
+  body: string;
+  url: string;
+}
+
+/** §12 — a triage task terminates in an artifact rather than a pull request. */
+export type TriageKind =
+  | 'reproduce'
+  | 'bisect'
+  | 'failing-test'
+  | 'duplicate-check'
+  | 'verify-pr-claim';
+
 export interface PlanStep {
   name: string;
   cmd: string;
@@ -66,6 +81,27 @@ export const api = {
 
   verifyRun: (taskId: string) =>
     call('mutation', 'verifyRun', { taskId }) as Promise<{ passed: boolean; headSha: string }>,
+
+  issueList: (repoId: string) => call('query', 'issueList', { repoId }) as Promise<Issue[]>,
+
+  issueImport: (repoPath: string, issue: Issue, triage?: TriageKind) =>
+    call('mutation', 'issueImport', { repoPath, issue, triage }) as Promise<{ taskId: string }>,
+
+  prPlan: (taskId: string) =>
+    call('query', 'prPlan', { taskId }) as Promise<{
+      viaFork: boolean;
+      head: string;
+      target: string;
+      base: string;
+    }>,
+
+  prOpenRequest: (taskId: string, title: string, body: string, draft?: boolean) =>
+    call('mutation', 'prOpenRequest', { taskId, title, body, draft }) as Promise<{
+      gateId: string;
+    }>,
+
+  scmRefresh: (taskId: string) =>
+    call('mutation', 'scmRefresh', { taskId }) as Promise<{ refreshed: boolean }>,
 
   taskTranscript: (taskId: string, lines = 200) =>
     call('query', 'taskTranscript', { taskId, lines }) as Promise<{

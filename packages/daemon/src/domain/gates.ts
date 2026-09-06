@@ -16,6 +16,7 @@ export type GateName =
   | 'gate.commit'
   | 'gate.push'
   | 'gate.pr_open'
+  | 'gate.fork_create'
   | 'gate.pr_update'
   | 'gate.pr_comment'
   | 'gate.issue_comment'
@@ -42,6 +43,16 @@ export const GATES: readonly GatePolicy[] = [
   { gate: 'gate.commit', def: 'auto', overridable: true, note: 'local only, reversible via checkpoint' },
   { gate: 'gate.push', def: 'human', overridable: true, note: 'first write that leaves the machine' },
   { gate: 'gate.pr_open', def: 'human', overridable: true, note: 'requires passing verification' },
+  // §11.3 — "If the user has no fork, offer to create one behind a gate." Creating a
+  // repository under someone's account is a visible, public act on their behalf, so it is not
+  // overridable: a policy that silently forked things would be exactly the surprise §14 exists
+  // to prevent.
+  {
+    gate: 'gate.fork_create',
+    def: 'human',
+    overridable: false,
+    note: 'creates a public repository under the user account',
+  },
   { gate: 'gate.pr_update', def: 'human', overridable: true, note: 'public speech' },
   { gate: 'gate.pr_comment', def: 'human', overridable: true, note: 'public speech' },
   { gate: 'gate.issue_comment', def: 'human', overridable: true, note: 'public speech' },

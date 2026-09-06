@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { openDb, type Db } from '../../src/db/index.js';
 import { getScmFact } from '../../src/db/task-repo.js';
-import { GateError, Gates } from '../../src/domain/gates.js';
+import { GateError, Gates, gatePolicy } from '../../src/domain/gates.js';
 import { ScmClient, type ScmRequest } from '../../src/scm/client.js';
 import { ScmWrites } from '../../src/scm/writes.js';
 
@@ -229,5 +229,99 @@ describe('§11.3 — fork awareness', () => {
     // A failed permission check must never read as "yes".
     await expect(writer.planFork('t1')).rejects.toThrow(/no push access/);
     expect(warnings.join()).toContain('could not check push access');
+  });
+});
+
+describe('§11.3 — forking, behind a gate', () => {
+  const FORK_PAYLOAD = { owner: 'acme', repo: 'widget' };
+
+  it('finds a fork the user already has rather than offering to create another', async () => {
+    seed();
+    const { writer } = writes({
+      'GET /user': [{ login: 'contributor' }],
+      'GET /repos/{owner}/{repo}': [
+        { fork: true, parent: { full_name: 'acme/widget' }, owner: { login: 'contributor' }, name: 'widget' },
+      ],
+    });
+
+    await expect(writer.findExistingFork('t1')).resolves.toEqual({
+      owner: 'contributor',
+      name: 'widget',
+    });
+  });
+
+  it('does not mistake an unrelated repo of the same name for a fork', async () => {
+    seed();
+    const { writer } = writes({
+      'GET /user': [{ login: 'contributor' }],
+      'GET /repos/{owner}/{repo}': [
+        // Same name, but forked from somewhere else entirely.
+        { fork: true, parent: { full_name: 'other-org/widget' }, owner: { login: 'contributor' }, name: 'widget' },
+      ],
+    });
+
+    await expect(writer.findExistingFork('t1')).resolves.toBe(null);
+  });
+
+  it('refuses to fork without an approved gate', async () => {
+    seed();
+    const { writer, gates, calls } = writes({
+      'POST /repos/{owner}/{repo}/forks': [{ owner: { login: 'contributor' }, name: 'widget' }],
+    });
+    const gateId = gates.request({ taskId: 't1', gate: 'gate.fork_create', payload: FORK_PAYLOAD });
+
+    await expect(writer.createFork('t1', gateId, FORK_PAYLOAD)).rejects.toThrow(GateError);
+    // Nothing was created under the user's account.
+    expect(calls).toEqual([]);
+  });
+
+  it('gate.fork_create can never be downgraded by policy', () => {
+    // Creating a public repository on someone's behalf is not something a policy may automate.
+    expect(gatePolicy('gate.fork_create').overridable).toBe(false);
+    expect(gatePolicy('gate.fork_create').def).toBe('human');
+
+    seed();
+    const policyGates = new Gates(db, { now: () => NOW, policies: { 'gate.fork_create': 'yolo' } });
+    const gateId = policyGates.request({
+      taskId: 't1',
+      gate: 'gate.fork_create',
+      payload: FORK_PAYLOAD,
+    });
+    const row = db.prepare('SELECT decided_at FROM gate_request WHERE id = ?').get(gateId) as {
+      decided_at: number | null;
+    };
+    expect(row.decided_at).toBe(null);
+  });
+
+  it('creates the fork on approval and routes future PRs through it', async () => {
+    seed();
+    const { writer, gates } = writes({
+      'POST /repos/{owner}/{repo}/forks': [{ owner: { login: 'contributor' }, name: 'widget' }],
+    });
+    const gateId = gates.request({ taskId: 't1', gate: 'gate.fork_create', payload: FORK_PAYLOAD });
+    gates.decide(gateId, 'approve');
+
+    await expect(writer.createFork('t1', gateId, FORK_PAYLOAD)).resolves.toEqual({
+      owner: 'contributor',
+      name: 'widget',
+    });
+
+    // §11.3 — the checkout is now the fork; upstream is where it came from.
+    const plan = await writer.planFork('t1');
+    expect(plan.viaFork).toBe(true);
+    expect(plan.head).toBe('contributor:osade/fix');
+    expect(plan.prOwner).toBe('acme');
+  });
+
+  it('adopting an existing fork writes nothing to GitHub, so it needs no gate', async () => {
+    seed();
+    const { writer, calls } = writes({});
+
+    writer.adoptFork('t1', { owner: 'contributor', name: 'widget' });
+
+    const plan = await writer.planFork('t1');
+    expect(plan.viaFork).toBe(true);
+    expect(plan.head).toBe('contributor:osade/fix');
+    expect(calls).toEqual([]);
   });
 });

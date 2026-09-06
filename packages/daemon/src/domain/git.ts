@@ -162,3 +162,44 @@ export const DEFAULT_MIRROR_PATHS: readonly string[] = [
   '.npmrc',
   '.tool-versions',
 ];
+
+export interface GitHubRemote {
+  owner: string;
+  name: string;
+}
+
+/**
+ * Parses `owner/name` out of a GitHub remote URL.
+ *
+ * Handles the three shapes in the wild — HTTPS, SSH, and `git://` — because a repo cloned over
+ * SSH is not a different repo, and requiring the user to tell Osade something git already knows
+ * is the kind of friction that gets a tool abandoned.
+ *
+ * Returns null for non-GitHub remotes rather than guessing: §11 is GitHub-specific in v1, and a
+ * wrong owner would send a pull request to a stranger.
+ */
+export function parseGitHubRemote(url: string): GitHubRemote | null {
+  const trimmed = url.trim().replace(/\.git$/, '');
+
+  // git@github.com:owner/name  |  ssh://git@github.com/owner/name
+  const ssh = trimmed.match(/^(?:ssh:\/\/)?(?:[^@]+@)?github\.com[:/]([^/]+)\/([^/]+)$/i);
+  if (ssh) return { owner: ssh[1]!, name: ssh[2]! };
+
+  // https://github.com/owner/name  |  git://github.com/owner/name
+  const web = trimmed.match(/^(?:https?|git):\/\/(?:[^@]+@)?github\.com\/([^/]+)\/([^/]+)$/i);
+  if (web) return { owner: web[1]!, name: web[2]! };
+
+  return null;
+}
+
+/** The GitHub identity of a checkout, from its `origin` remote. Null when there isn't one. */
+export async function githubRemote(repoPath: string): Promise<GitHubRemote | null> {
+  try {
+    const url = await git(repoPath, ['remote', 'get-url', 'origin']);
+    return parseGitHubRemote(url);
+  } catch {
+    // No origin, or not a git repo. Neither is an error: a local-only repo is a valid task
+    // target, it just cannot open pull requests.
+    return null;
+  }
+}

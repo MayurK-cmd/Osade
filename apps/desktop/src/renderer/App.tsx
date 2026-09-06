@@ -3,6 +3,7 @@ import { useState, type JSX } from 'react';
 import type { TaskStatus, TaskView } from '@osade/contract';
 
 import { GateCard } from './GateCard.js';
+import { PrOpen } from './PrOpen.js';
 import { useLedger } from './useLedger.js';
 import { VerifyPlanReview } from './VerifyPlanReview.js';
 
@@ -277,6 +278,13 @@ function Detail({ task }: { task: TaskView | null }): JSX.Element {
       <section style={{ marginTop: 18, borderTop: '1px solid var(--rule)', paddingTop: 12 }}>
         <h2 style={{ fontSize: 'var(--t-s)', fontWeight: 600, margin: '0 0 4px' }}>Verification</h2>
         <VerifyPlanReview taskId={task.task.id} />
+      </section>
+
+      <section style={{ marginTop: 18, borderTop: '1px solid var(--rule)', paddingTop: 12 }}>
+        <h2 style={{ fontSize: 'var(--t-s)', fontWeight: 600, margin: '0 0 4px' }}>
+          Pull request
+        </h2>
+        <PrOpen task={task} />
       </section>
 
       <button

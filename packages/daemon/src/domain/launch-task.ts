@@ -18,6 +18,7 @@ import type { Checkpoints } from './checkpoints.js';
 import {
   DEFAULT_MIRROR_PATHS,
   defaultBranch,
+  githubRemote,
   mirrorPaths,
   pruneWorktrees,
   resolveSha,
@@ -748,13 +749,25 @@ export class LaunchTask {
     if (existing) return existing.id;
 
     const branch = await defaultBranch(repoPath);
+    // §11 — read the GitHub identity from the remote rather than asking the user for something
+    // git already knows. Null for a local-only repo, which is a valid task target that simply
+    // cannot open pull requests.
+    const remote = await githubRemote(repoPath);
 
     this.#db
       .prepare(
-        `INSERT INTO repo (id, path, default_branch, created_at) VALUES (?, ?, ?, ?)
+        `INSERT INTO repo (id, path, default_branch, gh_owner, gh_name, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(path) DO NOTHING`,
       )
-      .run(`r_${randomUUID().slice(0, 8)}`, repoPath, branch, this.#now());
+      .run(
+        `r_${randomUUID().slice(0, 8)}`,
+        repoPath,
+        branch,
+        remote?.owner ?? null,
+        remote?.name ?? null,
+        this.#now(),
+      );
 
     const row = this.#db.prepare('SELECT id FROM repo WHERE path = ?').get(repoPath) as {
       id: string;

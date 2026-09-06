@@ -127,6 +127,88 @@ export class ScmWrites {
     );
   }
 
+  /**
+   * Whether an existing fork is already available under the authenticated account.
+   *
+   * Checked before offering to create one: forking something the user already forked produces
+   * a confusing no-op on GitHub's side and an offer that should never have been made.
+   */
+  async findExistingFork(taskId: string): Promise<{ owner: string; name: string } | null> {
+    const repo = this.#repoFor(taskId);
+    if (!repo?.gh_owner || !repo.gh_name) return null;
+
+    const me = await this.#scm
+      .get<{ login: string }>('GET /user', {})
+      .catch(() => null);
+    if (!me || typeof me === 'symbol') return null;
+
+    const candidate = await this.#scm
+      .get<{ fork: boolean; parent?: { full_name: string }; owner: { login: string }; name: string }>(
+        'GET /repos/{owner}/{repo}',
+        { owner: me.login, repo: repo.gh_name },
+      )
+      .catch(() => null);
+    if (!candidate || typeof candidate === 'symbol') return null;
+
+    const parent = candidate.parent?.full_name?.toLowerCase();
+    if (!candidate.fork || parent !== `${repo.gh_owner}/${repo.gh_name}`.toLowerCase()) return null;
+
+    return { owner: candidate.owner.login, name: candidate.name };
+  }
+
+  /**
+   * Creates a fork — §11.3, behind `gate.fork_create`.
+   *
+   * Forking creates a **public repository under the user's account**, which is a visible act
+   * done on their behalf, so it is gated like any other public write and the gate cannot be
+   * downgraded by policy (§14.1).
+   *
+   * Records the result on the repo row so `planFork` routes through the fork afterwards.
+   */
+  async createFork(
+    taskId: string,
+    gateId: string,
+    payload: { owner: string; repo: string },
+  ): Promise<{ owner: string; name: string }> {
+    // §11.2 — re-hashed at execution, like every other write.
+    this.#gates.assertExecutable(gateId, payload);
+
+    const repo = this.#repoFor(taskId);
+    if (!repo?.gh_owner || !repo.gh_name) throw new ScmError('no GitHub remote', 0);
+
+    try {
+      const fork = await this.#scm.write<{ owner: { login: string }; name: string }>(
+        'POST /repos/{owner}/{repo}/forks',
+        { owner: payload.owner, repo: payload.repo },
+      );
+
+      // The checkout is now the fork's, and upstream is where it came from.
+      this.#db
+        .prepare('UPDATE repo SET fork_of = ?, gh_owner = ? WHERE id = ?')
+        .run(`${repo.gh_owner}/${repo.gh_name}`, fork.owner.login, repo.id);
+
+      this.#gates.markExecuted(gateId);
+      return { owner: fork.owner.login, name: fork.name };
+    } catch (err) {
+      this.#gates.markExecuted(gateId, (err as Error).message);
+      throw err;
+    }
+  }
+
+  /**
+   * Records a fork the user already has, without creating anything.
+   *
+   * No gate: adopting an existing fork writes nothing to GitHub. §14 gates *public writes*,
+   * and treating a local bookkeeping update as one would train people to click through gates.
+   */
+  adoptFork(taskId: string, fork: { owner: string; name: string }): void {
+    const repo = this.#repoFor(taskId);
+    if (!repo?.gh_owner || !repo.gh_name) throw new ScmError('no GitHub remote', 0);
+    this.#db
+      .prepare('UPDATE repo SET fork_of = ?, gh_owner = ? WHERE id = ?')
+      .run(`${repo.gh_owner}/${repo.gh_name}`, fork.owner, repo.id);
+  }
+
   /** §11.3 — checked before offering the action, not after. */
   async #canPush(owner: string, name: string): Promise<boolean> {
     try {

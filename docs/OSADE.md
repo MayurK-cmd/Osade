@@ -1383,6 +1383,7 @@ The mechanism behind "safe autonomous contribution." Without this the product is
 | `gate.review_submit` | **human** | public speech about someone else's work |
 | `gate.force_push` | **human** | always, no policy override |
 | `gate.branch_delete` | **human** | |
+| `gate.fork_create` | **human** | creates a public repository under the user's account. *Added 2026-09-06 for §11.3's "offer to create one behind a gate"; not policy-overridable, because forking on someone's behalf is a visible public act.* |
 | `gate.dep_add` | **human** | supply chain |
 | `gate.file_write_outside_worktree` | **human** | should never happen; if it fires, investigate |
 | `gate.undo_turn` | conditional | human if diff > 20 files |
