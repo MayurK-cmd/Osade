@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 
 import { api, type PlanStep } from './api.js';
 
@@ -26,6 +26,30 @@ export function VerifyPlanReview({ taskId }: { taskId: string }): JSX.Element {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+
+  /**
+   * Load the plan this repo already has.
+   *
+   * Without this the panel could not tell a confirmed plan from no plan, so it offered "Derive a
+   * verification plan" either way — and deriving resets `needsReview`, discarding the
+   * confirmation §10.1 exists to collect. Deriving is now only offered when nothing is stored.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .verifyPlanGet(taskId)
+      .then((plan) => {
+        if (cancelled || !plan) return;
+        setSteps(plan.steps);
+        setNeedsReview(plan.needsReview);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [taskId]);
 
   async function run<T>(action: () => Promise<T>, after?: (value: T) => void): Promise<void> {
     setBusy(true);

@@ -190,6 +190,9 @@ function Row({
 }): JSX.Element {
   return (
     <div
+      // Also the handle the smoke run uses to open a task — the panels are otherwise only
+      // reachable by a human clicking, which is why they went unexercised for three milestones.
+      data-task-id={task.task.id}
       onClick={() => onSelect(task.task.id)}
       style={{
         display: 'grid',

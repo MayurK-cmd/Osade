@@ -131,6 +131,19 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
     // A moment past load, so React has mounted rather than being caught mid-paint.
     await new Promise((resolve) => setTimeout(resolve, 2_000));
 
+    // `OSADE_SMOKE_CLICK` opens something before the photograph. The detail panels — gates, the
+    // verification plan, the PR flow, conventions — are only reachable by selecting a row, so
+    // without this the only thing a smoke run can ever see is the ledger.
+    const clickSelector = process.env.OSADE_SMOKE_CLICK;
+    if (clickSelector) {
+      const clicked = await target.webContents.executeJavaScript(
+        `(() => { const el = document.querySelector(${JSON.stringify(clickSelector)});
+                  if (!el) return false; el.click(); return true; })()`,
+      );
+      if (!clicked) throw new Error(`nothing matched ${clickSelector}`);
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+    }
+
     // An occluded or unpainted window captures as an *empty* image rather than failing, so a
     // zero-byte PNG would otherwise be written and reported as a pass. Bring the window forward,
     // stop Chromium throttling it, and retry until there are actual pixels.

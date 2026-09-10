@@ -91,6 +91,12 @@ export const api = {
   gateEditAndApprove: (gateId: string, payload: unknown) =>
     call('mutation', 'gateEditAndApprove', { gateId, payload }) as Promise<{ ok: true }>,
 
+  verifyPlanGet: (taskId: string) =>
+    call('query', 'verifyPlanGet', { taskId }) as Promise<{
+      steps: PlanStep[];
+      needsReview: boolean;
+    } | null>,
+
   verifyPlanDerive: (taskId: string) =>
     call('mutation', 'verifyPlanDerive', { taskId }) as Promise<{
       steps: PlanStep[];

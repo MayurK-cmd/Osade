@@ -218,6 +218,49 @@ export const appRouter = t.router({
       return { ok: true as const };
     }),
 
+  /**
+   * The plan this repo already has, if any — §10.1.
+   *
+   * Read-only, and the reason it exists: without it the renderer cannot tell a repo with a
+   * confirmed plan from one with none, so it offered "Derive a verification plan" either way and
+   * deriving resets `needs_review` to 1 — silently discarding the confirmation §10.1 exists to
+   * collect. Found by looking at the panel for the first time.
+   */
+  verifyPlanGet: t.procedure
+    .input(z.object({ taskId: TaskId }))
+    .output(
+      z
+        .object({
+          steps: z.array(
+            z.object({
+              name: z.string(),
+              cmd: z.string(),
+              cwd: z.string(),
+              timeoutSec: z.number(),
+              required: z.boolean(),
+              source: z.enum(['ci', 'manifest', 'doc', 'user']),
+              evidence: z.string(),
+            }),
+          ),
+          needsReview: z.boolean(),
+        })
+        .nullable(),
+    )
+    .query(({ ctx, input }) => {
+      const task = getTask(ctx.db, input.taskId);
+      if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown task' });
+
+      const stored = ctx.db
+        .prepare('SELECT steps_json, needs_review FROM verify_plan WHERE repo_id = ?')
+        .get(task.repo_id) as { steps_json: string; needs_review: number } | undefined;
+      if (!stored) return null;
+
+      return {
+        steps: JSON.parse(stored.steps_json) as VerifyStep[],
+        needsReview: stored.needs_review === 1,
+      };
+    }),
+
   verifyRun: t.procedure
     .input(z.object({ taskId: TaskId }))
     .output(z.object({ passed: z.boolean(), headSha: z.string() }))
