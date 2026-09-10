@@ -8,7 +8,8 @@
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
     "build": "pnpm build:main && pnpm build:renderer",
-    "start": "pnpm build && electron ."
+    "start": "pnpm build && electron .",
+    "smoke": "pnpm build && cross-env OSADE_HOME=.smoke OSADE_SMOKE_SHOT=smoke.png electron ."
   },
   "dependencies": {
     "@osade/contract": "workspace:*"

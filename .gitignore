@@ -43,3 +43,5 @@ Thumbs.db
 
 /.wrangler/
 **/.wrangler/
+apps/desktop/smoke.png
+apps/desktop/.smoke/

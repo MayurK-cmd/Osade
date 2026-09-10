@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import type { ChildProcess } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -12,7 +13,10 @@ import { join } from 'node:path';
  *
  * This is the first executable statement in the app for that reason. Do not move it.
  */
-const OSADE_ROOT = process.env.OSADE_HOME ?? join(homedir(), '.osade');
+// `resolve`, not the raw value: Electron's setPath rejects a relative path with a bare
+// "Path must be absolute" thrown before any of this file's logging exists, which is a hard
+// thing to diagnose from the outside. A relative OSADE_HOME is a reasonable thing to type.
+const OSADE_ROOT = resolve(process.env.OSADE_HOME ?? join(homedir(), '.osade'));
 app.setPath('userData', join(OSADE_ROOT, 'electron'));
 app.setPath('sessionData', join(OSADE_ROOT, 'electron', 'session'));
 
@@ -23,6 +27,8 @@ const isDev = !app.isPackaged;
 
 let window: BrowserWindow | null = null;
 let daemonPort: number | null = null;
+/** Non-null only when *this* process started the daemon. §18.1 — an adopted one is not ours. */
+let spawnedDaemon: ChildProcess | null = null;
 
 /**
  * Startup order, and it matters (§18.1):
@@ -43,6 +49,7 @@ async function boot(): Promise<void> {
     onInfo: (m) => console.log(`[daemon] ${m}`),
   });
   daemonPort = daemon.port;
+  spawnedDaemon = daemon.child;
 
   createWindow();
 }
@@ -123,8 +130,23 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
 
     // A moment past load, so React has mounted rather than being caught mid-paint.
     await new Promise((resolve) => setTimeout(resolve, 2_000));
-    writeFileSync(path, (await target.webContents.capturePage()).toPNG());
-    console.log(`[smoke] wrote ${path}`);
+
+    // An occluded or unpainted window captures as an *empty* image rather than failing, so a
+    // zero-byte PNG would otherwise be written and reported as a pass. Bring the window forward,
+    // stop Chromium throttling it, and retry until there are actual pixels.
+    target.webContents.setBackgroundThrottling(false);
+    target.show();
+    target.focus();
+
+    let png = new Uint8Array(0);
+    for (let attempt = 0; attempt < 10 && png.length === 0; attempt += 1) {
+      png = new Uint8Array((await target.webContents.capturePage()).toPNG());
+      if (png.length === 0) await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    if (png.length === 0) throw new Error('captured an empty image: the window never painted');
+
+    writeFileSync(path, png);
+    console.log(`[smoke] wrote ${path} (${png.length} bytes)`);
 
     for (const failure of failures) console.error(`[smoke] renderer error: ${failure}`);
     if (failures.length > 0) process.exitCode = 1;
@@ -132,6 +154,17 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
     console.error(`[smoke] ${(err as Error).message}`);
     process.exitCode = 1;
   } finally {
+    // §18.1 says shutdown detaches and the daemon outlives the window — which is right for a
+    // person, and wrong for a harness that would otherwise leave a daemon behind on every run.
+    // Only ever the one this process started; an adopted daemon belongs to someone else.
+    if (spawnedDaemon?.pid) {
+      try {
+        process.kill(spawnedDaemon.pid);
+        console.log('[smoke] stopped the daemon this run started');
+      } catch {
+        // Already gone. Nothing to do, and nothing worth saying.
+      }
+    }
     app.quit();
   }
 }
