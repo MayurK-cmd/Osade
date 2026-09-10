@@ -71,13 +71,24 @@ The actual novelty. Everything else is assembly.
 - [ ] Near-duplicate rule matching is content-word overlap within a category. Deliberately dumb
       (a fourth model call would have no way to check its work), but it will miss a paraphrase
       that shares few words with the original
-- [ ] Electron app builds, typechecks and lints; still not launched against a live daemon
+- [ ] The app runs, but nothing exercises the panels. `pnpm --filter @osade/desktop smoke`
+      boots it against a live daemon and screenshots the window; the gate cards, plan review,
+      PR panel and conventions panel have still only been seen as code
 - [ ] `VerifyRunner` recovers exit codes by echoing a sentinel into the lane. Proved against
       real herdr in the M1 acceptance, but still the weakest seam. Revisit if herdr ever
       exposes a run-and-report method.
 - [ ] The M1 acceptance's "agent fixes it" step depends on a real agent choosing to act, so it
       can fail for reasons outside Osade. Failures now report whether the prompt was
       *delivered* separately from what the agent did with it.
+
+## Release blockers — packaging
+- [ ] Nothing is built to JavaScript. `bin` fields point at `.ts`, and the Electron supervisor
+      only runs the daemon because it shells out to vite-node. A packaged app needs real builds
+      for `packages/daemon` and `packages/cli`
+- [ ] A packaged app has no Node to run the daemon on. It cannot use Electron's — `better-sqlite3`
+      is compiled for Node's ABI and the daemon also runs standalone under the CLI and tests, so
+      either ship a Node runtime or ship two ABI-matched builds of every native module
+      (`OSADE_NODE_BIN` is the seam)
 
 ## Release blockers (THIRD-PARTY-NOTICES.md)
 - [ ] fetch herdr's LICENSE + NOTICE from the pinned tag into vendor/herdr/0.8.2-p20/

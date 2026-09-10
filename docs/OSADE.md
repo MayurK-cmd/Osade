@@ -1680,6 +1680,29 @@ reconnect it discards local state and takes the snapshot.
 4. Spawn the daemon; wait for its ready handshake (never a fixed sleep)
 5. Create the window; renderer connects to the daemon. **No surface port in M0** (§4.4).
 
+*Corrected 2026-09-11, after running the app for the first time.* Step 4 says "spawn the
+daemon" and hides three decisions, each of which failed as the same unhelpful symptom — "the
+daemon did not become healthy within 30s", a timeout standing in for a start that never
+happened:
+
+- **The daemon runs on Node, not on Electron's Node.** `process.execPath` under Electron is
+  `electron.exe`, whose Node carries its own native ABI (`NODE_MODULE_VERSION` 130 for Electron
+  33 against 127 for Node 22). `better-sqlite3` is compiled once, for Node, and has to be — the
+  daemon also runs under the CLI and the test suite. §2 already treats the daemon as an
+  independent process that outlives the window; the runtime has to match that. `OSADE_NODE_BIN`
+  names it; `ELECTRON_RUN_AS_NODE` is the fallback when no Node is found, and it is a fallback
+  rather than the plan because native modules will still be wrong.
+- **A source checkout has no JavaScript to spawn.** The daemon entry is TypeScript and Node
+  answers `ERR_UNKNOWN_FILE_EXTENSION`. A packaged build spawns built JS directly; a checkout
+  goes through the same dev runner the docs and tests already use.
+- **`OSADE_HOME` is resolved before use.** Electron's `setPath` rejects a relative path with a
+  bare "Path must be absolute", thrown before any of the app's own logging exists.
+
+**The window is checked, not assumed.** `pnpm --filter @osade/desktop smoke` boots the real
+sequence against a live daemon, waits for the renderer to load, and writes a screenshot —
+failing on any renderer console error, and on an empty capture, which is what an unpainted
+window silently produces. It is the only automated check that sees the renderer at all.
+
 **Shutdown:** quitting the window detaches. It does **not** stop herdr and does **not** stop the
 daemon. Agents keep running. Add an explicit "Stop everything" menu item and a tray state so
 this is discoverable rather than surprising.
