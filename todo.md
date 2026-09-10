@@ -72,7 +72,6 @@ The actual novelty. Everything else is assembly.
       (a fourth model call would have no way to check its work), but it will miss a paraphrase
       that shares few words with the original
 - [ ] Electron app builds, typechecks and lints; still not launched against a live daemon
-- [ ] `osade` CLI has no tests
 - [ ] `VerifyRunner` recovers exit codes by echoing a sentinel into the lane. Proved against
       real herdr in the M1 acceptance, but still the weakest seam. Revisit if herdr ever
       exposes a run-and-report method.

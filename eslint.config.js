@@ -34,6 +34,22 @@ const NO_ENV_DESTRUCTURE = {
     'OSADE.md §20.1: do not destructure process.env — read it at the use site so late-set variables are visible.',
 };
 
+/**
+ * The same rule, one property over.
+ *
+ * `import { argv } from 'node:process'` binds the array at import time. A runner that rewrites
+ * argv — vite-node does — replaces `process.argv` wholesale, so the imported binding still points
+ * at the array from *before* the rewrite, script path and all, and every argument lands one
+ * place to the right. This shipped once: the `osade` bin read its own path as the command name,
+ * so `--help` printed "unknown command group" and an unknown command exited 0.
+ */
+const NO_PROCESS_BINDING_IMPORT = {
+  selector:
+    'ImportDeclaration[source.value=/^(node:)?process$/] > ImportSpecifier[imported.name=/^(argv|env)$/]',
+  message:
+    'OSADE.md §20.1: do not import argv or env as bindings — read process.argv / process.env at the use site, because a runner can replace them after this module loads.',
+};
+
 /** §17 — one definition of the synthetic orchestrator id. */
 const NO_RAW_ORCHESTRATOR_ID = {
   selector: 'Literal[value=/__orchestrator__/]',
@@ -62,7 +78,7 @@ const NO_STORED_STATUS = [
   },
 ];
 
-const BASE_SELECTORS = [NO_ENV_DESTRUCTURE, NO_RAW_ORCHESTRATOR_ID];
+const BASE_SELECTORS = [NO_ENV_DESTRUCTURE, NO_PROCESS_BINDING_IMPORT, NO_RAW_ORCHESTRATOR_ID];
 
 export default tseslint.config(
   { ignores: [...GENERATED, ...HERDR_FURNITURE, 'vendor/**', '**/*.d.ts'] },
@@ -174,7 +190,7 @@ export default tseslint.config(
   // ── the synthetic orchestrator id lives in exactly one file (§17) ─────────
   {
     files: ['packages/daemon/src/domain/orchestrator-id.ts'],
-    rules: { 'no-restricted-syntax': ['error', NO_ENV_DESTRUCTURE] },
+    rules: { 'no-restricted-syntax': ['error', NO_ENV_DESTRUCTURE, NO_PROCESS_BINDING_IMPORT] },
   },
 
   // ── the renderer is never the source of truth (§18.1) ─────────────────────

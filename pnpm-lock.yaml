@@ -69,6 +69,10 @@ importers:
       '@osade/contract':
         specifier: workspace:*
         version: link:../contract
+    devDependencies:
+      '@osade/daemon':
+        specifier: workspace:*
+        version: link:../daemon
 
   packages/contract:
     dependencies:

@@ -42,6 +42,29 @@ describe('§20.1 lint boundaries actually fire', () => {
     expect(messages.join('\n')).toContain('§20.1');
   });
 
+  it('§20.1 — importing argv as a binding from node:process', async () => {
+    // The bug this caught: a runner that rewrites argv reassigns `process.argv`, so a binding
+    // captured at import time still holds the pre-rewrite array — script path and all.
+    const messages = await messagesFor(
+      DOMAIN,
+      ["import { argv } from 'node:process';", 'export const x = argv;', ''].join('\n'),
+    );
+    expect(messages.join('\n')).toContain('§20.1');
+  });
+
+  it('§20.1 — importing env as a binding, bare specifier included', async () => {
+    const messages = await messagesFor(
+      DOMAIN,
+      ["import { env } from 'process';", 'export const x = env;', ''].join('\n'),
+    );
+    expect(messages.join('\n')).toContain('§20.1');
+  });
+
+  it('§20.1 — but reading process.argv at the use site is fine', async () => {
+    const messages = await messagesFor(DOMAIN, 'export const x = process.argv.slice(2);\n');
+    expect(messages.join('\n')).not.toContain('§20.1');
+  });
+
   it('§17 — a raw __orchestrator__ literal', async () => {
     const messages = await messagesFor(DOMAIN, "export const id = '__orchestrator__:r1';\n");
     expect(messages.join('\n')).toContain('§17');

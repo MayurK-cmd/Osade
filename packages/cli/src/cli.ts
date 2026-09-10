@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { resolve } from 'node:path';
 
 import type { TaskStatus, TaskView } from '@osade/contract';
@@ -12,6 +11,24 @@ import { api, OsadeCliError } from './client.js';
  * creation (§8.2 step 4), so writes are attributed and scoped without the caller asserting an
  * identity.
  */
+
+/**
+ * Where output goes.
+ *
+ * Injected rather than reached for, so `main` can be driven by a test that reads what a user
+ * would have seen. §17's claim is that an orchestrating agent and a human drive the *same*
+ * surface — a CLI whose behaviour is only observable by running a subprocess is one where that
+ * claim goes unchecked.
+ */
+export interface Io {
+  out(text: string): void;
+  err(text: string): void;
+}
+
+export const processIo: Io = {
+  out: (text) => void process.stdout.write(text),
+  err: (text) => void process.stderr.write(text),
+};
 
 /** §19.3 — the gutter glyph set is fixed-width and fixed-position, so it scans peripherally. */
 const GLYPH: Record<TaskStatus, string> = {
@@ -74,16 +91,16 @@ Task id defaults to $OSADE_TASK_ID, which is set inside every agent lane.
 The daemon must be running: osade-daemon start
 `;
 
-async function main(argv: string[]): Promise<number> {
+export async function main(argv: string[], io: Io = processIo): Promise<number> {
   const [group, command, ...rest] = argv;
 
   if (!group || group === 'help' || group === '--help' || group === '-h') {
-    process.stdout.write(HELP);
+    io.out(HELP);
     return 0;
   }
 
   if (group !== 'task') {
-    process.stderr.write(`unknown command group: ${group}\n`);
+    io.err(`unknown command group: ${group}\n`);
     return 2;
   }
 
@@ -91,15 +108,15 @@ async function main(argv: string[]): Promise<number> {
     case 'list': {
       const tasks = await api.taskList();
       if (tasks.length === 0) {
-        process.stdout.write('no tasks yet — osade task create <repo> <title>\n');
+        io.out('no tasks yet — osade task create <repo> <title>\n');
         return 0;
       }
       const needsYou = tasks.filter((t) => t.needsYou);
       for (const view of tasks) {
         // One blank line between the needs-you set and everything else, so the boundary is
         // visible without a header (§19.4: nothing moves on its own, nothing shouts).
-        if (needsYou.length > 0 && view === tasks[needsYou.length]) process.stdout.write('\n');
-        process.stdout.write(renderRow(view) + '\n');
+        if (needsYou.length > 0 && view === tasks[needsYou.length]) io.out('\n');
+        io.out(renderRow(view) + '\n');
       }
       return 0;
     }
@@ -107,7 +124,7 @@ async function main(argv: string[]): Promise<number> {
     case 'create': {
       const [repoPath, title, ...intentParts] = rest;
       if (!repoPath || !title) {
-        process.stderr.write('usage: osade task create <repo> <title> [intent]\n');
+        io.err('usage: osade task create <repo> <title> [intent]\n');
         return 2;
       }
       const { taskId } = await api.taskCreate({
@@ -115,24 +132,24 @@ async function main(argv: string[]): Promise<number> {
         title,
         intent: intentParts.join(' ') || title,
       });
-      process.stdout.write(`${taskId}\n`);
+      io.out(`${taskId}\n`);
       return 0;
     }
 
     case 'start': {
       const taskId = currentTaskId(rest[0]);
       const result = await api.taskLaunch(taskId);
-      process.stdout.write(`${taskId} launched in ${result.workspaceId} pane ${result.paneId}\n`);
+      io.out(`${taskId} launched in ${result.workspaceId} pane ${result.paneId}\n`);
       return 0;
     }
 
     case 'show': {
       const view = await api.taskGet(currentTaskId(rest[0]));
       if (!view) {
-        process.stderr.write('no such task\n');
+        io.err('no such task\n');
         return 1;
       }
-      process.stdout.write(
+      io.out(
         [
           `${view.task.id}  ${view.task.title}`,
           `status       ${view.status}${view.needsYou ? '  (needs you)' : ''}`,
@@ -157,42 +174,49 @@ async function main(argv: string[]): Promise<number> {
       const taskId = currentTaskId(looksLikeId ? args[0] : undefined);
       const text = (looksLikeId ? args.slice(1) : args).join(' ');
       if (!text) {
-        process.stderr.write('usage: osade task send [task-id] <text> [--wait]\n');
+        io.err('usage: osade task send [task-id] <text> [--wait]\n');
         return 2;
       }
       await api.taskSend(taskId, text, wait);
-      process.stdout.write('sent\n');
+      io.out('sent\n');
       return 0;
     }
 
     case 'read': {
       const linesFlag = rest.indexOf('--lines');
-      const lines = linesFlag >= 0 ? Number(rest[linesFlag + 1]) : undefined;
-      const positional = rest.filter((a, i) => a !== '--lines' && i !== linesFlag + 1);
+
+      let lines: number | undefined;
+      if (linesFlag >= 0) {
+        // Validated here rather than sent onward: `--lines` with nothing after it used to reach
+        // the daemon as NaN and come back as a schema error about a field the user never named.
+        const parsed = Number(rest[linesFlag + 1]);
+        if (!Number.isInteger(parsed) || parsed < 1) {
+          io.err('usage: osade task read [task-id] [--lines N]   (N: a positive integer)\n');
+          return 2;
+        }
+        lines = parsed;
+      }
+
+      // Skip by *index*, not by value. Filtering on `i !== linesFlag + 1` dropped argument 0 —
+      // the task id — whenever `--lines` was absent and `indexOf` returned -1, so
+      // `osade task read <id>` silently read whatever `$OSADE_TASK_ID` pointed at instead.
+      const skip = linesFlag >= 0 ? new Set([linesFlag, linesFlag + 1]) : new Set<number>();
+      const positional = rest.filter((_, i) => !skip.has(i));
+
       const result = await api.taskTranscript(currentTaskId(positional[0]), lines);
-      process.stdout.write(result.text.endsWith('\n') ? result.text : result.text + '\n');
-      if (result.truncated) process.stderr.write('(truncated)\n');
+      io.out(result.text.endsWith('\n') ? result.text : result.text + '\n');
+      if (result.truncated) io.err('(truncated)\n');
       return 0;
     }
 
     case 'archive': {
       await api.taskArchive(currentTaskId(rest[0]));
-      process.stdout.write('archived\n');
+      io.out('archived\n');
       return 0;
     }
 
     default:
-      process.stderr.write(`unknown task command: ${command ?? '(none)'}\n`);
+      io.err(`unknown task command: ${command ?? '(none)'}\n`);
       return 2;
   }
 }
-
-main(process.argv.slice(2)).then(
-  (code) => {
-    if (code !== 0) process.exit(code);
-  },
-  (err: Error) => {
-    process.stderr.write(`${err instanceof OsadeCliError ? err.message : err.stack}\n`);
-    process.exit(1);
-  },
-);
