@@ -223,7 +223,15 @@ export default tseslint.config(
 
   // ── scripts are scripts ───────────────────────────────────────────────────
   {
-    files: ['scripts/**/*.mjs', 'eslint.config.js', '**/vite.config.ts', 'vitest.config.ts'],
+    files: [
+      'scripts/**/*.mjs',
+      // Package-local scripts too. A script that needs a package's dependencies has to sit
+      // beside them, because node resolves from the file's own location, not the cwd.
+      'packages/*/scripts/**/*.mjs',
+      'eslint.config.js',
+      '**/vite.config.ts',
+      'vitest.config.ts',
+    ],
     languageOptions: {
       globals: { process: 'readonly', console: 'readonly', URL: 'readonly' },
     },
