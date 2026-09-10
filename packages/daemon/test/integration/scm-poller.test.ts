@@ -237,6 +237,88 @@ describe('§11.1 — reads', () => {
     expect(getScmFact(db, 't1')!.unresolved_threads).toBe(0);
     expect(deriveStatus(getTaskFacts(db, 't1')!, clock)).toBe('pr_open');
   });
+
+  it("one reviewer's approval does not clear another reviewer's request", async () => {
+    const gh = recorded({
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}': [PR_OPEN],
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews': [
+        [
+          { state: 'CHANGES_REQUESTED', user: { login: 'ada' } },
+          { state: 'APPROVED', user: { login: 'grace' } },
+        ],
+      ],
+      'GET /repos/{owner}/{repo}/commits/{ref}/check-runs': [{ check_runs: [] }],
+    });
+    await new ScmPoller(db, new ScmClient({ request: gh.request }), {
+      now: () => clock,
+    }).refreshPr('t1', 7);
+
+    // Ada is still waiting. Dropping this task out of the needs-you set because someone else
+    // approved is how a maintainer's request gets silently abandoned.
+    expect(getScmFact(db, 't1')!.review_state).toBe('changes_requested');
+    expect(getScmFact(db, 't1')!.unresolved_threads).toBe(1);
+    expect(deriveStatus(getTaskFacts(db, 't1')!, clock)).toBe('review_changes_requested');
+  });
+
+  it('counts reviewers who are still asking, not review rows', async () => {
+    const gh = recorded({
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}': [PR_OPEN],
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews': [
+        [
+          { state: 'CHANGES_REQUESTED', user: { login: 'ada' } },
+          { state: 'CHANGES_REQUESTED', user: { login: 'ada' } },
+          { state: 'CHANGES_REQUESTED', user: { login: 'grace' } },
+          { state: 'APPROVED', user: { login: 'alan' } },
+        ],
+      ],
+      'GET /repos/{owner}/{repo}/commits/{ref}/check-runs': [{ check_runs: [] }],
+    });
+    await new ScmPoller(db, new ScmClient({ request: gh.request }), {
+      now: () => clock,
+    }).refreshPr('t1', 7);
+
+    // Two people are waiting, not four reviews and not one boolean.
+    expect(getScmFact(db, 't1')!.unresolved_threads).toBe(2);
+  });
+
+  it('a dismissed review stops counting against the task', async () => {
+    const gh = recorded({
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}': [PR_OPEN],
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews': [
+        [
+          { state: 'CHANGES_REQUESTED', user: { login: 'ada' } },
+          { state: 'DISMISSED', user: { login: 'ada' } },
+        ],
+      ],
+      'GET /repos/{owner}/{repo}/commits/{ref}/check-runs': [{ check_runs: [] }],
+    });
+    await new ScmPoller(db, new ScmClient({ request: gh.request }), {
+      now: () => clock,
+    }).refreshPr('t1', 7);
+
+    expect(getScmFact(db, 't1')!.unresolved_threads).toBe(0);
+    expect(getScmFact(db, 't1')!.review_state).toBe('none');
+  });
+
+  it('a later comment does not withdraw an outstanding request', async () => {
+    const gh = recorded({
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}': [PR_OPEN],
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews': [
+        [
+          { state: 'CHANGES_REQUESTED', user: { login: 'ada' } },
+          // GitHub: a COMMENTED review carries no verdict and leaves the standing one alone.
+          { state: 'COMMENTED', user: { login: 'ada' } },
+        ],
+      ],
+      'GET /repos/{owner}/{repo}/commits/{ref}/check-runs': [{ check_runs: [] }],
+    });
+    await new ScmPoller(db, new ScmClient({ request: gh.request }), {
+      now: () => clock,
+    }).refreshPr('t1', 7);
+
+    expect(getScmFact(db, 't1')!.review_state).toBe('changes_requested');
+    expect(getScmFact(db, 't1')!.unresolved_threads).toBe(1);
+  });
 });
 
 describe('§11.1 — rate limits', () => {
@@ -326,6 +408,34 @@ describe('§21 M2 — review feedback loops back into the agent lane', () => {
     expect(sent[0]!.text).toContain('https://github.com/acme/widget/pull/7');
     // §14 — the agent never performs a gated action itself.
     expect(sent[0]!.text).toContain('Do not push, comment, or update the pull request');
+  });
+
+  it('does not replay a request the reviewer has already withdrawn', async () => {
+    const sent: string[] = [];
+    const gh = recorded({
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}': [PR_OPEN, PR_OPEN],
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews': [
+        [
+          // Ada asked, then was satisfied. Grace is the one still waiting.
+          { state: 'CHANGES_REQUESTED', body: 'Rename this module.', user: { login: 'ada' } },
+          { state: 'APPROVED', body: 'Looks good now.', user: { login: 'ada' } },
+          { state: 'CHANGES_REQUESTED', body: 'Add a test for null.', user: { login: 'grace' } },
+        ],
+      ],
+      'GET /repos/{owner}/{repo}/commits/{ref}/check-runs': [{ check_runs: [] }],
+    });
+
+    await new ScmPoller(db, new ScmClient({ request: gh.request }), {
+      now: () => clock,
+      sendToAgent: async (_taskId, text) => {
+        sent.push(text);
+      },
+    }).refreshPr('t1', 7);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!).toContain('Add a test for null.');
+    // Re-fixing something already accepted spends the agent's turn for nothing.
+    expect(sent[0]!).not.toContain('Rename this module.');
   });
 
   it('delivers once on the transition, not on every poll', async () => {

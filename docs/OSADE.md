@@ -575,6 +575,9 @@ CREATE TABLE scm_fact (
   pr_draft      INTEGER,
   checks_state  TEXT,                      -- pending|success|failure|neutral
   review_state  TEXT,                      -- none|commented|changes_requested|approved
+  -- Corrected 2026-09-10: a real count of *reviewers* whose latest verdict is still
+  -- `changes_requested`, not review rows and not a 0/1 flag. Verdicts are grouped per author:
+  -- one reviewer's approval must not cancel another reviewer's outstanding request.
   unresolved_threads INTEGER NOT NULL DEFAULT 0,
   mergeable     TEXT,                      -- clean|dirty|blocked|unknown
   fetched_at    INTEGER NOT NULL,
@@ -1248,6 +1251,19 @@ v1 is local-first with no public ingress, so there is no webhook endpoint. Poll:
 
 Conditional requests with ETags. A failed poll writes `fetch_failed_at` and changes nothing
 else — **INVARIANT: a failed fetch is a fact, not a state change.**
+
+**Reviews are read per author** (added 2026-09-10, after finding the opposite in the
+implementation). GitHub's review list is a chronological log, not a verdict, and reducing it
+requires its actual semantics: `APPROVED` and `CHANGES_REQUESTED` replace *that author's*
+standing verdict, `COMMENTED` carries no verdict and leaves a standing one alone, `DISMISSED`
+clears it. A single running verdict over the whole list gets this wrong in a way that matters:
+one reviewer's approval cancels a different reviewer's outstanding request, and the task leaves
+the needs-you set with a maintainer still waiting. One outstanding request outranks any number
+of approvals.
+
+The same grouping decides what reaches the agent. A reviewer who asked and then approved has
+been satisfied, so replaying their words spends the agent's turn re-fixing something already
+accepted — only still-standing requests are delivered.
 
 ### 11.2 Writes — all gated
 

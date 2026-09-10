@@ -79,8 +79,6 @@ The actual novelty. Everything else is assembly.
 - [ ] The M1 acceptance's "agent fixes it" step depends on a real agent choosing to act, so it
       can fail for reasons outside Osade. Failures now report whether the prompt was
       *delivered* separately from what the agent did with it.
-- [ ] `unresolved_threads` is derived from review state rather than counting real threads;
-      good enough for §6 row 5, wrong if the UI ever shows the number
 
 ## Release blockers (THIRD-PARTY-NOTICES.md)
 - [ ] fetch herdr's LICENSE + NOTICE from the pinned tag into vendor/herdr/0.8.2-p20/
