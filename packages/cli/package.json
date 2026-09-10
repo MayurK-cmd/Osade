@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "bin": {
-    "osade": "./src/bin.ts"
+    "osade": "./dist/bin.js"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "node ../../scripts/bundle.mjs . src/bin.ts dist/bin.js"
   },
   "dependencies": {
     "@osade/contract": "workspace:*"

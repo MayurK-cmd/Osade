@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import type { ChildProcess } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -43,15 +43,27 @@ let spawnedDaemon: ChildProcess | null = null;
 async function boot(): Promise<void> {
   await adoptOrSpawnHerdr({ onInfo: (m) => console.log(`[herdr] ${m}`) });
 
-  const daemonEntry = join(__dirname, '../../../..', 'packages/daemon/src/cli.ts');
   const daemon = await adoptOrSpawnDaemon({
-    entry: process.env.OSADE_DAEMON_ENTRY ?? daemonEntry,
+    entry: process.env.OSADE_DAEMON_ENTRY ?? daemonEntry(),
     onInfo: (m) => console.log(`[daemon] ${m}`),
   });
   daemonPort = daemon.port;
   spawnedDaemon = daemon.child;
 
   createWindow();
+}
+
+/**
+ * The daemon to run: built JavaScript when it exists, TypeScript source otherwise.
+ *
+ * Built wins because it is what a packaged app has and what plain node can execute. Source is
+ * the fallback so a fresh checkout works before anyone has run `pnpm build` — the supervisor
+ * routes that through the dev runner. `OSADE_DAEMON_ENTRY` overrides both.
+ */
+function daemonEntry(): string {
+  const repo = join(__dirname, '../../../..');
+  const built = join(repo, 'packages/daemon/dist/cli.js');
+  return existsSync(built) ? built : join(repo, 'packages/daemon/src/cli.ts');
 }
 
 function createWindow(): void {

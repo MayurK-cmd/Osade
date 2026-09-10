@@ -47,3 +47,4 @@ apps/desktop/smoke.png
 apps/desktop/.smoke/
 vendor/herdr/*/x86_64-*/
 vendor/herdr/*/aarch64-*/
+packages/*/dist/
