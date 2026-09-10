@@ -20,7 +20,8 @@
     "test:e2e": "cross-env OSADE_E2E=1 vitest run packages/daemon/test/e2e",
     "lint": "eslint .",
     "attribution": "node scripts/generate-rust-attribution.mjs",
-    "attribution:check": "node scripts/generate-rust-attribution.mjs --check"
+    "attribution:check": "node scripts/generate-rust-attribution.mjs --check",
+    "herdr:source": "node scripts/fetch-herdr-source.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

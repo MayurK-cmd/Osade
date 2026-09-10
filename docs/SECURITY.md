@@ -12,11 +12,15 @@ Report privately through GitHub's [private vulnerability
 reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability)
 on this repository: **Security → Report a vulnerability**.
 
-<!-- TODO: add a security contact address here, or enable private vulnerability reporting in
-     the repository settings so the link above works. One of the two must be true before the
-     first public release. -->
-
 Please include: what you were running, the steps to reproduce, and what an attacker gains.
+
+**If that button is not there**, open a public issue that says only that you have a security
+report and asks a maintainer to open a private channel — no details, no reproduction, no
+proof-of-concept. An empty issue costs a maintainer a minute; a public reproduction costs every
+user of the release until it is patched.
+
+No email address is published here on purpose. A private advisory keeps the report, the fix and
+the disclosure in one place, and an address in a public file mostly collects spam.
 
 ## Scope
 
