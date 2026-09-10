@@ -36,6 +36,11 @@ OSADE_GITHUB_TOKEN=ghp_… OSADE_ANTHROPIC_API_KEY=sk-ant-… \
 call and one verify call per candidate (Sonnet). Start with a smaller repo. Re-mines are
 incremental and cost a fraction of the first run.
 
+**On time.** The run happens in the background and the panel shows which pass it is in —
+extraction is one model call per pull request and is where nearly all the minutes go. You can
+close the panel; the run continues. If the daemon is stopped mid-run the run is marked
+interrupted at the next start, and anything already written is kept.
+
 ---
 
 ## 1. Mine the repository
@@ -47,13 +52,15 @@ Open any task on the repo and use **Mine this repository** in the conventions pa
 1. The button is disabled with a stated reason when it cannot work — no model key, no GitHub
    token, no GitHub remote, or a run already in progress. It should never fail *after* two
    minutes of work for a reason that was knowable before it started.
-2. Every rule that appears has at least one citation, and **every citation is a link that
+2. Progress appears within a second or two and keeps moving. A run that sits on `fetching` for
+   minutes on a small repo is a bug; on a 300-PR repo it is the GitHub fetch doing its job.
+3. Every rule that appears has at least one citation, and **every citation is a link that
    resolves to a real page in this repository**. Click three at random. This is §13.1, and it is
    the single most important thing to verify by hand: the invariant is enforced at write time,
    but only a human can confirm the URL points at what the quote says it does.
-3. Rules arrive as candidates. Nothing is active until you say so, however confident it is —
+4. Rules arrive as candidates. Nothing is active until you say so, however confident it is —
    except rules from CI config, which are mechanically enforced and can auto-promote.
-4. Nothing being found is a **valid result**, not a failure. A rule needs three observations from
+5. Nothing being found is a **valid result**, not a failure. A rule needs three observations from
    two different PRs, or one from CI. A repo whose reviews are all "LGTM" genuinely has no mined
    conventions.
 

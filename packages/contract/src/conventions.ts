@@ -63,6 +63,19 @@ export const ConventionView = z.object({
 });
 export type ConventionView = z.infer<typeof ConventionView>;
 
+/**
+ * Which pass a run is in. `interrupted` is what an unfinished run looks like once the daemon
+ * running it went away — distinguishable from a run still working, which is the point.
+ */
+export const MinePhase = z.enum([
+  'fetching',
+  'extracting',
+  'clustering',
+  'verifying',
+  'interrupted',
+]);
+export type MinePhase = z.infer<typeof MinePhase>;
+
 export const MineRunView = z.object({
   id: z.string(),
   startedAt: Timestamp,
@@ -71,6 +84,9 @@ export const MineRunView = z.object({
   observations: z.number().int(),
   candidates: z.number().int(),
   error: z.string().nullable(),
+  phase: MinePhase.nullable(),
+  progressDone: z.number().int(),
+  progressTotal: z.number().int(),
 });
 export type MineRunView = z.infer<typeof MineRunView>;
 
@@ -82,6 +98,8 @@ export const MineStatus = z.object({
   lastRun: MineRunView.nullable(),
   activeRules: z.number().int(),
   candidateRules: z.number().int(),
+  /** §13.4's weekly re-mine, offered rather than performed — mining spends real money. */
+  dueForRemine: z.boolean(),
 });
 export type MineStatus = z.infer<typeof MineStatus>;
 

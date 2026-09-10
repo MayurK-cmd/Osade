@@ -1,10 +1,12 @@
+import { randomUUID } from 'node:crypto';
+
 import type { Db } from '../db/index.js';
 import type { ScmClient } from '../scm/client.js';
 import { fetchCorpus, fetchReviewRounds } from '../scm/corpus.js';
 
 import { Conventions, type ConventionWithEvidence } from './conventions.js';
 import { compareInjection, type Comparison } from './measure.js';
-import { Miner, type MineResult } from './miner.js';
+import { Miner, type MineResult, type MinePhase } from './miner.js';
 import type { ModelPort } from './model.js';
 
 /**
@@ -27,7 +29,13 @@ export interface MineRunRow {
   observations: number;
   candidates: number;
   error: string | null;
+  phase: MinePhase | null;
+  progressDone: number;
+  progressTotal: number;
 }
+
+/** §13.4 — "re-mine weekly, or on demand". */
+export const REMINE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface MiningAvailability {
   available: boolean;
@@ -62,6 +70,34 @@ export class Knowledge {
     this.#now = options.now ?? Date.now;
     this.#onWarning = options.onWarning ?? (() => {});
     this.#conventions = new Conventions(db, { now: this.#now });
+    this.#reapInterruptedRuns();
+  }
+
+  /**
+   * A run whose daemon died is finished, whatever its row says.
+   *
+   * `#running` is in-memory, so after a restart an unfinished row would look like a run in
+   * progress forever: the button would stay disabled and nothing would ever re-enable it. Marked
+   * `interrupted` rather than deleted — the partial work is real (conventions written before the
+   * crash are still cited and still valid), and only the high-water mark is withheld, which
+   * `highWaterPr` already does by ignoring runs with an error.
+   */
+  #reapInterruptedRuns(): void {
+    const orphans = this.#db
+      .prepare(
+        `UPDATE mine_run
+            SET finished_at = ?, phase = 'interrupted',
+                error = COALESCE(error, 'the daemon stopped while this run was in progress')
+          WHERE finished_at IS NULL`,
+      )
+      .run(this.#now());
+
+    if (orphans.changes > 0) {
+      this.#onWarning(
+        `${orphans.changes} mining run(s) did not finish before the daemon stopped; ` +
+          `re-run to cover the pull requests they missed`,
+      );
+    }
   }
 
   get conventions(): Conventions {
@@ -120,11 +156,65 @@ export class Knowledge {
       observations: row.observations as number,
       candidates: row.candidates as number,
       error: (row.error as string | null) ?? null,
+      phase: (row.phase as MinePhase | null) ?? null,
+      progressDone: (row.progress_done as number | null) ?? 0,
+      progressTotal: (row.progress_total as number | null) ?? 0,
     };
   }
 
   /**
-   * Fetch, mine, store. Incremental by default (§13.4).
+   * §13.4 — "re-mine weekly". Reported, never acted on.
+   *
+   * A timer that mined every Monday would spend the user's GitHub quota and model tokens while
+   * they were not looking, which contradicts the rule that mining is always explicit. So this
+   * says a repo is *due* and lets the UI offer it. Never mined at all does not count as due:
+   * a repo nobody has chosen to mine is not overdue for a second helping.
+   */
+  dueForRemine(repoId: string): boolean {
+    const row = this.#db
+      .prepare(
+        `SELECT MAX(finished_at) AS last FROM mine_run
+          WHERE repo_id = ? AND finished_at IS NOT NULL AND error IS NULL`,
+      )
+      .get(repoId) as { last: number | null };
+
+    if (row.last === null) return false;
+    return this.#now() - row.last >= REMINE_INTERVAL_MS;
+  }
+
+  /**
+   * Starts a run and returns at once.
+   *
+   * Mining a 300-pull-request repository is minutes of work, which makes it the wrong shape for
+   * a request-response call: a single long mutation holds an HTTP request open with nothing to
+   * show, and a client that gives up mid-flight learns nothing about a run that is still
+   * spending money. So the run goes to the background and its progress lands in `mine_run`,
+   * where `mineStatus` can poll it — and where a second window watching the same daemon sees the
+   * same thing.
+   *
+   * Throws only for the reasons `availability` already knows: those are worth surfacing
+   * immediately rather than as a failed background run a moment later.
+   */
+  startMine(repoId: string, options: { full?: boolean } = {}): { runId: string } {
+    const availability = this.availability(repoId);
+    if (!availability.available) throw new Error(availability.reason ?? 'mining unavailable');
+
+    // Claimed synchronously, before the first await, so two calls in the same tick cannot both
+    // pass the availability check above.
+    this.#running.add(repoId);
+    const runId = `mr_${randomUUID().slice(0, 8)}`;
+
+    void this.#mineHoldingLock(repoId, runId, options).catch((error: Error) => {
+      // #mineHoldingLock records failures in `mine_run` itself; this is the last resort for a
+      // throw on the way there. An unhandled rejection here would take the daemon down.
+      this.#onWarning(`mining run ${runId} failed: ${error.message}`);
+    });
+
+    return { runId };
+  }
+
+  /**
+   * Fetch, mine, store. Incremental by default (§13.4). Awaits the whole run.
    *
    * Decay runs first: a rule that has gone 180 days without confirmation should be a candidate
    * *before* this run gets its chance to re-confirm it, or a stale rule would be quietly renewed
@@ -133,16 +223,48 @@ export class Knowledge {
   async mine(repoId: string, options: { full?: boolean } = {}): Promise<MineResult> {
     const availability = this.availability(repoId);
     if (!availability.available) throw new Error(availability.reason ?? 'mining unavailable');
-
-    const repo = this.#repo(repoId);
-    const scm = this.#scm;
-    const model = this.#model;
-    if (!repo?.gh_owner || !repo.gh_name || !scm || !model) {
-      throw new Error(availability.reason ?? 'mining unavailable');
-    }
-
     this.#running.add(repoId);
+    return this.#mineHoldingLock(repoId, `mr_${randomUUID().slice(0, 8)}`, options);
+  }
+
+  /** The body of a run. The caller has already claimed `#running`; this always releases it. */
+  async #mineHoldingLock(
+    repoId: string,
+    runId: string,
+    options: { full?: boolean },
+  ): Promise<MineResult> {
+    // The row exists before any work does, so a poll one millisecond later sees a run rather
+    // than nothing. Fetching the corpus is itself minutes of GitHub calls.
+    this.#db
+      .prepare(
+        `INSERT INTO mine_run (id, repo_id, started_at, phase) VALUES (?, ?, ?, 'fetching')`,
+      )
+      .run(runId, repoId, this.#now());
+
+    const fail = (message: string): MineResult => {
+      this.#db
+        .prepare('UPDATE mine_run SET finished_at = ?, error = ? WHERE id = ?')
+        .run(this.#now(), message, runId);
+      return {
+        runId,
+        observations: 0,
+        candidates: 0,
+        written: 0,
+        rejected: 0,
+        reconfirmed: 0,
+        belowThreshold: 0,
+        error: message,
+      };
+    };
+
     try {
+      const repo = this.#repo(repoId);
+      const scm = this.#scm;
+      const model = this.#model;
+      if (!repo?.gh_owner || !repo.gh_name || !scm || !model) {
+        return fail('mining unavailable');
+      }
+
       const decayed = this.#conventions.decay();
       if (decayed > 0) {
         this.#onWarning(`${decayed} convention(s) went 180 days unconfirmed and are candidates`);
@@ -151,6 +273,13 @@ export class Knowledge {
       const miner = new Miner(this.#db, model, {
         now: this.#now,
         onWarning: this.#onWarning,
+        onProgress: (progress) => {
+          this.#db
+            .prepare(
+              'UPDATE mine_run SET phase = ?, progress_done = ?, progress_total = ? WHERE id = ?',
+            )
+            .run(progress.phase, progress.done, progress.total, runId);
+        },
       });
 
       const { corpus, partial } = await fetchCorpus(
@@ -168,7 +297,10 @@ export class Knowledge {
         );
       }
 
-      return await miner.mine(corpus);
+      return await miner.mine(corpus, { runId });
+    } catch (error) {
+      // A background run has no caller to throw at, so the failure has to be durable.
+      return fail((error as Error).message);
     } finally {
       this.#running.delete(repoId);
     }

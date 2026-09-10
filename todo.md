@@ -54,6 +54,11 @@ The actual novelty. Everything else is assembly.
 - [x] §13.6 instrumentation: `task_injection` records what each launch injected, and the
       comparison can report that conventions made things worse
 - [x] Candidate/active promotion UI with the evidence beside the toggle (§13.4)
+- [x] Mining is a background job: starting it returns a run id, progress lands in `mine_run`,
+      the panel polls only while a run is live, a run interrupted by a daemon restart is reaped
+      at startup rather than looking live forever
+- [x] §13.4's weekly re-mine, **reported rather than performed** — a timer that spent tokens
+      unattended would contradict "mining is always explicit"
 
 - [ ] Run `docs/M3-ACCEPTANCE.md` on a repo with a real review history, with your own keys.
       **M3 acceptance (§13.6):** N ≥ 10 comparable tasks with and without injected conventions
@@ -66,10 +71,6 @@ The actual novelty. Everything else is assembly.
 - [ ] Near-duplicate rule matching is content-word overlap within a category. Deliberately dumb
       (a fourth model call would have no way to check its work), but it will miss a paraphrase
       that shares few words with the original
-- [ ] `mineRepo` is a single long-running mutation. A 300-PR first run holds one HTTP request
-      open for minutes; the UI shows no progress until it returns. `mine_run` already carries
-      the bookkeeping to make this a background job with a polled status
-- [ ] §13.4 says re-mine "weekly, or on demand". Only on demand is wired — nothing schedules it
 - [ ] Electron app builds, typechecks and lints; still not launched against a live daemon
 - [ ] `osade` CLI has no tests
 - [ ] `VerifyRunner` recovers exit codes by echoing a sentinel into the lane. Proved against
@@ -99,3 +100,4 @@ The actual novelty. Everything else is assembly.
 - [ ] move herdr's AGENTS.md, .github/ and .agents/skills/herdr-* under backend/
 - [ ] decide backend/: submodule, vendored at a pinned tag, or fetched by script
 - [ ] add a security contact to docs/SECURITY.md, or enable private vulnerability reporting
+

@@ -1381,6 +1381,27 @@ everything else normally and reports why mining is unavailable rather than faili
 presses the button. Mining is also always explicit — it spends GitHub quota and model tokens, so
 nothing starts it on its own and no task launch ever waits on it.
 
+**A run is a background job, not a request** (added 2026-09-10). A first mine of a large
+repository is minutes of model calls, which is the wrong shape for request-response: a single
+long mutation holds a connection open with nothing to show, and a client that gives up learns
+nothing about a run that is still spending money. Starting a mine returns a run id immediately
+and the run reports itself into `mine_run` — phase and a count — where a poll can read it and a
+second window watching the same daemon sees the same thing. Three consequences:
+
+- **The row exists before the work does.** Fetching the corpus is itself minutes of GitHub calls,
+  so the run is recorded as `fetching` before the first request goes out.
+- **A background failure has to be durable.** There is no caller to throw at, so a failed run is
+  written to its row, and a run that failed never advances the high-water mark.
+- **A run whose daemon died is marked `interrupted` at the next startup.** The in-memory lock
+  cannot survive a restart, so without this an unfinished row would look like a run in progress
+  forever and the button would never re-enable. The partial work is kept — conventions written
+  before the crash are still cited and still valid.
+
+The weekly half of "re-mine weekly, or on demand" is **reported, never performed**: a timer that
+mined every Monday would spend the user's quota and tokens while they were not looking, which is
+exactly what "mining is always explicit" forbids. A repo that has gone a week is flagged as due
+and the UI offers it. Never having been mined is not overdue.
+
 ### 13.5 Injection
 
 Render active conventions into `<worktree>/.osade/CONTEXT.md` at launch:

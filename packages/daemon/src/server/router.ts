@@ -4,7 +4,6 @@ import { z } from 'zod';
 import {
   ConventionImpact,
   ConventionView,
-  MineResultView,
   MineStatus,
   TaskId,
   TaskStatus,
@@ -393,19 +392,25 @@ export const appRouter = t.router({
         lastRun: knowledge.lastRun(input.repoId),
         activeRules: rules.filter((r) => r.lifecycle === 'active').length,
         candidateRules: rules.filter((r) => r.lifecycle === 'candidate').length,
+        dueForRemine: knowledge.dueForRemine(input.repoId),
       };
     }),
 
   /**
    * §13.4 — mining is always explicit. It spends GitHub quota and model tokens, so nothing
    * starts it on its own and no task launch waits on it.
+   *
+   * Returns as soon as the run is *started*, not when it finishes: a first mine of a large
+   * repository is minutes of model calls, and holding an HTTP request open for that is the wrong
+   * shape — a client that times out would learn nothing about a run still spending money. Poll
+   * `mineStatus` for progress.
    */
   mineRepo: t.procedure
     .input(z.object({ repoId: z.string(), full: z.boolean().optional() }))
-    .output(MineResultView)
-    .mutation(async ({ ctx, input }) => {
+    .output(z.object({ runId: z.string() }))
+    .mutation(({ ctx, input }) => {
       try {
-        return await requireKnowledge(ctx).mine(input.repoId, { full: input.full });
+        return requireKnowledge(ctx).startMine(input.repoId, { full: input.full });
       } catch (err) {
         throw new TRPCError({ code: 'PRECONDITION_FAILED', message: (err as Error).message });
       }

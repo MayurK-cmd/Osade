@@ -55,6 +55,22 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
     void refresh().catch((err: Error) => setError(err.message));
   }, [refresh]);
 
+  /**
+   * Poll only while a run is live.
+   *
+   * Mining takes minutes and the daemon runs it in the background, so this is the one place the
+   * panel needs a clock. It stops the moment the run does — §18.1's rule that the renderer is
+   * never the source of truth cuts both ways, and a timer that keeps asking a finished question
+   * is just noise on the wire.
+   */
+  useEffect(() => {
+    if (!status?.running) return;
+    const timer = setInterval(() => {
+      void refresh().catch((err: Error) => setError(err.message));
+    }, 2_000);
+    return () => clearInterval(timer);
+  }, [status?.running, refresh]);
+
   async function run(action: () => Promise<unknown>): Promise<void> {
     setBusy(true);
     setError(null);
@@ -99,15 +115,23 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
         >
           {status?.running ? 'Mining…' : status?.lastRun ? 'Mine again' : 'Mine this repository'}
         </button>
-        {status && !status.available && (
+        {status?.running && <Progress run={status.lastRun} />}
+        {status && !status.available && !status.running && (
           <span style={{ color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>{status.reason}</span>
         )}
-        {status?.lastRun?.error && (
+        {!status?.running && status?.lastRun?.error && (
           <span style={{ color: 'var(--st-fail)', fontSize: 'var(--t-xs)' }}>
             last run failed: {status.lastRun.error}
           </span>
         )}
       </div>
+
+      {/* §13.4's weekly re-mine — offered, never performed unasked. */}
+      {status?.dueForRemine && !status.running && (
+        <p style={{ color: 'var(--st-needs)', fontSize: 'var(--t-xs)', margin: '-6px 0 12px' }}>
+          Last mined over a week ago. Re-mining reads only what is new since then.
+        </p>
+      )}
 
       {error && <Err message={error} />}
       {note && (
@@ -183,6 +207,33 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
         Did this help?
       </button>
     </section>
+  );
+}
+
+/**
+ * What a running mine is doing.
+ *
+ * Extraction is one model call per pull request and is where a run spends nearly all of its
+ * time, so it is the only phase with a count worth showing. The others say what is happening and
+ * leave it there rather than inventing a percentage.
+ */
+function Progress({ run }: { run: MineStatus['lastRun'] }): JSX.Element | null {
+  if (!run?.phase) return null;
+
+  const label: Record<NonNullable<MineStatus['lastRun']>['phase'] & string, string> = {
+    fetching: 'reading the review record from GitHub',
+    extracting: 'reading pull requests',
+    clustering: 'grouping what it found',
+    verifying: 'testing each rule against merged pull requests',
+    interrupted: 'interrupted',
+  };
+
+  const counted = run.progressTotal > 0 ? ` ${run.progressDone}/${run.progressTotal}` : '';
+  return (
+    <span style={{ color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
+      {label[run.phase]}
+      {counted}
+    </span>
   );
 }
 

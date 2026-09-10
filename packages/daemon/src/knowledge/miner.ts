@@ -56,9 +56,26 @@ export interface MineResult {
   error: string | null;
 }
 
+/**
+ * Which pass a run is in, for the UI.
+ *
+ * `interrupted` is not a pass — it is what an unfinished run looks like after the daemon that
+ * was running it went away, and it exists so that state is distinguishable from a run still
+ * working. A row that says "extracting" forever is indistinguishable from progress.
+ */
+export type MinePhase = 'fetching' | 'extracting' | 'clustering' | 'verifying' | 'interrupted';
+
+export interface MineProgress {
+  phase: MinePhase;
+  done: number;
+  total: number;
+}
+
 export interface MinerOptions {
   now?: () => number;
   onWarning?: (message: string) => void;
+  /** Called as the run advances. Writes to `mine_run` so a poll can see it. */
+  onProgress?: (progress: MineProgress) => void;
 }
 
 export class Miner {
@@ -67,12 +84,14 @@ export class Miner {
   readonly #conventions: Conventions;
   readonly #now: () => number;
   readonly #onWarning: (message: string) => void;
+  readonly #onProgress: (progress: MineProgress) => void;
 
   constructor(db: Db, model: ModelPort, options: MinerOptions = {}) {
     this.#db = db;
     this.#model = model;
     this.#now = options.now ?? Date.now;
     this.#onWarning = options.onWarning ?? (() => {});
+    this.#onProgress = options.onProgress ?? (() => {});
     this.#conventions = new Conventions(db, { now: this.#now });
   }
 
@@ -93,12 +112,18 @@ export class Miner {
     return row.hw ?? null;
   }
 
-  async mine(corpus: Corpus): Promise<MineResult> {
-    const runId = `mr_${randomUUID().slice(0, 8)}`;
-    const startedAt = this.#now();
-    this.#db
-      .prepare('INSERT INTO mine_run (id, repo_id, started_at) VALUES (?, ?, ?)')
-      .run(runId, corpus.repoId, startedAt);
+  /**
+   * `runId` adopts a `mine_run` row the caller already created — the background path starts one
+   * before fetching the corpus, so a poll sees a run rather than nothing during the minutes that
+   * takes. Without one, this owns the row itself.
+   */
+  async mine(corpus: Corpus, options: { runId?: string } = {}): Promise<MineResult> {
+    const runId = options.runId ?? `mr_${randomUUID().slice(0, 8)}`;
+    if (!options.runId) {
+      this.#db
+        .prepare('INSERT INTO mine_run (id, repo_id, started_at) VALUES (?, ?, ?)')
+        .run(runId, corpus.repoId, this.#now());
+    }
 
     try {
       const result = await this.#run(runId, corpus);
@@ -138,6 +163,12 @@ export class Miner {
     const { extractable, heldOut } = splitCorpus(corpus);
 
     // ── pass 1 ──────────────────────────────────────────────────────────────
+    // This is the long one: one model call per pull request, so it is where a run spends
+    // almost all of its minutes and the only phase whose progress means anything to a human.
+    const extractTotal = extractable.length + corpus.docs.length;
+    let extractDone = 0;
+    this.#onProgress({ phase: 'extracting', done: 0, total: extractTotal });
+
     const observations: Observation[] = [];
     for (const pr of extractable) {
       try {
@@ -146,6 +177,8 @@ export class Miner {
         // One unreadable PR must not lose the other 199. The run reports the gap instead.
         this.#onWarning(`extract failed for PR #${pr.number}: ${(error as Error).message}`);
       }
+      extractDone += 1;
+      this.#onProgress({ phase: 'extracting', done: extractDone, total: extractTotal });
     }
     for (const doc of corpus.docs) {
       try {
@@ -153,9 +186,12 @@ export class Miner {
       } catch (error) {
         this.#onWarning(`extract failed for ${doc.path}: ${(error as Error).message}`);
       }
+      extractDone += 1;
+      this.#onProgress({ phase: 'extracting', done: extractDone, total: extractTotal });
     }
 
     // ── pass 2 ──────────────────────────────────────────────────────────────
+    this.#onProgress({ phase: 'clustering', done: 0, total: 1 });
     const candidates = await clusterObservations(this.#model, observations);
     const byId = new Map(observations.map((o) => [o.id, o]));
 
@@ -164,8 +200,13 @@ export class Miner {
     let rejected = 0;
     let reconfirmed = 0;
     let belowThreshold = 0;
+    let verified = 0;
+    this.#onProgress({ phase: 'verifying', done: 0, total: candidates.length });
 
     for (const candidate of candidates) {
+      verified += 1;
+      this.#onProgress({ phase: 'verifying', done: verified, total: candidates.length });
+
       const support = candidate.observationIds
         .map((id) => byId.get(id))
         .filter((o): o is Observation => o !== undefined);

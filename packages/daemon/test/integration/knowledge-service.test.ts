@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { openDb, type Db } from '../../src/db/index.js';
+import { Miner } from '../../src/knowledge/miner.js';
 import { Knowledge } from '../../src/knowledge/service.js';
 import type { ModelPort, ModelRequest } from '../../src/knowledge/model.js';
 import { ScmClient, type ScmRequest } from '../../src/scm/client.js';
@@ -29,6 +30,48 @@ function scmClient(handler: (route: string) => unknown = () => []): ScmClient {
     data: handler(route),
   });
   return new ScmClient({ request, now: () => NOW });
+}
+
+/** A GitHub with two closed pull requests, so extraction has something to park on. */
+function prCorpus(route: string): unknown {
+  if (route === 'GET /repos/{owner}/{repo}/pulls') {
+    return [
+      {
+        number: 20,
+        html_url: 'https://github.com/acme/widget/pull/20',
+        title: 'Change 20',
+        body: 'body',
+        user: { login: 'contributor' },
+        merged_at: null,
+        closed_at: '2025-08-02T00:00:00Z',
+        updated_at: '2025-08-02T00:00:00Z',
+      },
+      {
+        number: 19,
+        html_url: 'https://github.com/acme/widget/pull/19',
+        title: 'Change 19',
+        body: 'body',
+        user: { login: 'contributor' },
+        merged_at: '2025-08-01T00:00:00Z',
+        closed_at: '2025-08-01T00:00:00Z',
+        updated_at: '2025-08-01T00:00:00Z',
+      },
+    ];
+  }
+  return [];
+}
+
+/**
+ * Waits for a background run to let go of its repo.
+ *
+ * The whole point of `startMine` is that nothing awaits it, so a test has to watch the same
+ * signal the UI does rather than hold a promise.
+ */
+async function settle(knowledge: Knowledge, repoId: string): Promise<void> {
+  for (let i = 0; i < 200 && knowledge.isRunning(repoId); i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  if (knowledge.isRunning(repoId)) throw new Error(`mining run on ${repoId} never finished`);
 }
 
 function seedRepo(id: string, owner: string | null, name: string | null): void {
@@ -73,6 +116,207 @@ describe('mining availability is reported, not discovered halfway through', () =
     const knowledge = new Knowledge(db, scmClient(), null, { now: () => NOW });
     await expect(knowledge.mine('r1')).rejects.toThrow(/OSADE_ANTHROPIC_API_KEY/);
     expect(db.prepare('SELECT COUNT(*) AS n FROM mine_run').get()).toEqual({ n: 0 });
+  });
+});
+
+describe('mining runs in the background — it takes minutes', () => {
+  /** A model that parks on the first call, so a run can be observed mid-flight. */
+  function parked(): { model: ModelPort; release: () => void; started: Promise<void> } {
+    let release: () => void = () => {};
+    let markStarted: () => void = () => {};
+    const blocked = new Promise<void>((resolve) => (release = resolve));
+    const started = new Promise<void>((resolve) => (markStarted = resolve));
+
+    return {
+      release,
+      started,
+      model: {
+        async complete(req) {
+          markStarted();
+          await blocked;
+          return silentModel.complete(req);
+        },
+      },
+    };
+  }
+
+  it('returns a run id at once rather than holding the caller for the whole run', async () => {
+    const { model, release, started } = parked();
+    const knowledge = new Knowledge(db, scmClient(prCorpus), model, { now: () => NOW });
+
+    const { runId } = knowledge.startMine('r1');
+    expect(runId).toMatch(/^mr_/);
+
+    await started;
+    expect(knowledge.isRunning('r1')).toBe(true);
+
+    release();
+    await settle(knowledge, 'r1');
+  });
+
+  it('records the run before any work happens, so a poll sees it immediately', () => {
+    const { model } = parked();
+    const knowledge = new Knowledge(db, scmClient(prCorpus), model, { now: () => NOW });
+
+    const { runId } = knowledge.startMine('r1');
+
+    const run = knowledge.lastRun('r1');
+    expect(run?.id).toBe(runId);
+    expect(run?.phase).toBe('fetching');
+    expect(run?.finishedAt).toBeNull();
+  });
+
+  it('reports which pass it is in and how far through', async () => {
+    const { model, release, started } = parked();
+    const knowledge = new Knowledge(db, scmClient(prCorpus), model, { now: () => NOW });
+
+    knowledge.startMine('r1');
+    await started;
+
+    const run = knowledge.lastRun('r1');
+    expect(run?.phase).toBe('extracting');
+    expect(run?.progressTotal).toBeGreaterThan(0);
+
+    release();
+    await settle(knowledge, 'r1');
+    expect(knowledge.lastRun('r1')?.finishedAt).toBe(NOW);
+  });
+
+  it('refuses a second run while one is in flight', async () => {
+    const { model, release, started } = parked();
+    const knowledge = new Knowledge(db, scmClient(prCorpus), model, { now: () => NOW });
+
+    knowledge.startMine('r1');
+    await started;
+    expect(() => knowledge.startMine('r1')).toThrow(/already in progress/);
+
+    release();
+    await settle(knowledge, 'r1');
+  });
+
+  it('cannot be started twice in the same tick', () => {
+    const { model } = parked();
+    const knowledge = new Knowledge(db, scmClient(prCorpus), model, { now: () => NOW });
+
+    knowledge.startMine('r1');
+    expect(() => knowledge.startMine('r1')).toThrow(/already in progress/);
+  });
+
+  it('records a background failure durably — there is no caller to throw at', async () => {
+    // GitHub failing outright, rather than a model failing on one PR: an extract failure is a
+    // per-PR warning by design, so it is the fetch that can take a whole run down.
+    const brokenGitHub = scmClient(() => {
+      throw Object.assign(new Error('502 Bad Gateway'), { status: 502 });
+    });
+    const knowledge = new Knowledge(db, brokenGitHub, silentModel, { now: () => NOW });
+
+    knowledge.startMine('r1');
+    await settle(knowledge, 'r1');
+
+    const run = knowledge.lastRun('r1');
+    expect(run?.finishedAt).toBe(NOW);
+    expect(run?.error).toContain('502');
+    expect(knowledge.isRunning('r1')).toBe(false);
+    // And a failed run leaves the next one free to start.
+    expect(knowledge.availability('r1').available).toBe(true);
+  });
+
+  it('does not advance the high-water mark past pull requests a failed run never read', async () => {
+    const brokenGitHub = scmClient(() => {
+      throw Object.assign(new Error('502 Bad Gateway'), { status: 502 });
+    });
+    const knowledge = new Knowledge(db, brokenGitHub, silentModel, { now: () => NOW });
+
+    knowledge.startMine('r1');
+    await settle(knowledge, 'r1');
+
+    expect(new Miner(db, silentModel, { now: () => NOW }).highWaterPr('r1')).toBeNull();
+  });
+});
+
+describe('a run whose daemon died', () => {
+  it('is marked interrupted at startup rather than looking live forever', () => {
+    db.prepare('INSERT INTO mine_run (id, repo_id, started_at, phase) VALUES (?, ?, ?, ?)').run(
+      'mr_orphan',
+      'r1',
+      NOW - DAY,
+      'extracting',
+    );
+
+    const warnings: string[] = [];
+    const knowledge = new Knowledge(db, scmClient(), silentModel, {
+      now: () => NOW,
+      onWarning: (m) => warnings.push(m),
+    });
+
+    const run = knowledge.lastRun('r1');
+    expect(run?.phase).toBe('interrupted');
+    expect(run?.finishedAt).toBe(NOW);
+    expect(run?.error).toContain('daemon stopped');
+    expect(warnings.some((w) => w.includes('did not finish'))).toBe(true);
+    // And the button works again.
+    expect(knowledge.availability('r1').available).toBe(true);
+  });
+
+  it('does not let the interrupted run advance the high-water mark', () => {
+    db.prepare(
+      'INSERT INTO mine_run (id, repo_id, started_at, high_water_pr) VALUES (?, ?, ?, ?)',
+    ).run('mr_orphan', 'r1', NOW - DAY, 900);
+
+    new Knowledge(db, scmClient(), silentModel, { now: () => NOW });
+
+    const miner = new Miner(db, silentModel, { now: () => NOW });
+    expect(miner.highWaterPr('r1')).toBeNull();
+  });
+});
+
+describe('§13.4 — weekly re-mine, offered rather than performed', () => {
+  function completedRun(finishedAt: number, error: string | null = null): void {
+    db.prepare(
+      'INSERT INTO mine_run (id, repo_id, started_at, finished_at, error) VALUES (?, ?, ?, ?, ?)',
+    ).run(`mr_${finishedAt}`, 'r1', finishedAt - 1000, finishedAt, error);
+  }
+
+  it('a repo nobody has mined is not overdue', () => {
+    const knowledge = new Knowledge(db, scmClient(), silentModel, { now: () => NOW });
+    expect(knowledge.dueForRemine('r1')).toBe(false);
+  });
+
+  it('is not due within the week', () => {
+    completedRun(NOW - 6 * DAY);
+    const knowledge = new Knowledge(db, scmClient(), silentModel, { now: () => NOW });
+    expect(knowledge.dueForRemine('r1')).toBe(false);
+  });
+
+  it('is due after a week', () => {
+    completedRun(NOW - 8 * DAY);
+    const knowledge = new Knowledge(db, scmClient(), silentModel, { now: () => NOW });
+    expect(knowledge.dueForRemine('r1')).toBe(true);
+  });
+
+  it('does not count a failed run as having mined anything', () => {
+    completedRun(NOW - 10 * DAY);
+    completedRun(NOW - DAY, 'boom');
+    const knowledge = new Knowledge(db, scmClient(), silentModel, { now: () => NOW });
+    expect(knowledge.dueForRemine('r1')).toBe(true);
+  });
+
+  it('never starts a run on its own — mining spends real money', async () => {
+    completedRun(NOW - 30 * DAY);
+    let calls = 0;
+    const counting: ModelPort = {
+      async complete(req) {
+        calls += 1;
+        return silentModel.complete(req);
+      },
+    };
+
+    const knowledge = new Knowledge(db, scmClient(prCorpus), counting, { now: () => NOW });
+    expect(knowledge.dueForRemine('r1')).toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(calls).toBe(0);
+    expect(knowledge.isRunning('r1')).toBe(false);
   });
 });
 

@@ -294,6 +294,23 @@ CREATE TABLE task_injection (
 );
 `;
 
+/**
+ * M3 — mining progress, because mining takes minutes.
+ *
+ * A 300-pull-request first run is not a request-response operation. The run happens in the
+ * background and the UI polls, which means progress has to live somewhere durable rather than in
+ * the promise nobody is awaiting: an in-memory counter would vanish on restart and would be
+ * invisible to a second window looking at the same daemon.
+ *
+ * `phase` doubles as the liveness signal — a row with `finished_at IS NULL` whose phase is
+ * `interrupted` is a run whose daemon died, which is a different thing from a run still going.
+ */
+const M005_MINE_PROGRESS = `
+ALTER TABLE mine_run ADD COLUMN phase TEXT;
+ALTER TABLE mine_run ADD COLUMN progress_done INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE mine_run ADD COLUMN progress_total INTEGER NOT NULL DEFAULT 0;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     id: 1,
@@ -314,5 +331,10 @@ export const MIGRATIONS: readonly Migration[] = [
     id: 4,
     name: 'convention injection, recorded per launch for §13.6',
     sql: M004_INJECTION,
+  },
+  {
+    id: 5,
+    name: 'mining progress, for runs that take minutes',
+    sql: M005_MINE_PROGRESS,
   },
 ];

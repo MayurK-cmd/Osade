@@ -6,12 +6,7 @@
  * renderer never computes status.
  */
 
-import type {
-  ConventionImpact,
-  ConventionView,
-  MineResultView,
-  MineStatus,
-} from '@osade/contract';
+import type { ConventionImpact, ConventionView, MineStatus } from '@osade/contract';
 
 let cachedBase: string | null = null;
 
@@ -74,8 +69,9 @@ export const api = {
   mineStatus: (repoId: string) =>
     call('query', 'mineStatus', { repoId }) as Promise<MineStatus>,
 
+  /** Starts a background run and returns at once; poll `mineStatus` for progress. */
   mineRepo: (repoId: string, full?: boolean) =>
-    call('mutation', 'mineRepo', { repoId, full }) as Promise<MineResultView>,
+    call('mutation', 'mineRepo', { repoId, full }) as Promise<{ runId: string }>,
 
   conventionList: (repoId: string) =>
     call('query', 'conventionList', { repoId }) as Promise<ConventionView[]>,
