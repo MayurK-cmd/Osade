@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 
 /**
  * Spawn and adopt the Osade daemon — OSADE.md §18.1.
@@ -41,6 +41,85 @@ function readPort(): number | null {
   }
 }
 
+/**
+ * How to actually run the daemon — three things the first live launch got wrong, each of which
+ * surfaced as the same useless symptom: "the daemon did not become healthy within 30s".
+ *
+ * **The daemon runs on Node, not on Electron's Node.** `process.execPath` under Electron is
+ * `electron.exe`, whose Node has its own native ABI (`NODE_MODULE_VERSION` 130 for Electron 33,
+ * against 127 for Node 22). `better-sqlite3` is compiled once, for Node — and it has to be,
+ * because the daemon also runs standalone under the CLI and the test suite. Running it under
+ * Electron would demand a second, ABI-matched build of the same module and two ways to get it
+ * wrong. §2 already treats the daemon as an independent process that outlives the window; this
+ * makes the runtime match that.
+ *
+ * **`ELECTRON_RUN_AS_NODE` is the fallback, not the plan.** If no Node is found, `electron.exe`
+ * at least behaves as a Node runtime rather than booting a second, invisible Electron app — but
+ * native modules will still be wrong, so the failure is loud when it comes.
+ *
+ * **A `.ts` entry is not executable.** In a source checkout the daemon is TypeScript and Node
+ * answers `ERR_UNKNOWN_FILE_EXTENSION`. A packaged build ships JavaScript and is spawned
+ * directly; a checkout goes through the same dev runner every doc and test already uses.
+ */
+export function daemonCommand(entry: string): {
+  command: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+} {
+  const node = nodeBinary();
+  // Read at the use site, never snapshotted (§20.1).
+  const env = { ...process.env };
+  if (node.isElectron) env.ELECTRON_RUN_AS_NODE = '1';
+
+  const args = entry.endsWith('.ts')
+    ? // `--` separates vite-node's own arguments from the script's; without it `start` is eaten.
+      [viteNodeCli(entry), entry, '--', 'start']
+    : [entry, 'start'];
+
+  return { command: node.command, args, env };
+}
+
+/**
+ * A real `node`, or Electron pretending.
+ *
+ * `OSADE_NODE_BIN` overrides the search, which is what a packaged build will set once it ships
+ * its own runtime.
+ */
+export function nodeBinary(): { command: string; isElectron: boolean } {
+  const explicit = process.env.OSADE_NODE_BIN;
+  if (explicit && existsSync(explicit)) return { command: explicit, isElectron: false };
+
+  const name = process.platform === 'win32' ? 'node.exe' : 'node';
+  for (const dir of (process.env.PATH ?? '').split(delimiter)) {
+    if (!dir) continue;
+    const candidate = join(dir, name);
+    if (existsSync(candidate)) return { command: candidate, isElectron: false };
+  }
+
+  return { command: process.execPath, isElectron: true };
+}
+
+/**
+ * The dev runner's entry, found from the daemon entry rather than from `__dirname`.
+ *
+ * Resolving relative to this file would break the moment the main process is bundled; the
+ * daemon entry is a real path inside the repo either way.
+ */
+function viteNodeCli(daemonEntry: string): string {
+  let dir = dirname(daemonEntry);
+  for (let up = 0; up < 8; up += 1) {
+    const candidate = join(dir, 'node_modules', 'vite-node', 'dist', 'cli.mjs');
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error(
+    `cannot run the daemon from TypeScript: vite-node was not found above ${daemonEntry}. ` +
+      `Build the daemon, or point OSADE_DAEMON_ENTRY at built JavaScript.`,
+  );
+}
+
 export interface DaemonSupervisorOptions {
   /** Node entry for the daemon CLI. */
   entry: string;
@@ -72,8 +151,9 @@ export async function adoptOrSpawnDaemon(
     rmSync(portFile(), { force: true });
   }
 
-  const child = spawn(process.execPath, [options.entry, 'start'], {
-    env: process.env,
+  const { command, args, env } = daemonCommand(options.entry);
+  const child = spawn(command, args, {
+    env,
     stdio: ['ignore', 'inherit', 'inherit'],
     detached: true,
     windowsHide: true,

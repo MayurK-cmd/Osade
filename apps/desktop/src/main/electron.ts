@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -75,10 +76,64 @@ function createWindow(): void {
     void window.loadFile(join(__dirname, '../renderer/index.html'));
   }
 
-  if (isDev) window.webContents.openDevTools({ mode: 'detach' });
+  if (isDev && !smokeShotPath()) window.webContents.openDevTools({ mode: 'detach' });
   window.on('closed', () => {
     window = null;
   });
+
+  void runSmokeShot(window);
+}
+
+/** Where a smoke run should write its screenshot, if this is one. */
+function smokeShotPath(): string | undefined {
+  return process.env.OSADE_SMOKE_SHOT;
+}
+
+/**
+ * Boot, photograph the window, quit.
+ *
+ * The renderer is the one part of Osade a test suite cannot see: everything else is asserted by
+ * `pnpm check`, while the window is only ever verified by a human looking at it. This makes
+ * "does it actually render against a live daemon" a command that leaves evidence behind, which
+ * is the difference between the app being checked occasionally and being checked at all.
+ *
+ * Off unless `OSADE_SMOKE_SHOT` names a file. It is a capture, not a mode — nothing about the
+ * boot sequence changes, so what it photographs is the real thing.
+ */
+async function runSmokeShot(target: BrowserWindow): Promise<void> {
+  const path = smokeShotPath();
+  if (!path) return;
+
+  const failures: string[] = [];
+  target.webContents.on('console-message', (_event, level, message) => {
+    // Errors only. A renderer that logged a warning still rendered.
+    if (level >= 2) failures.push(message);
+  });
+  target.webContents.on('render-process-gone', (_event, details) =>
+    failures.push(`render process gone: ${details.reason}`),
+  );
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      target.webContents.once('did-finish-load', () => resolve());
+      target.webContents.once('did-fail-load', (_event, code, description) =>
+        reject(new Error(`the renderer failed to load: ${description} (${code})`)),
+      );
+    });
+
+    // A moment past load, so React has mounted rather than being caught mid-paint.
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    writeFileSync(path, (await target.webContents.capturePage()).toPNG());
+    console.log(`[smoke] wrote ${path}`);
+
+    for (const failure of failures) console.error(`[smoke] renderer error: ${failure}`);
+    if (failures.length > 0) process.exitCode = 1;
+  } catch (err) {
+    console.error(`[smoke] ${(err as Error).message}`);
+    process.exitCode = 1;
+  } finally {
+    app.quit();
+  }
 }
 
 ipcMain.handle('osade:daemon-port', () => daemonPort);
