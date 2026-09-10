@@ -16,9 +16,11 @@
     "herdr:codegen": "node scripts/generate-herdr-client.mjs",
     "herdr:drift": "vite-node packages/daemon/src/cli.ts -- drift",
     "herdr:codegen:check": "node scripts/generate-herdr-client.mjs --check",
-    "check": "pnpm herdr:codegen:check && pnpm lint && pnpm -r typecheck && vitest run",
+    "check": "pnpm herdr:codegen:check && pnpm attribution:check && pnpm lint && pnpm -r typecheck && vitest run",
     "test:e2e": "cross-env OSADE_E2E=1 vitest run packages/daemon/test/e2e",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "attribution": "node scripts/generate-rust-attribution.mjs",
+    "attribution:check": "node scripts/generate-rust-attribution.mjs --check"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

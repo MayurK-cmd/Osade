@@ -35,6 +35,17 @@
     "todo": "M0 packaging: fetch per-platform release binaries into this directory, record a sha256 per target, verify at boot (OSADE.md §18.1)."
   },
 
+  "license": {
+    "$comment": "herdr is Apache-2.0. LICENSE is the file from the pinned tag, byte for byte, so attribution does not depend on the network or on backend/ still being present. There is NO NOTICE file upstream (raw.githubusercontent.com/herdrdev/herdr/v0.8.2/NOTICE is 404), so Apache-2.0 section 4(d) has nothing to propagate - recorded here so nobody re-checks, and so nobody writes one.",
+    "spdx": "Apache-2.0",
+    "file": "LICENSE",
+    "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "source": "https://raw.githubusercontent.com/herdrdev/herdr/v0.8.2/LICENSE",
+    "fetched_at": "2026-09-11",
+    "notice_file": null,
+    "upstream_repository": "https://github.com/herdrdev/herdr"
+  },
+
   "known_gaps": {
     "$comment": "Methods present in backend/src/api/schema.rs but absent from this pinned schema. Calling any of these against this target returns invalid_request. See PRD-DELTA #1.",
     "absent_from_this_target": [

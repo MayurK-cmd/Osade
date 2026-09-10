@@ -21,8 +21,6 @@ import tseslint from 'typescript-eslint';
 
 const GENERATED = ['**/generated/**', '**/dist/**', '**/node_modules/**', 'backend/**'];
 
-/** herdr's own repo furniture, hoisted into this tree. Not Osade code (PRD-DELTA #14). */
-const HERDR_FURNITURE = ['.agents/**', '.github/**'];
 
 // ── selectors, declared once ────────────────────────────────────────────────
 
@@ -81,7 +79,7 @@ const NO_STORED_STATUS = [
 const BASE_SELECTORS = [NO_ENV_DESTRUCTURE, NO_PROCESS_BINDING_IMPORT, NO_RAW_ORCHESTRATOR_ID];
 
 export default tseslint.config(
-  { ignores: [...GENERATED, ...HERDR_FURNITURE, 'vendor/**', '**/*.d.ts'] },
+  { ignores: [...GENERATED, 'vendor/**', '**/*.d.ts'] },
 
   js.configs.recommended,
   ...tseslint.configs.recommended,
