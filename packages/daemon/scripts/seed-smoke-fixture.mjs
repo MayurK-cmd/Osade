@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-import Database from 'better-sqlite3';
 import { createHash } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+
+import { openDb } from '../src/db/index.js';
 
 /**
  * Seed a smoke database with one task that reaches every panel.
@@ -13,11 +15,15 @@ import { join, resolve } from 'node:path';
  * Writes facts directly, which is the point: §6 derives status at read time, so seeding *facts*
  * and seeing the right status appear is the invariant being checked, not a shortcut around it.
  *
- *   node scripts/seed-smoke-fixture.mjs [path-to-osade-home]
+ *   pnpm --filter @osade/daemon exec vite-node scripts/seed-smoke-fixture.mjs [osade-home]
  */
 
 const home = resolve(process.argv[2] ?? join('apps', 'desktop', '.smoke'));
-const db = new Database(join(home, 'osade.db'));
+mkdirSync(home, { recursive: true });
+
+// `openDb` migrates, so this works against a fresh directory as well as a booted one - which is
+// what lets the panel check be a single command instead of boot-then-seed-then-boot.
+const db = openDb(join(home, 'osade.db'));
 const NOW = Date.now();
 
 const payload = {

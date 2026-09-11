@@ -123,6 +123,7 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
   const path = smokeShotPath();
   if (!path) return;
 
+  let failed = false;
   const failures: string[] = [];
   target.webContents.on('console-message', (_event, level, message) => {
     // Errors only. A renderer that logged a warning still rendered.
@@ -156,6 +157,22 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
       await new Promise((resolve) => setTimeout(resolve, 1_500));
     }
 
+    // `OSADE_SMOKE_EXPECT` turns the screenshot into a check. A picture proves the window is not
+    // blank; it proves nothing about a panel that quietly stopped rendering, because the only
+    // thing that would notice is a person who happened to look carefully. Each `|`-separated
+    // phrase must appear in the rendered text.
+    const expected = (process.env.OSADE_SMOKE_EXPECT ?? '').split('|').filter(Boolean);
+    if (expected.length > 0) {
+      const text = (await target.webContents.executeJavaScript(
+        'document.body.innerText',
+      )) as string;
+      const missing = expected.filter((phrase) => !text.includes(phrase));
+      for (const phrase of missing) failures.push(`expected on screen, absent: ${phrase}`);
+      if (missing.length === 0) {
+        console.log(`[smoke] all ${expected.length} expected phrases are on screen`);
+      }
+    }
+
     // An occluded or unpainted window captures as an *empty* image rather than failing, so a
     // zero-byte PNG would otherwise be written and reported as a pass. Bring the window forward,
     // stop Chromium throttling it, and retry until there are actual pixels.
@@ -174,10 +191,10 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
     console.log(`[smoke] wrote ${path} (${png.length} bytes)`);
 
     for (const failure of failures) console.error(`[smoke] renderer error: ${failure}`);
-    if (failures.length > 0) process.exitCode = 1;
+    if (failures.length > 0) failed = true;
   } catch (err) {
     console.error(`[smoke] ${(err as Error).message}`);
-    process.exitCode = 1;
+    failed = true;
   } finally {
     // §18.1 says shutdown detaches and the daemon outlives the window — which is right for a
     // person, and wrong for a harness that would otherwise leave a daemon behind on every run.
@@ -190,7 +207,12 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
         // Already gone. Nothing to do, and nothing worth saying.
       }
     }
-    app.quit();
+
+    // `app.exit(code)`, not `app.quit()`. Electron's quit sequence discards `process.exitCode`,
+    // so a smoke run that detected a missing panel still exited 0 — a check that reports a
+    // failure and then reports success is worse than no check, because CI believes the second
+    // one. Found by deliberately asserting a phrase that was not on screen.
+    app.exit(failed ? 1 : 0);
   }
 }
 
