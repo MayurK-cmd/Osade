@@ -48,6 +48,29 @@ being lost.
 `backend/` if it is deleted, and establishing **known** provenance the next time the herdr pin
 moves. It is not wired into any build.
 
+## How far the provenance could be narrowed
+
+Chased on 2026-09-11 by comparing git blob hashes — content-addressed, so a match is proof
+rather than a guess:
+
+| file | result |
+| --- | --- |
+| `src/api/server.rs` | matches `cc88b3b8` (2026-09-01, "feat: add stable client endpoint compatibility #3509") |
+| `src/app/agents.rs` | matches `cc88b3b8` |
+| `src/api/subscriptions.rs` | matches `cc88b3b8` |
+| `Cargo.lock` | matches `cc88b3b8` |
+| `src/platform/windows.rs` | **matches nothing public** |
+
+So the bulk of `backend/` is herdr at `cc88b3b8`. But `src/platform/windows.rs` matches neither
+that commit, nor any master commit touching that path, nor the `windows` branch — and it is
+unmodified relative to Osade's own git HEAD, so it was not changed in this session. Either it
+came from an unpushed branch, or `backend/` was edited before the read-only rule was written
+down.
+
+**This is not academic.** The first version of `patches/0001` was generated against that file and
+did **not** apply to herdr's master. It was regenerated against master and verified there. Anyone
+writing a patch from `backend/` should assume the same and check.
+
 ## What this leaves open
 
 The next herdr bump should land `backend/` at a known commit and write `OSADE-PIN.json` beside it

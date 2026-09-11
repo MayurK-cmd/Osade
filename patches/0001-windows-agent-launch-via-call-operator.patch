@@ -2,6 +2,15 @@
 #
 # PRD-DELTA #13a.2. Found while launching Claude Code and Codex from Osade on Windows.
 #
+# TARGET
+#   herdrdev/herdr master @ 61ca85d5895bb530b59da85beeccdd767f4720d2 (2026-09-11).
+#   Verified with `git apply --check` against that file.
+#
+#   NOTE: this does NOT apply to Osade's own `backend/`. That tree's
+#   `src/platform/windows.rs` matches no commit in herdr's public history (ADR 0002), so a patch
+#   generated against it would not apply upstream — which is exactly what happened to the first
+#   version of this file. The bug is present in both; only the line numbers differ.
+#
 # WHAT HAPPENS
 #   `agent.start` on Windows builds a PowerShell script that runs the agent through
 #   `Start-Process -FilePath <program> -ArgumentList '<args>'` unless `Get-Command` reports the
@@ -18,7 +27,7 @@
 #   is why the branch can go away entirely rather than gain a third arm. `&` is also synchronous
 #   in the current console, so `-NoNewWindow -Wait` was already describing what `&` does.
 #
-#   `quote_windows_command_line_arg` stays: it has another caller at windows.rs:913.
+#   `super::quote_windows_command_line_arg` stays: it has another caller at windows.rs:1037.
 #
 # NOT COMPILED HERE
 #   herdr requires Zig 0.15.2 for libghostty-vt and this machine has no Zig, so this was verified
@@ -33,13 +42,13 @@
 #   than hidden.
 --- a/src/platform/windows.rs
 +++ b/src/platform/windows.rs
-@@ -562,18 +562,15 @@
+@@ -715,18 +715,15 @@
          .map(|arg| super::quote_powershell_arg(arg))
          .collect::<Vec<_>>()
          .join(" ");
 -    let command_line = args
 -        .iter()
--        .map(|arg| quote_windows_command_line_arg(arg))
+-        .map(|arg| super::quote_windows_command_line_arg(arg))
 -        .collect::<Vec<_>>()
 -        .join(" ");
 +    // The call operator runs whatever `Get-Command` resolves - .exe, .cmd, .bat and .ps1 alike.
@@ -58,7 +67,7 @@
      ))
  }
  
-@@ -2718,7 +2715,7 @@
+@@ -2917,7 +2914,7 @@
              .collect::<Vec<_>>();
          assert_eq!(
              String::from_utf16(&utf16).unwrap(),

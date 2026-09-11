@@ -25,14 +25,29 @@ event, or drop it), and 0003 is about which error a caller should see. Guessing 
 shipping a diff would waste a maintainer's time arguing with a stranger's assumption instead of
 reading a description of the problem.
 
+## Patches target herdr's master, not `backend/`
+
+`backend/`'s `src/platform/windows.rs` matches no commit in herdr's public history (ADR 0002), so
+a diff generated against it does not apply upstream. That is not hypothetical: the first version
+of 0001 was written from `backend/` and failed `git apply --check` against master. It was
+regenerated against master and verified there.
+
+Read `backend/` to understand the behaviour. Generate the diff against the file you are actually
+asking someone to change:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/herdrdev/herdr/master/src/platform/windows.rs -o /tmp/upstream.rs
+# edit a copy, diff the two, then check it applies to a clean copy of the same file
+```
+
 ## None of this is compiled
 
 herdr requires **Zig 0.15.2** for `libghostty-vt`, which this machine does not have, so nothing
 here has been through `cargo test`. 0001 was verified by reading and by `git apply --check`
-against the pinned tree; the test it updates should be run before the patch is taken:
+against herdr's master; the test it updates should be run before the patch is taken:
 
 ```bash
-cd backend && cargo test -p herdr platform::windows
+cargo test -p herdr platform::windows
 ```
 
 Treat these as well-evidenced proposals, not as verified changes.

@@ -28,9 +28,12 @@ photographs the window.
 
 ## Carried debt
 
-- [ ] **`backend/`'s provenance is unknown.** It is an unreleased herdr, ahead of v0.8.2, with
-      nothing recording which commit (ADR 0002). The next herdr bump should land it at a known
-      commit — `scripts/fetch-herdr-source.mjs` does that and writes `OSADE-PIN.json` beside it.
+- [ ] **`backend/` may contain an edit to a read-only tree.** Narrowed 2026-09-11 by blob hash
+      (ADR 0002): the bulk is herdr `cc88b3b8` (2026-09-01), but `src/platform/windows.rs`
+      matches no commit in herdr's public history and no branch, while being unmodified relative
+      to Osade's own HEAD. Either an unpushed branch or an edit predating the read-only rule.
+      The next herdr bump should land `backend/` at a known commit —
+      `scripts/fetch-herdr-source.mjs` does that and writes `OSADE-PIN.json` beside it.
 - [ ] **`VerifyRunner` recovers exit codes by echoing a sentinel into the lane.** Checked
       2026-09-11: herdr 0.8.2-p20 has no run-and-report method. `pane.process_info` returns
       running processes (pid, argv, cwd) and no exit status; the only `exit_code` in the whole
@@ -49,7 +52,8 @@ photographs the window.
 Written up in `patches/` — one patch, two reports. Nothing here blocks Osade; each item names
 what Osade does instead.
 
-- [ ] Offer `patches/0001-windows-agent-launch-via-call-operator.patch` upstream. Not compiled
-      here: herdr needs Zig 0.15.2 and this machine has none.
+- [ ] Offer `patches/0001-windows-agent-launch-via-call-operator.patch` upstream. Targets and
+      verified against master @ `61ca85d5` (2026-09-11), where the bug is still present. Not
+      compiled here: herdr needs Zig 0.15.2 and this machine has none.
 - [ ] Decide with a maintainer what `events.subscribe` should do about its primed event (0002),
       and whether a failed `worktree.remove` can surface git's error (0003).
