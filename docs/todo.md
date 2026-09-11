@@ -22,37 +22,20 @@ Packaging is done and verified by launching the packaged build: it boots, spawns
 the runtime it ships, renders, and passes its panel assertions. `pnpm package` builds an
 installer; `pnpm package:dir` an unpacked app.
 
-- [ ] **Signing.** Nothing is signed — certificates do not belong in a repo. electron-builder
-      reads `CSC_LINK` / `CSC_KEY_PASSWORD` (and the macOS notarisation variables) from the
-      environment. An unsigned build is fine to test and not fine to hand to a user: SmartScreen
-      and Gatekeeper both refuse it.
-- [x] **An icon.** `scripts/make-icon.mjs` draws it — four ledger rows, one flagged in the
-      needs-you amber, in the palette from `tokens.css` so the mark and the interface cannot
-      drift. Generated rather than committed as a blob, for the same reason as the rest.
-
+- [x] **Signing is configured and cannot be skipped by accident.** Windows signs with sha256 and
+      an RFC 3161 timestamp; macOS has a hardened runtime, entitlements and notarisation that
+      switch on when the credentials exist. `pnpm package` refuses to build a release without
+      them — `OSADE_ALLOW_UNSIGNED=1` overrides, loudly. `pnpm package:dir` is ungated, because
+      an unpacked build never leaves the machine.
+      **What still needs you:** the certificates themselves. A Windows OV or EV certificate, and
+      an Apple Developer ID plus notarisation credentials. Nothing else is missing.
 ## Carried debt
 
 Each of these was chased to an answer. What is left is the answer, not the question.
 
-- [ ] **`backend/` may contain an edit to a read-only tree.** Narrowed by blob hash (ADR 0002):
-      the bulk is the substrate at `cc88b3b8`, but `src/platform/windows.rs` matches no public
-      commit and no branch, while being unmodified relative to Osade's own HEAD. Resolvable only
-      by landing `backend/` at a known commit at the next substrate bump —
-      `scripts/fetch-herdr-source.mjs` does that and writes `OSADE-PIN.json` beside it.
-- [x] **`smoke:panels` now checks layout, not just text.** Each expected phrase must be laid
-      out, sized and inside the page, and the document must not scroll horizontally — `innerText`
-      alone reports text that is hidden or collapsed to nothing. What it still cannot judge is
-      whether a layout that passes all of that actually *looks* right; that needs eyes on
-      `smoke.png`.
-- [x] **`VerifyRunner`'s exit-code sentinel.** Checked against the pinned schema: there is no
-      run-and-report method. `pane.process_info` returns running processes and no exit status;
-      the only `exit_code` in the schema belongs to plugin commands. The sentinel stays because
-      nothing better exists, not because nobody looked.
-- [x] **Near-duplicate rule matching is content-word overlap.** Deliberate and staying so: a
-      fourth model call would have no way to check its work, and being too strict (a duplicate a
-      human can merge) is much cheaper than being too loose (a rule silently absorbed into an
-      unrelated one).
-- [x] **The M1 acceptance depends on a real agent choosing to act.** Inherent to testing against
-      a real agent, and mitigated: failures report whether the prompt was *delivered* separately
-      from what the agent did with it, so an Osade bug is distinguishable from an agent's
-      judgement.
+- [x] **`backend/`'s provenance is known, and nothing in it was edited.** All 1766 tracked files
+      are byte-identical to the substrate at `94f6d9c0` (2026-09-02) — recorded in
+      `backend/OSADE-PIN.json`, and the fetch script now pins that commit rather than the older
+      tag. The earlier suspicion of a local edit came from sampling four files and generalising;
+      comparing the whole tree disproved it (ADR 0002). One genuinely foreign file did turn up —
+      Osade's own `skills/opensource/SKILL.md` inside someone else's tree — now in `docs/skills/`.

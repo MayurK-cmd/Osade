@@ -22,7 +22,7 @@
     "attribution": "node scripts/generate-rust-attribution.mjs",
     "attribution:check": "node scripts/generate-rust-attribution.mjs --check",
     "herdr:source": "node scripts/fetch-herdr-source.mjs",
-    "package": "pnpm -r build && node scripts/make-icon.mjs && node scripts/fetch-node-runtime.mjs && node scripts/fetch-herdr-binaries.mjs && electron-builder --config electron-builder.config.cjs",
+    "package": "node scripts/check-signing.mjs && pnpm -r build && node scripts/make-icon.mjs && node scripts/fetch-node-runtime.mjs && node scripts/fetch-herdr-binaries.mjs && electron-builder --config electron-builder.config.cjs",
     "package:dir": "pnpm -r build && node scripts/make-icon.mjs && node scripts/fetch-node-runtime.mjs && node scripts/fetch-herdr-binaries.mjs && electron-builder --config electron-builder.config.cjs --dir",
     "icon": "node scripts/make-icon.mjs"
   },

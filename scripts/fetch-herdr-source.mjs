@@ -4,16 +4,13 @@ import { existsSync, mkdirSync, readdirSync, rmSync, renameSync, writeFileSync }
 import { join } from 'node:path';
 
 /**
- * Fetch herdr's source into `backend/` — OSADE.md §4.1, ADR 0002.
+ * Fetch the substrate's source into `backend/` — OSADE.md §4.1, ADR 0002.
  *
- * **This is not how `backend/` normally gets there.** ADR 0002: the committed tree is an
- * unreleased herdr, ahead of v0.8.2 and of unknown provenance, so a fetch cannot reproduce it and
- * `backend/` stays committed. This script exists for the two jobs it is actually good at:
- * restoring `backend/` if someone deletes it, and establishing *known* provenance the next time
- * the herdr pin moves. Nothing builds on it.
+ * `backend/` stays committed (ADR 0002); this restores it if it is deleted, and is how the pin
+ * moves at the next substrate bump. Nothing builds on it.
  *
- * Running it replaces the working tree with v0.8.2, which is **older** than what is committed.
- * Expect `file:line` citations in Osade's comments to shift.
+ * Pinned to the commit `backend/` **is**, so running this reproduces the tree Osade's `file:line`
+ * citations were written against rather than shifting them.
  *
  * **Pinned to a commit, not a tag.** A tag can be moved; a commit sha is the content. GitHub's
  * codeload serves an archive for any sha, so asking for the sha *is* the verification — there is
@@ -29,9 +26,11 @@ const BACKEND = join(ROOT, 'backend');
 /** The herdr Osade reads. Bump alongside `vendor/herdr/<version>-p<protocol>/`. */
 const PIN = {
   repository: 'herdrdev/herdr',
-  tag: 'v0.8.2',
-  // `git rev-parse v0.8.2^{}` — the annotated tag dereferenced to its commit.
-  commit: '9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c',
+  // The commit `backend/` actually is — established by comparing every tracked blob hash
+  // against the upstream tree (all 1766 identical). Not the v0.8.2 tag: the source is ahead of
+  // the binary, which is pinned separately in vendor/herdr/0.8.2-p20.
+  commit: '94f6d9c0d9bb',
+  committedAt: '2026-09-02',
 };
 
 function log(message) {
@@ -44,7 +43,7 @@ function main() {
   if (existsSync(BACKEND) && readdirSync(BACKEND).length > 0) {
     if (!force) {
       log(`backend/ already exists. Nothing to do — pass --force to replace it.`);
-      log(`  pinned: ${PIN.repository}@${PIN.commit.slice(0, 12)} (${PIN.tag})`);
+      log(`  pinned: ${PIN.repository}@${PIN.commit.slice(0, 12)} (${PIN.committedAt})`);
       return;
     }
     log('removing the existing backend/ …');
@@ -76,7 +75,7 @@ function main() {
     `${JSON.stringify({ ...PIN, fetched_at: new Date().toISOString().slice(0, 10) }, null, 2)}\n`,
   );
 
-  log(`backend/ is ${PIN.repository}@${PIN.commit.slice(0, 12)} (${PIN.tag}).`);
+  log(`backend/ is ${PIN.repository}@${PIN.commit.slice(0, 12)} (${PIN.committedAt}).`);
   log('It is read-only reference. Changes herdr needs go in patches/ (see patches/README.md).');
 }
 

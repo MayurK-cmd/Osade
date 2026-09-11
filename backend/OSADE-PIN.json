@@ -1,0 +1,18 @@
+{
+  "$comment": "What this tree is. Established 2026-09-11 by comparing every tracked blob hash against the upstream tree: all 1766 match this commit exactly, and nothing here has been locally edited. Osade never edits backend/ — it is reference reading, and the API contract comes from vendor/herdr/<version>-p<protocol>/api-schema.json.",
+  "repository": "herdrdev/herdr",
+  "commit": "94f6d9c0d9bb",
+  "committed_at": "2026-09-02",
+  "subject": "fix: reveal newly focused spaces in the sidebar",
+  "verified": {
+    "method": "git blob sha per file, against the upstream tree at this commit",
+    "files_compared": 1766,
+    "files_identical": 1766,
+    "files_differing": 0
+  },
+  "not_from_upstream": {
+    "$comment": "Present here but not in the upstream tree at this commit. These are herdr's own repo furniture, moved under backend/ on 2026-09-11 so it stops competing with Osade's at the repo root (PRD-DELTA #14).",
+    "paths": [".agents/**", ".github/commit-msg", ".github/pre-commit"]
+  },
+  "relationship_to_the_shipped_binary": "This source is AHEAD of the binary Osade runs. vendor/herdr/0.8.2-p20 pins the v0.8.2 release, whose checksum is recorded and verified. Source and binary are pinned to different things, deliberately: the binary is the contract, the source explains its behaviour."
+}

@@ -48,34 +48,40 @@ being lost.
 `backend/` if it is deleted, and establishing **known** provenance the next time the herdr pin
 moves. It is not wired into any build.
 
-## How far the provenance could be narrowed
+## The provenance, established
 
-Chased on 2026-09-11 by comparing git blob hashes — content-addressed, so a match is proof
-rather than a guess:
+Corrected 2026-09-11. An earlier pass sampled four files, found three matching `cc88b3b8`, and
+concluded the tree was "mostly that commit with one unattributable file" — including a suspicion
+that `src/platform/windows.rs` had been edited in place. **That was wrong, and wrong in the way
+sampling usually is: four files is not a tree.** Comparing all of them said so immediately — 65
+differed from `cc88b3b8`, not one.
 
-| file | result |
-| --- | --- |
-| `src/api/server.rs` | matches `cc88b3b8` (2026-09-01, "feat: add stable client endpoint compatibility #3509") |
-| `src/app/agents.rs` | matches `cc88b3b8` |
-| `src/api/subscriptions.rs` | matches `cc88b3b8` |
-| `Cargo.lock` | matches `cc88b3b8` |
-| `src/platform/windows.rs` | **matches nothing public** |
+Done properly, by comparing every tracked blob hash against upstream trees:
 
-So the bulk of `backend/` is herdr at `cc88b3b8`. But `src/platform/windows.rs` matches neither
-that commit, nor any master commit touching that path, nor the `windows` branch — and it is
-unmodified relative to Osade's own git HEAD, so it was not changed in this session. Either it
-came from an unpushed branch, or `backend/` was edited before the read-only rule was written
-down.
+| commit | date | files matching (of 1766) |
+| --- | --- | --- |
+| master head `61ca85d5` | 2026-09-11 | 1055 |
+| v0.8.2 `9eb52145` | — | 1462 |
+| `cc88b3b8` | 2026-09-01 | 1686 |
+| **`94f6d9c0`** | **2026-09-02** | **1766 — all of them** |
 
-**This is not academic.** The first version of `patches/0001` was generated against that file and
-did **not** apply to herdr's master. It was regenerated against master and verified there. Anyone
-writing a patch from `backend/` should assume the same and check.
+`backend/` is `herdrdev/herdr@94f6d9c0d9bb`, "fix: reveal newly focused spaces in the sidebar".
+Every tracked file is byte-identical. **Nothing in the read-only tree has been edited**, and the
+worry that something had was an artefact of the sampling, not a finding.
 
-## What this leaves open
+Recorded in `backend/OSADE-PIN.json`, and `scripts/fetch-herdr-source.mjs` now pins that commit —
+so restoring `backend/` reproduces the tree the `file:line` citations were written against,
+rather than the older v0.8.2 it used to fetch.
 
-The next herdr bump should land `backend/` at a known commit and write `OSADE-PIN.json` beside it
-— the script already does that. Until then the citations are accurate and the provenance is not,
-which is the honest state of it and is recorded in `todo.md` rather than pretended away.
+The only files present that upstream does not have at that commit are the substrate's own repo
+furniture (`.agents/**`, `.github/commit-msg`, `.github/pre-commit`), moved under `backend/` the
+same day so it would stop competing with Osade's at the root. One genuinely foreign file turned
+up in the sweep — `skills/opensource/SKILL.md`, Osade's own writing about contribution, sitting
+inside someone else's tree. Moved to `docs/skills/`.
+
+Source and binary stay pinned to different things, deliberately: `vendor/herdr/0.8.2-p20` pins
+the release Osade actually runs, with a verified checksum, while this source is ahead of it and
+explains its behaviour.
 
 ## Why not a submodule
 
