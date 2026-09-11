@@ -186,17 +186,58 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
 
     // `OSADE_SMOKE_EXPECT` turns the screenshot into a check. A picture proves the window is not
     // blank; it proves nothing about a panel that quietly stopped rendering, because the only
-    // thing that would notice is a person who happened to look carefully. Each `|`-separated
-    // phrase must appear in the rendered text.
+    // thing that would notice is a person who happened to look carefully.
+    //
+    // Each `|`-separated phrase must be **visible**, not merely present. `innerText` reports text
+    // that is scrolled out of view, clipped to nothing, or sitting outside the window, so a
+    // check against it passes for a panel that rendered somewhere nobody can see — which is the
+    // failure this was supposed to catch.
     const expected = (process.env.OSADE_SMOKE_EXPECT ?? '').split('|').filter(Boolean);
     if (expected.length > 0) {
-      const text = (await target.webContents.executeJavaScript(
-        'document.body.innerText',
-      )) as string;
-      const missing = expected.filter((phrase) => !text.includes(phrase));
-      for (const phrase of missing) failures.push(`expected on screen, absent: ${phrase}`);
-      if (missing.length === 0) {
-        say(`[smoke] all ${expected.length} expected phrases are on screen`);
+      const problems = (await target.webContents.executeJavaScript(
+        `(() => {
+          const wanted = ${JSON.stringify(expected)};
+          const problems = [];
+
+          // Nothing should need a horizontal scrollbar: the layout is two panes and neither is
+          // allowed to push the other off the edge.
+          if (document.documentElement.scrollWidth > window.innerWidth + 1) {
+            problems.push('the page scrolls horizontally (' +
+              document.documentElement.scrollWidth + 'px in a ' + window.innerWidth + 'px window)');
+          }
+
+          for (const phrase of wanted) {
+            // The deepest element containing the phrase — the one actually laying it out.
+            let host = null;
+            for (const el of document.querySelectorAll('body *')) {
+              if (el.textContent && el.textContent.includes(phrase)) host = el;
+            }
+            if (!host) { problems.push('absent: ' + phrase); continue; }
+
+            const style = getComputedStyle(host);
+            if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') {
+              problems.push('present but not visible: ' + phrase);
+              continue;
+            }
+
+            // Laid out *reachably*, which is not the same as currently on screen. The detail
+            // pane scrolls, so content below the fold is the design working, not a fault. What
+            // is a fault is content with no size, or pushed outside the document's own width
+            // where no amount of scrolling reaches it.
+            const r = host.getBoundingClientRect();
+            if (r.width < 1 || r.height < 1) {
+              problems.push('collapsed to nothing: ' + phrase);
+            } else if (r.left < -1 || r.right > document.documentElement.scrollWidth + 1) {
+              problems.push('laid out outside the page: ' + phrase);
+            }
+          }
+          return problems;
+        })()`,
+      )) as string[];
+
+      for (const problem of problems) failures.push(problem);
+      if (problems.length === 0) {
+        say(`[smoke] all ${expected.length} phrases laid out, sized and on the page`);
       }
     }
 

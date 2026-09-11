@@ -60,12 +60,22 @@ const result = await build({
   target: 'node22',
   sourcemap: true,
   external,
-  // Node 22 has these; without the banner, esbuild's ESM output has no `require` for any
-  // dependency that still reaches for one.
+  /**
+   * CommonJS globals, which ESM output does not have.
+   *
+   * Bundled dependencies are still CommonJS underneath and reach for `require`, `__filename` and
+   * `__dirname` — `bindings`, which better-sqlite3 falls back to, uses all three. Without these
+   * the daemon starts, passes its drift check, and dies on `__filename is not defined` the moment
+   * it opens the database.
+   */
   banner: {
     js: [
       "import { createRequire as __osadeCreateRequire } from 'node:module';",
+      "import { fileURLToPath as __osadeFileURLToPath } from 'node:url';",
+      "import { dirname as __osadeDirname } from 'node:path';",
       'const require = __osadeCreateRequire(import.meta.url);',
+      'const __filename = __osadeFileURLToPath(import.meta.url);',
+      'const __dirname = __osadeDirname(__filename);',
     ].join('\n'),
   },
   logLevel: 'warning',

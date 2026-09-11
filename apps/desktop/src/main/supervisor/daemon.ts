@@ -71,11 +71,14 @@ export function daemonCommand(entry: string): {
   const env = { ...process.env };
   if (node.isElectron) env.ELECTRON_RUN_AS_NODE = '1';
 
-  // A packaged daemon is one bundled file beside one native addon, with no `node_modules` for
-  // better-sqlite3's usual resolver to walk. Telling it the path skips that search — and skips
-  // `require('bindings')` with it, which is why nothing else from that dependency has to ship.
-  const addon = join(dirname(entry), 'better_sqlite3.node');
-  if (existsSync(addon)) env.OSADE_SQLITE_BINDING = addon;
+  // Point better-sqlite3 straight at its addon, packaged or not.
+  //
+  // The daemon is a *bundle*, so the resolver better-sqlite3 would otherwise use (`bindings`,
+  // which walks upward looking for a `node_modules/better-sqlite3/build`) is searching from the
+  // wrong place and with the wrong assumptions. Packaged, the addon sits beside the bundle; in a
+  // checkout it is still in the package's own node_modules.
+  const addon = sqliteAddon(entry);
+  if (addon) env.OSADE_SQLITE_BINDING = addon;
 
   const args = entry.endsWith('.ts')
     ? // `--` separates vite-node's own arguments from the script's; without it `start` is eaten.
@@ -83,6 +86,19 @@ export function daemonCommand(entry: string): {
     : [entry, 'start'];
 
   return { command: node.command, args, env };
+}
+
+/** The better-sqlite3 addon: beside a packaged bundle, or in the package's node_modules. */
+function sqliteAddon(entry: string): string | null {
+  const beside = join(dirname(entry), 'better_sqlite3.node');
+  if (existsSync(beside)) return beside;
+
+  // A checkout: <repo>/packages/daemon/dist/cli.js -> the package's own node_modules.
+  const inPackage = join(
+    dirname(dirname(entry)),
+    'node_modules/better-sqlite3/build/Release/better_sqlite3.node',
+  );
+  return existsSync(inPackage) ? inPackage : null;
 }
 
 /**
