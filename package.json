@@ -21,12 +21,15 @@
     "lint": "eslint .",
     "attribution": "node scripts/generate-rust-attribution.mjs",
     "attribution:check": "node scripts/generate-rust-attribution.mjs --check",
-    "herdr:source": "node scripts/fetch-herdr-source.mjs"
+    "herdr:source": "node scripts/fetch-herdr-source.mjs",
+    "package": "pnpm -r build && node scripts/fetch-node-runtime.mjs && node scripts/fetch-herdr-binaries.mjs && electron-builder --config electron-builder.yml",
+    "package:dir": "pnpm -r build && node scripts/fetch-node-runtime.mjs && node scripts/fetch-herdr-binaries.mjs && electron-builder --config electron-builder.yml --dir"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@types/node": "^22.10.2",
     "cross-env": "^10.1.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "json-schema-to-typescript": "^15.0.3",
@@ -41,5 +44,8 @@
       "electron",
       "esbuild"
     ]
-  }
+  },
+  "description": "Run coding agents as open-source contributors",
+  "author": "Osade contributors",
+  "main": "apps/desktop/dist/main/electron.js"
 }

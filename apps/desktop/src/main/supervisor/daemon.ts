@@ -86,10 +86,17 @@ export function daemonCommand(entry: string): {
  * its own runtime.
  */
 export function nodeBinary(): { command: string; isElectron: boolean } {
+  const name = process.platform === 'win32' ? 'node.exe' : 'node';
+
   const explicit = process.env.OSADE_NODE_BIN;
   if (explicit && existsSync(explicit)) return { command: explicit, isElectron: false };
 
-  const name = process.platform === 'win32' ? 'node.exe' : 'node';
+  // The runtime Osade ships, which is the one a packaged app must use: a user's machine need not
+  // have Node at all, and if it does, it may be a version this daemon does not run on.
+  for (const vendored of vendoredNodePaths(name)) {
+    if (existsSync(vendored)) return { command: vendored, isElectron: false };
+  }
+
   for (const dir of (process.env.PATH ?? '').split(delimiter)) {
     if (!dir) continue;
     const candidate = join(dir, name);
@@ -97,6 +104,24 @@ export function nodeBinary(): { command: string; isElectron: boolean } {
   }
 
   return { command: process.execPath, isElectron: true };
+}
+
+/**
+ * Where the shipped Node sits, packaged and in a checkout.
+ *
+ * `process.resourcesPath` exists only in a packaged Electron app, which is why it is read
+ * defensively rather than assumed.
+ */
+function vendoredNodePaths(name: string): string[] {
+  const target = `${process.platform}-${process.arch}`;
+  const paths: string[] = [];
+
+  const resources = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  if (resources) paths.push(join(resources, 'node', name));
+
+  // A source checkout: apps/desktop/dist/main → repo root.
+  paths.push(join(__dirname, '../../../..', 'vendor', 'node', target, name));
+  return paths;
 }
 
 /**
