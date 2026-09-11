@@ -110,7 +110,7 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
           style={buttonStyle}
           onClick={() => void run(() => api.mineRepo(repoId))}
         >
-          {status?.running ? 'Mining…' : status?.lastRun ? 'Mine again' : 'Mine this repository'}
+          {status?.running ? 'mining…' : status?.lastRun ? 'mine again' : 'mine this repository'}
         </button>
         {status?.running && <Progress run={status.lastRun} />}
         {status && !status.available && !status.running && (
@@ -138,7 +138,7 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
       )}
 
       {candidates.length > 0 && (
-        <Group title="Not in use yet" hint="Confirm one and every agent you launch is told about it.">
+        <Group title="not in use yet" hint="Confirm one and every agent you launch is told about it.">
           {candidates.map((rule) => (
             <Rule
               key={rule.id}
@@ -155,7 +155,7 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
 
       {active.length > 0 && (
         <Group
-          title="In use"
+          title="in use"
           hint="Written into every agent's context, most confident and most recent first."
         >
           {active.map((rule) => (
@@ -170,7 +170,7 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
       )}
 
       {dismissed.length > 0 && (
-        <Group title="Set aside" hint="Kept with their evidence, so the same rule is not re-mined blindly.">
+        <Group title="set aside" hint="Kept with their evidence, so the same rule is not re-mined blindly.">
           {dismissed.map((rule) => (
             <Rule key={rule.id} rule={rule} busy={busy} />
           ))}
@@ -201,7 +201,7 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
           })
         }
       >
-        Did this help?
+        did this help?
       </button>
     </section>
   );
@@ -302,12 +302,12 @@ function Rule({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {onConfirm && (
           <button disabled={busy} style={buttonStyle} onClick={onConfirm}>
-            Use it
+            use it
           </button>
         )}
         {onReject && (
           <button disabled={busy} style={buttonStyle} onClick={onReject}>
-            {rule.lifecycle === 'active' ? 'Turn off' : 'Not a rule'}
+            {rule.lifecycle === 'active' ? 'turn off' : 'not a rule'}
           </button>
         )}
       </div>

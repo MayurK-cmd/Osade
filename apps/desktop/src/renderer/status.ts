@@ -30,78 +30,78 @@ export interface StatusCopy {
 
 export const STATUS: Record<TaskStatus, StatusCopy> = {
   awaiting_approval: {
-    label: 'Needs your approval',
+    label: 'needs your approval',
     meaning: 'An agent wants to do something public. Nothing leaves this machine until you say so.',
     next: 'Read what it wants to send, then approve or deny it.',
     tone: 'needs',
   },
   needs_input: {
-    label: 'Waiting for you',
+    label: 'waiting for you',
     meaning: 'The agent stopped to ask something and cannot continue until it is answered.',
     next: 'Open the terminal to see the question and reply.',
     tone: 'needs',
   },
   review_changes_requested: {
-    label: 'Changes requested',
+    label: 'changes requested',
     meaning: 'A reviewer asked for changes on the pull request. The agent has been given their exact words.',
     next: 'Watch, or open the terminal to steer it.',
     tone: 'needs',
   },
   awaiting_review: {
-    label: 'Ready for you to look',
+    label: 'ready for you to look',
     meaning: 'The agent thinks it is finished. Nothing has been published.',
     next: 'Read the diff, then open a pull request when you are happy.',
     tone: 'needs',
   },
   implementing: {
-    label: 'Working',
+    label: 'working',
     meaning: 'Writing code in its own worktree. Your checkout is untouched.',
     tone: 'live',
   },
   verifying: {
-    label: 'Checking its work',
+    label: 'checking its work',
     meaning: 'Running this project’s own tests and checks before asking you to look.',
     tone: 'live',
   },
   verify_failed: {
-    label: 'Checks failed',
+    label: 'checks failed',
     meaning: 'The work did not pass. The agent has been told what broke and is trying again.',
     tone: 'fail',
   },
   ci_failed: {
-    label: 'CI failed',
+    label: 'ci failed',
     meaning: 'GitHub’s checks failed on the pull request.',
     next: 'Read the failure on GitHub, or let the agent try again.',
     tone: 'fail',
   },
   pr_open: {
-    label: 'Pull request open',
+    label: 'pull request open',
     meaning: 'Published and waiting on the project’s maintainers.',
     tone: 'rest',
   },
   queued: {
-    label: 'Not started',
+    label: 'not started',
     meaning: 'Created, with a worktree ready. No agent is running yet.',
     next: 'Start it when you are ready.',
     tone: 'rest',
   },
   idle: {
-    label: 'Idle',
+    label: 'idle',
     meaning: 'Nothing is happening on this task right now.',
     tone: 'rest',
   },
   stopped: {
-    label: 'Stopped',
+    label: 'stopped',
     meaning: 'The agent’s process ended. Its work is still in the worktree.',
     tone: 'rest',
   },
   merged: {
-    label: 'Merged',
+    label: 'merged',
     meaning: 'This landed upstream.',
     tone: 'done',
   },
   archived: {
-    label: 'Archived',
+    label: 'archived',
     meaning: 'Hidden from the ledger. Nothing was deleted.',
     tone: 'done',
   },
@@ -146,13 +146,13 @@ export function ago(at: number | null | undefined, now = Date.now()): string {
 
 /** A one-line summary of the whole ledger, for the header. */
 export function summarise(counts: { needsYou: number; working: number; total: number }): string {
-  if (counts.total === 0) return 'Nothing running';
+  if (counts.total === 0) return 'nothing running';
 
   const parts: string[] = [];
   if (counts.working > 0) parts.push(`${counts.working} working`);
   if (counts.needsYou > 0) {
     parts.push(`${counts.needsYou} ${counts.needsYou === 1 ? 'task needs' : 'tasks need'} you`);
   }
-  if (parts.length === 0) return `${counts.total} ${counts.total === 1 ? 'task' : 'tasks'}, idle`;
+  if (parts.length === 0) return `${counts.total} ${counts.total === 1 ? 'task' : 'tasks'} · idle`;
   return parts.join(' · ');
 }

@@ -1776,33 +1776,43 @@ horizontal columns ever will.
 
 ### 19.2 Tokens
 
-**Color.** Light-first, which is itself a differentiator in a category that is uniformly dark.
-Ship dark as a full peer, not an afterthought.
+**Reversed 2026-09-11, by the owner.** This section read "light-first, which is itself a
+differentiator in a category that is uniformly dark". The direction is now the opposite: Osade
+should look like the terminal it sits beside, so it is dark, monospaced throughout, lowercase in
+its chrome, and square-cornered. Recorded rather than quietly diverged from — the differentiation
+argument was real, and it was traded away deliberately for belonging to the terminal.
+
+**Color.** Dark ground. One blue accent, which means "this is what you are on" and nothing else;
+everything not stateful is greyscale.
 
 ```
---paper     #F6F7F4    faint green-grey stock; not cream, not white
---ink       #191C1A    body text
---ink-soft  #5C6360    secondary
---rule      #D7DCD6    all borders, 1px, no shadows anywhere
---field     #ECEEE9    inset surfaces (terminal chrome, diff gutters)
+--paper       #0F1214    ground
+--surface     #14181B    the sidebar, a shade above the ground as terminal chrome is
+--field       #1B2025    inset surfaces, selected rows
+--ink         #C9D1D9    body text
+--ink-soft    #7D868E    secondary
+--rule        #21262C    all borders, 1px, no shadows anywhere
+--accent      #58A6FF    selection and focus only
 ```
 
 State colors appear **only** as state, never as decoration or branding:
 
 ```
---st-needs  #A85B12    needs you        (approval, blocked, changes requested)
---st-live   #2C6B4F    running          (implementing, verifying)
---st-fail   #97302E    failed           (verify, ci)
+--st-needs  #D9903F    needs you        (approval, blocked, changes requested)
+--st-live   #57A773    running          (implementing, verifying)
+--st-fail   #CF6A67    failed           (verify, ci)
 --st-rest   #6E7772    idle / merged / archived
 ```
 
 Deliberately avoided: near-black with one acid accent; warm cream with terracotta; gradient
 washes; a single shadow value under every card.
 
-**Type.** IBM Plex Sans for interface, IBM Plex Mono for anything machine-authored — paths,
-shas, commands, diffs, log tails. This is a superfamily chosen because the whole product is a
-record of machine work and Plex was drawn for that register; it is not a neutral default.
-Tabular numerals on everywhere numbers align. Scale: 11 / 13 / 15 / 19 / 25.
+**Type.** IBM Plex Mono, everywhere. Plex was chosen because the whole product is a record of
+machine work and it was drawn for that register; taking only the mono cut (2026-09-11, with the
+colour reversal above) is what makes the screen read as a terminal rather than as an application
+imitating one. Interface chrome is lowercase — headings, labels, buttons, status names — while
+content keeps its own case: a task title, a mined rule and a reviewer's words are quoted, not
+styled. Tabular numerals everywhere numbers align. Scale: 11 / 12.5 / 14 / 17 / 21.
 
 Do not use all-caps labels. Do not put an eyebrow above every heading. Do not accent one word
 in a headline.

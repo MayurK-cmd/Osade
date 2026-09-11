@@ -50,11 +50,11 @@ export function NewTask({
         background: 'var(--field)',
       }}
     >
-      <h2 style={{ margin: '0 0 12px', fontSize: 'var(--t-m)', fontWeight: 600 }}>New task</h2>
+      <h2 style={{ margin: '0 0 12px', fontSize: 'var(--t-m)', fontWeight: 600 }}>new task</h2>
 
       <label style={{ display: 'block', marginBottom: 12 }}>
         <span style={{ display: 'block', marginBottom: 4, color: 'var(--ink-soft)' }}>
-          Repository
+          repository
         </span>
         <input
           className="mono"
@@ -79,7 +79,7 @@ export function NewTask({
 
       <label style={{ display: 'block', marginBottom: 14 }}>
         <span style={{ display: 'block', marginBottom: 4, color: 'var(--ink-soft)' }}>
-          What should the agent do?
+          what should the agent do?
         </span>
         <textarea
           rows={3}
@@ -113,9 +113,9 @@ export function NewTask({
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button className="primary" disabled={!ready || busy} onClick={create}>
-          {busy ? 'Creating…' : 'Create task'}
+          {busy ? 'creating…' : 'create task'}
         </button>
-        <button onClick={onClose}>Cancel</button>
+        <button onClick={onClose}>cancel</button>
         <span style={{ color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
           Creates the task. You start the agent yourself.
         </span>

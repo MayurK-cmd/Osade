@@ -79,7 +79,7 @@ export function VerifyPlanReview({ taskId }: { taskId: string }): JSX.Element {
           }
           style={buttonStyle}
         >
-          Derive a verification plan
+          derive a verification plan
         </button>
         {error && <Err message={error} />}
       </div>
@@ -163,7 +163,7 @@ export function VerifyPlanReview({ taskId }: { taskId: string }): JSX.Element {
             )
           }
         >
-          {needsReview ? 'Confirm plan' : 'Save changes'}
+          {needsReview ? 'confirm plan' : 'save changes'}
         </button>
         <button
           disabled={busy || needsReview}
@@ -176,7 +176,7 @@ export function VerifyPlanReview({ taskId }: { taskId: string }): JSX.Element {
             )
           }
         >
-          Run verification
+          run verification
         </button>
       </div>
     </div>

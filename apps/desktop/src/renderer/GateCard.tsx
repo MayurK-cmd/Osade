@@ -122,10 +122,10 @@ export function GateCard({
               disabled={busy}
               onClick={() => void run(() => api.gateEditAndApprove(gate.id, parse(draft)))}
             >
-              Approve edited
+              approve edited
             </button>
             <button disabled={busy} onClick={() => setEditing(false)}>
-              Cancel
+              cancel
             </button>
           </>
         ) : (
@@ -139,10 +139,10 @@ export function GateCard({
               {approveLabel(gate.gate)}
             </button>
             <button disabled={busy} onClick={() => void run(() => api.gateDecide(gate.id, 'deny'))}>
-              Deny
+              deny
             </button>
             <button disabled={busy} onClick={() => setEditing(true)}>
-              Edit
+              edit
             </button>
           </>
         )}
@@ -159,23 +159,23 @@ export function GateCard({
 function approveLabel(gate: string): string {
   switch (gate) {
     case 'gate.pr_open':
-      return 'Open pull request';
+      return 'open pull request';
     case 'gate.push':
-      return 'Push';
+      return 'push';
     case 'gate.pr_comment':
     case 'gate.issue_comment':
-      return 'Post comment';
+      return 'post comment';
     case 'gate.review_submit':
-      return 'Submit review';
+      return 'submit review';
     case 'gate.undo_turn':
-      return 'Undo turn';
+      return 'undo turn';
     default:
-      return 'Approve';
+      return 'approve';
   }
 }
 
 function describe(gate: string): string {
-  return approveLabel(gate) === 'Approve' ? gate.replace('gate.', '') : approveLabel(gate);
+  return approveLabel(gate) === 'approve' ? gate.replace('gate.', '') : approveLabel(gate);
 }
 
 /**

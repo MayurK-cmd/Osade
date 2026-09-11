@@ -37,11 +37,19 @@ export function App(): JSX.Element {
        */
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(340px, 460px) minmax(0, 1fr)',
+        gridTemplateColumns: 'minmax(280px, 360px) minmax(0, 1fr)',
         height: '100%',
       }}
     >
-      <main style={{ overflow: 'auto', borderRight: '1px solid var(--rule)' }}>
+      <main
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'auto',
+          borderRight: '1px solid var(--rule)',
+          background: 'var(--surface)',
+        }}
+      >
         <Header
           connection={connection}
           error={error}
@@ -70,7 +78,7 @@ export function App(): JSX.Element {
             {needsYou.length > 0 && (
               <Band
                 title={
-                  needsYou.length === 1 ? '1 task needs you' : `${needsYou.length} tasks need you`
+                  needsYou.length === 1 ? 'needs you' : `needs you · ${needsYou.length}`
                 }
               >
                 {needsYou.map((task) => (
@@ -85,7 +93,7 @@ export function App(): JSX.Element {
             )}
 
             {rest.length > 0 && (
-              <Section title={needsYou.length > 0 ? 'Everything else' : 'Tasks'}>
+              <Section title={needsYou.length > 0 ? 'everything else' : 'tasks'}>
                 {rest.map((task) => (
                   <Row
                     key={task.task.id}
@@ -98,11 +106,79 @@ export function App(): JSX.Element {
             )}
           </>
         )}
+        <SidebarFoot
+          working={working.length}
+          total={tasks.length}
+          connected={connection === 'live'}
+        />
       </main>
 
       <aside style={{ overflow: 'auto' }}>
         {selected ? <Detail task={selected} /> : <NothingSelected hasTasks={tasks.length > 0} />}
       </aside>
+    </div>
+  );
+}
+
+/**
+ * The sidebar's footer — label left, reading right, on one line.
+ *
+ * Borrowed from the terminal this sits beside, where the sidebar ends in exactly this shape. It
+ * earns the space by carrying the two facts that are true of the whole window rather than of any
+ * one task: how many agents are actually running, and whether the daemon is there at all.
+ */
+function SidebarFoot({
+  working,
+  total,
+  connected,
+}: {
+  working: number;
+  total: number;
+  connected: boolean;
+}): JSX.Element {
+  return (
+    <div
+      style={{
+        position: 'sticky',
+        bottom: 0,
+        marginTop: 'auto',
+        background: 'var(--surface)',
+        borderTop: '1px solid var(--rule)',
+        padding: '6px 0',
+      }}
+    >
+      <FootRow label="agents" value={working === 0 ? 'idle' : `${working} running`} />
+      <FootRow label="tasks" value={String(total)} />
+      <FootRow
+        label="daemon"
+        value={connected ? 'connected' : 'reconnecting'}
+        tone={connected ? undefined : 'var(--st-fail)'}
+      />
+    </div>
+  );
+}
+
+function FootRow({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+}): JSX.Element {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        padding: '2px 16px',
+        fontSize: 'var(--t-xs)',
+        color: 'var(--ink-soft)',
+      }}
+    >
+      <span>{label}</span>
+      <span style={{ color: tone ?? 'var(--ink)' }}>{value}</span>
     </div>
   );
 }
@@ -125,37 +201,29 @@ function Header({
         display: 'flex',
         alignItems: 'center',
         gap: 14,
-        padding: '15px 22px',
+        padding: '10px 16px',
         borderBottom: '1px solid var(--rule)',
         position: 'sticky',
         top: 0,
-        background: 'var(--paper)',
+        background: 'var(--surface)',
         zIndex: 2,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, minWidth: 0 }}>
-        <span style={{ fontSize: 'var(--t-l)', fontWeight: 600, letterSpacing: '-0.01em' }}>
-          Osade
-        </span>
-        <span style={{ color: 'var(--ink-soft)' }}>{summary}</span>
+        <span style={{ fontSize: 'var(--t-m)', fontWeight: 600 }}>osade</span>
+        <span style={{ color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>{summary}</span>
       </div>
 
       <span style={{ flex: 1 }} />
 
-      <button onClick={onNew}>New task</button>
+      <button onClick={onNew}>new task</button>
 
-      {/* Connection is a fact about the app, not about the work — so it stays the quietest thing
-          on the screen, and only speaks up when it is bad news. */}
-      <span
-        title={connected ? 'Connected to the daemon' : 'Not connected to the daemon'}
-        style={{
-          fontSize: 'var(--t-xs)',
-          color: connected ? 'var(--st-rest)' : 'var(--st-fail)',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {error ?? (connected ? 'connected' : 'reconnecting…')}
-      </span>
+      {/* Only when it is bad news. The steady-state reading lives in the footer. */}
+      {(error || !connected) && (
+        <span style={{ fontSize: 'var(--t-xs)', color: 'var(--st-fail)', whiteSpace: 'nowrap' }}>
+          {error ?? 'reconnecting'}
+        </span>
+      )}
     </header>
   );
 }
@@ -173,9 +241,9 @@ function Band({ title, children }: { title: string; children: ReactNode }): JSX.
       <h2
         style={{
           margin: 0,
-          padding: '13px 22px 3px',
-          fontSize: 'var(--t-s)',
-          fontWeight: 600,
+          padding: '9px 16px 2px',
+          fontSize: 'var(--t-xs)',
+          fontWeight: 400,
           color: 'var(--st-needs)',
         }}
       >
@@ -192,9 +260,9 @@ function Section({ title, children }: { title: string; children: ReactNode }): J
       <h2
         style={{
           margin: 0,
-          padding: '18px 22px 3px',
+          padding: '14px 16px 2px',
           fontSize: 'var(--t-xs)',
-          fontWeight: 600,
+          fontWeight: 400,
           color: 'var(--ink-soft)',
         }}
       >
@@ -238,10 +306,11 @@ function Row({
         display: 'grid',
         gridTemplateColumns: '18px 1fr auto',
         alignItems: 'start',
-        columnGap: 12,
-        padding: '10px 22px',
+        columnGap: 10,
+        padding: '6px 16px',
         borderTop: '1px solid var(--rule)',
         background: selected ? 'var(--field)' : 'transparent',
+        boxShadow: selected ? 'inset 2px 0 0 var(--accent)' : 'none',
         cursor: 'default',
       }}
     >
@@ -252,8 +321,8 @@ function Row({
       <div style={{ minWidth: 0 }}>
         <div
           style={{
-            fontSize: 'var(--t-m)',
-            lineHeight: 1.35,
+            fontSize: 'var(--t-s)',
+            lineHeight: 1.45,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -291,7 +360,7 @@ function Empty({ connection, onNew }: { connection: string; onNew: () => void })
   if (connection !== 'live') {
     return (
       <div style={{ padding: '34px 22px', maxWidth: 460 }}>
-        <p style={{ marginTop: 0, fontSize: 'var(--t-m)' }}>Connecting to the daemon.</p>
+        <p style={{ marginTop: 0 }}>connecting to the daemon…</p>
         <p style={{ color: 'var(--ink-soft)', lineHeight: 1.55 }}>
           Agents keep running while this window is closed, so nothing has been lost. This should
           only take a moment.
@@ -302,13 +371,13 @@ function Empty({ connection, onNew }: { connection: string; onNew: () => void })
 
   return (
     <div style={{ padding: '34px 22px', maxWidth: 490 }}>
-      <p style={{ marginTop: 0, fontSize: 'var(--t-m)' }}>No tasks yet.</p>
+      <p style={{ marginTop: 0 }}>no tasks yet</p>
       <p style={{ color: 'var(--ink-soft)', lineHeight: 1.55 }}>
         A task is one piece of work on one repository. Osade gives it its own git worktree, runs an
         agent inside it, and stops for you before anything is published.
       </p>
       <button className="primary" onClick={onNew} style={{ marginTop: 8 }}>
-        New task
+        new task
       </button>
     </div>
   );

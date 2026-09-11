@@ -39,14 +39,13 @@ export function Detail({ task }: { task: TaskView }): JSX.Element {
 
   return (
     <div>
-      <header style={{ padding: '18px 24px 14px', borderBottom: '1px solid var(--rule)' }}>
+      <header style={{ padding: '14px 18px 12px', borderBottom: '1px solid var(--rule)' }}>
         <h1
           style={{
-            fontSize: 'var(--t-xl)',
+            fontSize: 'var(--t-l)',
             fontWeight: 600,
-            lineHeight: 1.2,
-            letterSpacing: '-0.015em',
-            margin: '0 0 8px',
+            lineHeight: 1.3,
+            margin: '0 0 6px',
           }}
         >
           {task.task.title}
@@ -79,7 +78,7 @@ export function Detail({ task }: { task: TaskView }): JSX.Element {
             background: 'var(--wash-needs)',
             borderBottom: '1px solid var(--edge-needs)',
             borderLeft: '3px solid var(--st-needs)',
-            padding: '14px 22px',
+            padding: '12px 16px',
           }}
         >
           {openGates.map((gate) => (
@@ -90,7 +89,7 @@ export function Detail({ task }: { task: TaskView }): JSX.Element {
         copy.next && (
           <section
             style={{
-              padding: '12px 24px',
+              padding: '10px 18px',
               borderBottom: '1px solid var(--rule)',
               color: 'var(--ink-soft)',
             }}
@@ -104,13 +103,13 @@ export function Detail({ task }: { task: TaskView }): JSX.Element {
 
       {/* 3. How it is going. */}
       {started && (
-        <Panel title="Checks" hint="What this project runs before work is reviewable.">
+        <Panel title="checks" hint="what this project runs before work is reviewable">
           <VerifyPlanReview taskId={task.task.id} />
         </Panel>
       )}
 
       {showPr && (
-        <Panel title="Pull request" hint="Nothing is published until you approve it.">
+        <Panel title="pull request" hint="nothing is published until you approve it">
           <PrOpen task={task} />
         </Panel>
       )}
@@ -120,9 +119,9 @@ export function Detail({ task }: { task: TaskView }): JSX.Element {
         * is collapsed so it stops competing with the task's own gate for "needs you" attention,
         * and left open enough to notice: the summary carries the counts.
         */}
-      <section style={{ padding: '14px 24px', borderBottom: '1px solid var(--rule)' }}>
+      <section style={{ padding: '12px 18px', borderBottom: '1px solid var(--rule)' }}>
         <details>
-          <summary style={{ cursor: 'default' }}>What this project expects of contributors</summary>
+          <summary style={{ cursor: 'default' }}>what this project expects of contributors</summary>
           <div style={{ marginTop: 6 }}>
             <Conventions repoId={task.task.repo_id} />
           </div>
@@ -140,7 +139,7 @@ function StartTask({ taskId }: { taskId: string }): JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <section style={{ padding: '14px 24px', borderBottom: '1px solid var(--rule)' }}>
+    <section style={{ padding: '12px 18px', borderBottom: '1px solid var(--rule)' }}>
       <button
         className="primary"
         disabled={busy}
@@ -153,7 +152,7 @@ function StartTask({ taskId }: { taskId: string }): JSX.Element {
             .finally(() => setBusy(false));
         }}
       >
-        {busy ? 'Starting…' : 'Start the agent'}
+        {busy ? 'starting…' : 'start the agent'}
       </button>
       <p style={{ margin: '8px 0 0', color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
         Creates a worktree and launches the agent inside it. Your own checkout is not touched.
@@ -177,11 +176,9 @@ function Panel({
   children: ReactNode;
 }): JSX.Element {
   return (
-    <section style={{ padding: '16px 24px', borderBottom: '1px solid var(--rule)' }}>
+    <section style={{ padding: '12px 18px', borderBottom: '1px solid var(--rule)' }}>
       {title && (
-        <h2 style={{ margin: 0, fontSize: 'var(--t-m)', fontWeight: 600 }}>
-          {title}
-        </h2>
+        <h2 style={{ margin: 0, fontSize: 'var(--t-s)', fontWeight: 600 }}>{title}</h2>
       )}
       {hint && (
         <p style={{ margin: '2px 0 0', color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
@@ -203,10 +200,10 @@ function TechnicalDetails({ task }: { task: TaskView }): JSX.Element {
   const probeFailures = task.agent?.probe_failures ?? 0;
 
   return (
-    <section style={{ padding: '14px 24px 28px' }}>
+    <section style={{ padding: '12px 18px 24px' }}>
       <details>
         <summary style={{ cursor: 'default', color: 'var(--ink-soft)' }}>
-          Where this is running
+          where this is running
         </summary>
 
         <div style={{ marginTop: 10 }}>
@@ -228,7 +225,7 @@ function TechnicalDetails({ task }: { task: TaskView }): JSX.Element {
       </details>
 
       <div style={{ marginTop: 14 }}>
-        <button onClick={() => void window.osade?.openInHerdr()}>Open the terminal</button>
+        <button onClick={() => void window.osade?.openInHerdr()}>open the terminal</button>
         <p style={{ margin: '8px 0 0', color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
           Watch the agent work, or talk to it directly. Osade does not embed a terminal
           (ADR 0001); this opens a real one on the same session.
