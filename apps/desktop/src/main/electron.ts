@@ -20,6 +20,7 @@ const OSADE_ROOT = resolve(process.env.OSADE_HOME ?? join(homedir(), '.osade'));
 app.setPath('userData', join(OSADE_ROOT, 'electron'));
 app.setPath('sessionData', join(OSADE_ROOT, 'electron', 'session'));
 
+import { repoFromArgv } from './argv.js';
 import { adoptOrSpawnDaemon } from './supervisor/daemon.js';
 import { adoptOrSpawnHerdr } from './supervisor/herdr.js';
 
@@ -51,23 +52,6 @@ let spawnedDaemon: ChildProcess | null = null;
 let openedRepo: string | null = null;
 
 /**
- * `--repo=<path>` out of a command line, wherever the runner left it.
- *
- * One token, not two. Electron injects its own switches into the argv handed to
- * `second-instance`, so "the element after `--repo`" is not reliably the path — it arrived once
- * as `--allow-file-access-from-files`. The two-token form is still read for anything that types
- * it by hand, but only when what follows is not itself a flag.
- */
-function repoFromArgv(argv: readonly string[]): string | null {
-  const joined = argv.find((arg) => arg.startsWith('--repo='));
-  if (joined) return joined.slice('--repo='.length) || null;
-
-  const at = argv.indexOf('--repo');
-  const next = at >= 0 ? argv[at + 1] : undefined;
-  return next && !next.startsWith('-') ? next : null;
-}
-
-/**
  * One window, re-scoped — not one window per repository.
  *
  * `osade .` in a second repository should bring the window you already have to the front and
@@ -82,15 +66,25 @@ if (!app.requestSingleInstanceLock()) {
   app.exit(0);
 } else {
   app.on('second-instance', (_event, argv) => {
-    const repo = repoFromArgv(argv);
-    if (repo) {
-      openedRepo = repo;
-      say(`re-scoping to ${repo}`);
-      window?.webContents.send('osade:repo-opened', repo);
-    }
-    if (window) {
-      if (window.isMinimized()) window.restore();
-      window.focus();
+    // Wrapped, because this runs on an event emitted from Electron's own message loop: an
+    // exception thrown here is uncaught in main, and an uncaught exception in a packaged GUI app
+    // is an app that vanishes with nothing written down. A failed re-scope should cost you the
+    // re-scope, not the window you already had.
+    try {
+      const repo = repoFromArgv(argv);
+      if (repo) {
+        openedRepo = repo;
+        say(`re-scoping to ${repo}`);
+        if (window && !window.isDestroyed()) {
+          window.webContents.send('osade:repo-opened', repo);
+        }
+      }
+      if (window && !window.isDestroyed()) {
+        if (window.isMinimized()) window.restore();
+        window.focus();
+      }
+    } catch (err) {
+      say(`re-scope failed: ${(err as Error).message}`);
     }
   });
 }
@@ -178,7 +172,16 @@ function createWindow(): void {
   }
 
   if (isDev && !smokeShotPath()) window.webContents.openDevTools({ mode: 'detach' });
+
+  // Why the window went away, in the log. Without these, a renderer that dies takes the app with
+  // it through `window-all-closed` and leaves an app.log whose last line is "creating the window"
+  // — which reads exactly like a hang.
+  window.webContents.on('render-process-gone', (_event, details) =>
+    say(`renderer gone: ${details.reason}${details.exitCode ? ` (exit ${details.exitCode})` : ''}`),
+  );
+  window.on('unresponsive', () => say('the window stopped responding'));
   window.on('closed', () => {
+    say('the window closed');
     window = null;
   });
 
@@ -383,5 +386,20 @@ app.whenReady().then(
  * closing a window.
  */
 app.on('window-all-closed', () => {
+  say('every window is closed; detaching');
   if (process.platform !== 'darwin') app.quit();
+});
+
+/**
+ * The last thing the app says before it dies.
+ *
+ * Electron's default handler for an uncaught exception in main is a dialog the user dismisses and
+ * a process that goes away, which in a packaged build means a silent disappearance. This does not
+ * swallow anything — it writes the reason to `~/.osade/logs/app.log` and then exits — but the
+ * difference between "it vanished" and "it vanished because X" is the whole of being able to fix
+ * it from a bug report.
+ */
+process.on('uncaughtException', (err: Error) => {
+  say(`fatal: ${err.stack ?? err.message}`);
+  app.exit(1);
 });
