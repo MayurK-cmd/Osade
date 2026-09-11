@@ -44,8 +44,9 @@ photographs the window.
 - [ ] The M1 acceptance's "agent fixes it" step depends on a real agent choosing to act, so it
       can fail for reasons outside Osade. Failures report whether the prompt was *delivered*
       separately from what the agent did with it.
-- [ ] The smoke screenshot is read by a human. It catches a blank window and a renderer error,
-      not a layout that has quietly gone wrong.
+- [ ] `smoke:panels` asserts nine phrases are on screen, which catches a panel that stopped
+      rendering. It does not catch a layout that is present but wrong — overlapping, unreadable,
+      off-screen. That still needs eyes on `smoke.png`.
 
 ## Upstream to herdr
 
