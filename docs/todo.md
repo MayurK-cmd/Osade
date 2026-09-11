@@ -26,7 +26,9 @@ installer; `pnpm package:dir` an unpacked app.
       reads `CSC_LINK` / `CSC_KEY_PASSWORD` (and the macOS notarisation variables) from the
       environment. An unsigned build is fine to test and not fine to hand to a user: SmartScreen
       and Gatekeeper both refuse it.
-- [ ] **An icon.** The build uses Electron's default.
+- [x] **An icon.** `scripts/make-icon.mjs` draws it — four ledger rows, one flagged in the
+      needs-you amber, in the palette from `tokens.css` so the mark and the interface cannot
+      drift. Generated rather than committed as a blob, for the same reason as the rest.
 
 ## Carried debt
 
@@ -37,9 +39,11 @@ Each of these was chased to an answer. What is left is the answer, not the quest
       commit and no branch, while being unmodified relative to Osade's own HEAD. Resolvable only
       by landing `backend/` at a known commit at the next substrate bump —
       `scripts/fetch-herdr-source.mjs` does that and writes `OSADE-PIN.json` beside it.
-- [ ] **`smoke:panels` cannot see a wrong layout.** It asserts nine phrases are on screen, which
-      catches a panel that stopped rendering. Overlapping, unreadable or off-screen still needs
-      eyes on `smoke.png`.
+- [x] **`smoke:panels` now checks layout, not just text.** Each expected phrase must be laid
+      out, sized and inside the page, and the document must not scroll horizontally — `innerText`
+      alone reports text that is hidden or collapsed to nothing. What it still cannot judge is
+      whether a layout that passes all of that actually *looks* right; that needs eyes on
+      `smoke.png`.
 - [x] **`VerifyRunner`'s exit-code sentinel.** Checked against the pinned schema: there is no
       run-and-report method. `pane.process_info` returns running processes and no exit status;
       the only `exit_code` in the schema belongs to plugin commands. The sentinel stays because
