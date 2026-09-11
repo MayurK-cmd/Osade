@@ -71,6 +71,12 @@ export function daemonCommand(entry: string): {
   const env = { ...process.env };
   if (node.isElectron) env.ELECTRON_RUN_AS_NODE = '1';
 
+  // A packaged daemon is one bundled file beside one native addon, with no `node_modules` for
+  // better-sqlite3's usual resolver to walk. Telling it the path skips that search — and skips
+  // `require('bindings')` with it, which is why nothing else from that dependency has to ship.
+  const addon = join(dirname(entry), 'better_sqlite3.node');
+  if (existsSync(addon)) env.OSADE_SQLITE_BINDING = addon;
+
   const args = entry.endsWith('.ts')
     ? // `--` separates vite-node's own arguments from the script's; without it `start` is eaten.
       [viteNodeCli(entry), entry, '--', 'start']

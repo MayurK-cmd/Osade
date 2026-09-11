@@ -61,6 +61,14 @@ async function boot(): Promise<void> {
  * routes that through the dev runner. `OSADE_DAEMON_ENTRY` overrides both.
  */
 function daemonEntry(): string {
+  // Packaged: extraResources put the daemon beside its addon. `resourcesPath` exists only in a
+  // packaged app, so it is read defensively rather than assumed.
+  const resources = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  if (resources) {
+    const packaged = join(resources, 'daemon', 'cli.js');
+    if (existsSync(packaged)) return packaged;
+  }
+
   const repo = join(__dirname, '../../../..');
   const built = join(repo, 'packages/daemon/dist/cli.js');
   return existsSync(built) ? built : join(repo, 'packages/daemon/src/cli.ts');

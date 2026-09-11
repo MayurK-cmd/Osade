@@ -35,9 +35,21 @@ if (!packageDir || !entry || !outfile) {
 const root = resolve(packageDir);
 const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 
-const external = Object.entries(manifest.dependencies ?? {})
-  .filter(([, range]) => !String(range).startsWith('workspace:'))
-  .map(([name]) => name);
+/**
+ * Packages that cannot be bundled, and nothing else.
+ *
+ * A native module is a `.node` binary loaded at runtime; esbuild has nothing to inline and the
+ * file has to exist on disk beside the output. Everything else — zod, ws, octokit, @trpc/server,
+ * yaml — is JavaScript and belongs *inside* the bundle, because the alternative is shipping a
+ * pnpm `node_modules` tree with a packaged app and discovering at launch which transitive
+ * dependency did not come along. That is not hypothetical: the first packaged build shipped
+ * better-sqlite3 alone and died on `Cannot find package 'zod'`.
+ */
+// better-sqlite3's JavaScript bundles fine; only its `.node` addon cannot. The addon is loaded
+// by a runtime path (`OSADE_SQLITE_BINDING`), which esbuild leaves alone.
+const UNBUNDLABLE = new Set([]);
+
+const external = Object.keys(manifest.dependencies ?? {}).filter((name) => UNBUNDLABLE.has(name));
 
 const result = await build({
   entryPoints: [join(root, entry)],

@@ -16,7 +16,14 @@ export type Db = Database.Database;
 export function openDb(path: string): Db {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
 
-  const db = new Database(path);
+  // A packaged app says where the native addon is; a checkout lets better-sqlite3 find it.
+  //
+  // Left to itself, better-sqlite3 resolves the addon through the `bindings` package, which walks
+  // for a `node_modules` layout that a packaged app does not have — the daemon ships as one
+  // bundled file beside one `.node`. Passing the path skips that search entirely, and skips
+  // `require('bindings')` with it, which is why nothing else from the dependency has to ship.
+  const nativeBinding = process.env.OSADE_SQLITE_BINDING;
+  const db = nativeBinding ? new Database(path, { nativeBinding }) : new Database(path);
 
   // WAL so the CDC poller can read while writers commit.
   db.pragma('journal_mode = WAL');
