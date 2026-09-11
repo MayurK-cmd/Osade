@@ -53,21 +53,21 @@ Three processes. Two of them survive the window closing.
         │ JSON API
         ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  herdr (vendored, headless)                                  │
+│  terminal substrate (headless)                               │
 │    PTYs · panes · tabs · worktrees · agent detection         │
 │    hook integrations · session persistence                   │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-Osade does not reimplement terminals. [**herdr**](https://herdr.dev) is the execution
-substrate: it owns PTYs, VT parsing, git worktrees, agent process detection, and session
-restore. Osade drives it over its JSON API.
+Osade does not reimplement terminals. A headless terminal substrate owns PTYs, VT parsing, git
+worktrees, agent process detection and session restore; Osade drives it over a JSON API and
+stays out of the business of rendering cells.
 
-Watching a terminal live is "Open in herdr", which attaches a real herdr client to the same
-session. Embedding the terminal in the Osade window is deliberately deferred —
-see [ADR 0001](docs/adr/0001-no-embedded-terminal-in-m0.md).
+Watching a terminal live opens it in a real terminal client attached to the same session.
+Embedding the terminal in the Osade window is deliberately deferred — see
+[ADR 0001](docs/adr/0001-no-embedded-terminal-in-m0.md).
 
-**Agents keep running when you close the window.** herdr and the daemon both survive it.
+**Agents keep running when you close the window.** The substrate and the daemon both survive it.
 
 ---
 
@@ -93,7 +93,7 @@ An existing worktree is authoritative. Osade only ever creates *missing* ones.
 ### 2. Status is derived, never stored
 
 There is no `status` column anywhere in the database. Status is a pure function over
-durable facts — what herdr observed, what verification returned, what GitHub reported —
+durable facts — what the substrate observed, what verification returned, what GitHub reported —
 recomputed on every read.
 
 That is the difference between a board that drifts out of sync with reality and one that
@@ -169,7 +169,7 @@ hand control back. There is never a hidden layer between you and the code.
 
 ### 11. Everything stays on your machine
 
-Local-first, single user, no hosted service. The daemon binds `127.0.0.1` only; herdr
+Local-first, single user, no hosted service. The daemon binds `127.0.0.1` only; the substrate
 speaks over local sockets. Everything Osade writes lives under `~/.osade/`, and the whole
 system is resettable with `rm -rf ~/.osade`.
 
@@ -217,27 +217,30 @@ the organization.
 
 ## Status
 
-**M0 in progress.** The specification is complete, the herdr integration surface is verified
-against a live server, and the daemon spine is building.
+**M0–M3 are built.** `pnpm check` runs 322 tests; `pnpm test:e2e` drives a real terminal
+substrate end to end; `pnpm --filter @osade/desktop smoke:panels` boots the app against a live
+daemon and asserts the window rendered.
 
-Working today (`pnpm test` — 55 tests):
+Working today:
 
-- typed herdr client generated from the pinned schema, plus the boot drift check
-  (protocol + method set, never the version string), passing against a real herdr binary
-- sqlite with forward-only migrations, `change_log` CDC triggers, and the broadcaster —
-  a raw SQL write reaches a subscriber, and no table has a `status` column
-- `deriveStatus` and the agent reducer, with the ordering property test
-- the herdr event subscriber as an N+1 connection manager, with the monotonic fact gate
+- a typed substrate client generated from a pinned schema, plus a boot drift check on protocol
+  and method set — never the version string, which is a label rather than a contract
+- sqlite with forward-only migrations, `change_log` CDC triggers and one event path: a raw SQL
+  write reaches a subscriber, and no table has a `status` column
+- `deriveStatus` over durable facts, with an ordering property test — any sequence of fact
+  writes lands on the same status
+- verification derived from a repository's own CI and manifests, which refuses to run a plan a
+  human has not confirmed
+- approval gates on every write that leaves the machine, bound to the exact bytes you approved
+  and re-hashed at execution
+- the conventions miner: three bounded model passes, every rule carrying citations, and an
+  injection budget that caps what reaches an agent
+- a packaged desktop app — app, daemon, CLI, substrate and a Node runtime, verified by launching
+  the packaged build
 
-Proven end-to-end against live herdr, headless, with no terminal client attached:
-
-- herdr spawns and keeps agent panes alive with **zero clients** connected
-- a git worktree is created on a pinned base commit and opened as a workspace
-- Claude Code launches inside it, and its first-run trust prompt is detected as `blocked`
-- a prompt is submitted, and the status stream reports `blocked → idle → working → done`
-
-That last line is the spine: the lifecycle Osade renders comes from herdr's own detection —
-no screen scraping, no polling.
+What is not done: the two live acceptance runs, which need real credentials and a real
+repository. Their runbooks are `docs/M2-ACCEPTANCE.md` and `docs/M3-ACCEPTANCE.md`, and the M3
+one is written so it can return a disappointing answer.
 
 | Milestone | Scope |
 | --- | --- |
@@ -254,7 +257,7 @@ no screen scraping, no polling.
 
 ```text
 osade/
-├── backend/     herdr — the execution substrate. Read-only reference; never edited here.
+├── backend/     the terminal substrate. Read-only reference; never edited here.
 ├── docs/        the spec (below)
 └── assets/
 ```
@@ -262,8 +265,8 @@ osade/
 | Document | What it is |
 | --- | --- |
 | [`docs/OSADE.md`](docs/OSADE.md) | Product requirements and build spec. Start here. |
-| [`docs/HERDR-CONTRACT.md`](docs/HERDR-CONTRACT.md) | The verified herdr integration surface — real method names, event names and payloads, with citations. What the daemon codes against. |
-| [`docs/PRD-DELTA.md`](docs/PRD-DELTA.md) | Where the spec was wrong about herdr, and the correction. |
+| [`docs/HERDR-CONTRACT.md`](docs/HERDR-CONTRACT.md) | The verified substrate integration surface — real method names, event names and payloads, with citations. What the daemon codes against. |
+| [`docs/PRD-DELTA.md`](docs/PRD-DELTA.md) | Where the spec was wrong about the substrate, and the correction. |
 | [`docs/adr/`](docs/adr) | One record per DECISION taken during the build. |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Architecture notes. |
 
