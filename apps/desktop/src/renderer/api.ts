@@ -66,6 +66,18 @@ export interface PlanStep {
 }
 
 export const api = {
+  /** §8.2 — creating a task prepares a worktree. It does not start an agent. */
+  taskCreate: (input: { repoPath: string; title: string; intent: string }) =>
+    call('mutation', 'taskCreate', input) as Promise<{ taskId: string }>,
+
+  /** §8.2 — the launch sequence. Long-running: worktree, lane, agent start. */
+  taskLaunch: (taskId: string) =>
+    call('mutation', 'taskLaunch', { taskId }) as Promise<{
+      taskId: string;
+      paneId: string;
+      workspaceId: string;
+    }>,
+
   mineStatus: (repoId: string) =>
     call('query', 'mineStatus', { repoId }) as Promise<MineStatus>,
 

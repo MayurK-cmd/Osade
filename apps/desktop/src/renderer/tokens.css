@@ -20,6 +20,13 @@
   --st-fail: #97302e;
   --st-rest: #6e7772;
 
+  /*
+   * A wash behind the needs-you set, so it reads as one block rather than as rows that happen
+   * to share a colour. Tinted from --st-needs, barely: the flag does the shouting.
+   */
+  --wash-needs: #fbf2e8;
+  --edge-needs: #e2c49c;
+
   /* §19.2 — IBM Plex, chosen because the whole product is a record of machine work. */
   --sans:
     'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -48,6 +55,9 @@
     --st-live: #5aa87e;
     --st-fail: #cf6a67;
     --st-rest: #8b948f;
+
+    --wash-needs: #221a10;
+    --edge-needs: #5b431f;
   }
 }
 
@@ -75,4 +85,76 @@ body {
 code,
 .mono {
   font-family: var(--mono);
+}
+
+/*
+ * Focus is visible, always. An interface that hides where the keyboard is has decided only mice
+ * matter.
+ */
+:focus-visible {
+  outline: 2px solid var(--st-needs);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 6px 13px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--ink-soft);
+}
+
+button:disabled {
+  color: var(--st-rest);
+  cursor: not-allowed;
+}
+
+/*
+ * The one emphatic control on the screen: the action a person came here to take. Exactly one per
+ * view, which is what keeps it meaning anything.
+ */
+button.primary {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+button.primary:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+button.primary:disabled {
+  background: var(--rule);
+  border-color: var(--rule);
+  color: var(--st-rest);
+}
+
+input,
+textarea {
+  font: inherit;
+  color: var(--ink);
+  background: var(--field);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 7px 9px;
+  width: 100%;
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }

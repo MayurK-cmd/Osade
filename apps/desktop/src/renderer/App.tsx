@@ -1,131 +1,99 @@
-import { useState, type JSX } from 'react';
+import { useState, type JSX, type ReactNode } from 'react';
 
-import type { TaskStatus, TaskView } from '@osade/contract';
+import type { TaskView } from '@osade/contract';
 
-import { GateCard } from './GateCard.js';
-import { Conventions } from './Conventions.js';
-import { PrOpen } from './PrOpen.js';
+import { Detail } from './Detail.js';
+import { NewTask } from './NewTask.js';
+import { GLYPH, STATUS, TONE_COLOUR, ago, summarise } from './status.js';
 import { useLedger } from './useLedger.js';
-import { VerifyPlanReview } from './VerifyPlanReview.js';
 
 /**
  * The ledger — OSADE.md §19.
  *
- * A record of machine work on a public commons, not a generic dark SaaS board. Ruled rows in a
- * fixed grid, a status gutter on the left like porcelain output, evidence inline.
+ * A record of machine work on a public commons. One question organises the whole screen, because
+ * with eight agents running it is the only question a person actually has: **who needs me?** The
+ * tasks that need a human sit at the top, under their own heading, on a tinted band, behind a
+ * flag. Everything else is deliberately quiet.
  *
- * §18.1 — App.tsx is a composition root only.
+ * §18.1 — App.tsx is a composition root only. Behaviour lives in the panels it arranges.
  */
-
-/** §19.3 — fixed-width, fixed-position glyphs, so the gutter scans peripherally. */
-const GLYPH: Record<TaskStatus, string> = {
-  awaiting_approval: '⚑',
-  needs_input: '⚑',
-  review_changes_requested: '⚑',
-  awaiting_review: '⚑',
-  implementing: '●',
-  verifying: '●',
-  verify_failed: '✗',
-  ci_failed: '✗',
-  pr_open: '○',
-  queued: '○',
-  idle: '○',
-  stopped: '○',
-  merged: '✓',
-  archived: '✓',
-};
-
-function toneFor(status: TaskStatus): string {
-  if (status === 'verify_failed' || status === 'ci_failed') return 'var(--st-fail)';
-  if (status === 'implementing' || status === 'verifying') return 'var(--st-live)';
-  if (
-    status === 'awaiting_approval' ||
-    status === 'needs_input' ||
-    status === 'review_changes_requested' ||
-    status === 'awaiting_review'
-  ) {
-    return 'var(--st-needs)';
-  }
-  return 'var(--st-rest)';
-}
-
-/** §19.4 — active voice, sentence case, an action keeps its name through the whole flow. */
-const LABEL: Record<TaskStatus, string> = {
-  awaiting_approval: 'needs approval',
-  needs_input: 'needs you',
-  review_changes_requested: 'changes requested',
-  awaiting_review: 'ready for review',
-  implementing: 'implementing',
-  verifying: 'verifying',
-  verify_failed: 'verification failed',
-  ci_failed: 'CI failed',
-  pr_open: 'pull request open',
-  queued: 'queued',
-  idle: 'idle',
-  stopped: 'stopped',
-  merged: 'merged',
-  archived: 'archived',
-};
 
 export function App(): JSX.Element {
   const { tasks, connection, error } = useLedger();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [composing, setComposing] = useState(false);
 
+  const working = tasks.filter((t) => t.status === 'implementing' || t.status === 'verifying');
   const needsYou = tasks.filter((t) => t.needsYou);
   const rest = tasks.filter((t) => !t.needsYou);
   const selected = tasks.find((t) => t.task.id === selectedId) ?? null;
 
-  // §14.2 — gate requests are the top of the ledger, above everything else.
-  const openGates = tasks.flatMap((task) =>
-    task.openGates.filter((g) => g.decided_at == null).map((gate) => ({ gate, task })),
-  );
-
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 420px', height: '100%' }}>
+    <div
+      style={{ display: 'grid', gridTemplateColumns: 'minmax(420px, 1fr) 470px', height: '100%' }}
+    >
       <main style={{ overflow: 'auto', borderRight: '1px solid var(--rule)' }}>
-        <Header connection={connection} error={error} count={tasks.length} />
+        <Header
+          connection={connection}
+          error={error}
+          summary={summarise({
+            needsYou: needsYou.length,
+            working: working.length,
+            total: tasks.length,
+          })}
+          onNew={() => setComposing(true)}
+        />
 
-        {openGates.length > 0 && (
-          <div style={{ padding: '14px 18px 4px' }}>
-            {openGates.map(({ gate, task }) => (
-              <GateCard
-                key={gate.id}
-                gate={gate}
-                task={task}
-                // §5.4 — no local mutation. The decision writes to the database and comes
-                // back over the websocket like every other change.
-                onDecided={() => {}}
-              />
-            ))}
-          </div>
+        {composing && (
+          <NewTask
+            onClose={() => setComposing(false)}
+            onCreated={(id) => {
+              setSelectedId(id);
+              setComposing(false);
+            }}
+          />
         )}
 
-        {tasks.length === 0 ? (
-          <Empty connection={connection} />
+        {tasks.length === 0 && !composing ? (
+          <Empty connection={connection} onNew={() => setComposing(true)} />
         ) : (
           <>
-            {needsYou.map((task) => (
-              <Row
-                key={task.task.id}
-                task={task}
-                selected={task.task.id === selectedId}
-                onSelect={setSelectedId}
-              />
-            ))}
-            {needsYou.length > 0 && rest.length > 0 && <Divider />}
-            {rest.map((task) => (
-              <Row
-                key={task.task.id}
-                task={task}
-                selected={task.task.id === selectedId}
-                onSelect={setSelectedId}
-              />
-            ))}
+            {needsYou.length > 0 && (
+              <Band
+                title={
+                  needsYou.length === 1 ? '1 task needs you' : `${needsYou.length} tasks need you`
+                }
+              >
+                {needsYou.map((task) => (
+                  <Row
+                    key={task.task.id}
+                    task={task}
+                    selected={task.task.id === selectedId}
+                    onSelect={setSelectedId}
+                  />
+                ))}
+              </Band>
+            )}
+
+            {rest.length > 0 && (
+              <Section title={needsYou.length > 0 ? 'Everything else' : 'Tasks'}>
+                {rest.map((task) => (
+                  <Row
+                    key={task.task.id}
+                    task={task}
+                    selected={task.task.id === selectedId}
+                    onSelect={setSelectedId}
+                  />
+                ))}
+              </Section>
+            )}
           </>
         )}
       </main>
 
-      <Detail task={selected} />
+      <aside style={{ overflow: 'auto' }}>
+        {selected ? <Detail task={selected} /> : <NothingSelected hasTasks={tasks.length > 0} />}
+      </aside>
     </div>
   );
 }
@@ -133,49 +101,98 @@ export function App(): JSX.Element {
 function Header({
   connection,
   error,
-  count,
+  summary,
+  onNew,
 }: {
   connection: string;
   error: string | null;
-  count: number;
+  summary: string;
+  onNew: () => void;
 }): JSX.Element {
+  const connected = connection === 'live';
   return (
     <header
       style={{
         display: 'flex',
-        alignItems: 'baseline',
-        gap: 12,
-        padding: '14px 18px',
+        alignItems: 'center',
+        gap: 14,
+        padding: '15px 22px',
         borderBottom: '1px solid var(--rule)',
+        position: 'sticky',
+        top: 0,
+        background: 'var(--paper)',
+        zIndex: 2,
       }}
     >
-      <span style={{ fontSize: 'var(--t-l)', fontWeight: 600 }}>Ledger</span>
-      <span style={{ color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
-        {count} {count === 1 ? 'task' : 'tasks'}
-      </span>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, minWidth: 0 }}>
+        <span style={{ fontSize: 'var(--t-l)', fontWeight: 600, letterSpacing: '-0.01em' }}>
+          Osade
+        </span>
+        <span style={{ color: 'var(--ink-soft)' }}>{summary}</span>
+      </div>
+
       <span style={{ flex: 1 }} />
+
+      <button onClick={onNew}>New task</button>
+
+      {/* Connection is a fact about the app, not about the work — so it stays the quietest thing
+          on the screen, and only speaks up when it is bad news. */}
       <span
-        className="mono"
+        title={connected ? 'Connected to the daemon' : 'Not connected to the daemon'}
         style={{
           fontSize: 'var(--t-xs)',
-          color: connection === 'live' ? 'var(--st-live)' : 'var(--st-rest)',
+          color: connected ? 'var(--st-rest)' : 'var(--st-fail)',
+          whiteSpace: 'nowrap',
         }}
       >
-        {error ?? connection}
+        {error ?? (connected ? 'connected' : 'reconnecting…')}
       </span>
     </header>
   );
 }
 
-function Divider(): JSX.Element {
-  // §19.3 — a rule separates lanes of meaning. It never decorates.
+/** The needs-you set, as one block — findable without being read (§19.3). */
+function Band({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   return (
-    <div
+    <section
       style={{
-        borderTop: '1px solid var(--rule)',
-        margin: '10px 0',
+        background: 'var(--wash-needs)',
+        borderBottom: '1px solid var(--edge-needs)',
+        borderLeft: '3px solid var(--st-needs)',
       }}
-    />
+    >
+      <h2
+        style={{
+          margin: 0,
+          padding: '13px 22px 3px',
+          fontSize: 'var(--t-s)',
+          fontWeight: 600,
+          color: 'var(--st-needs)',
+        }}
+      >
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }): JSX.Element {
+  return (
+    <section>
+      <h2
+        style={{
+          margin: 0,
+          padding: '18px 22px 3px',
+          fontSize: 'var(--t-xs)',
+          fontWeight: 600,
+          color: 'var(--ink-soft)',
+        }}
+      >
+        {title}
+      </h2>
+      {children}
+    </section>
   );
 }
 
@@ -188,154 +205,114 @@ function Row({
   selected: boolean;
   onSelect: (id: string) => void;
 }): JSX.Element {
+  const copy = STATUS[task.status];
+  const colour = TONE_COLOUR[copy.tone];
+  // What it is *doing* beats what it *is*: "running pnpm test" says more than "verifying", and
+  // the status is already in the gutter and the label beside it.
+  const activity = task.agent?.activity_text?.trim();
+  const at = task.agent?.last_event_at ?? task.task.created_at;
+
   return (
     <div
-      // Also the handle the smoke run uses to open a task — the panels are otherwise only
-      // reachable by a human clicking, which is why they went unexercised for three milestones.
       data-task-id={task.task.id}
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
       onClick={() => onSelect(task.task.id)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect(task.task.id);
+        }
+      }}
       style={{
         display: 'grid',
-        gridTemplateColumns: '20px 150px 1fr auto',
-        alignItems: 'baseline',
-        gap: 12,
-        padding: '9px 18px',
-        borderBottom: '1px solid var(--rule)',
+        gridTemplateColumns: '18px 1fr auto',
+        alignItems: 'start',
+        columnGap: 12,
+        padding: '10px 22px',
+        borderTop: '1px solid var(--rule)',
         background: selected ? 'var(--field)' : 'transparent',
         cursor: 'default',
       }}
     >
-      <span className="mono" style={{ color: toneFor(task.status) }}>
-        {GLYPH[task.status]}
+      <span className="mono" style={{ color: colour, lineHeight: 1.45 }} aria-hidden="true">
+        {GLYPH[copy.tone]}
       </span>
-      <span style={{ color: toneFor(task.status), fontSize: 'var(--t-s)' }}>
-        {LABEL[task.status]}
-      </span>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {task.task.title}
-      </span>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 'var(--t-m)',
+            lineHeight: 1.35,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {task.task.title}
+        </div>
+        <div
+          style={{
+            marginTop: 1,
+            fontSize: 'var(--t-xs)',
+            color: 'var(--ink-soft)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span style={{ color: colour }}>{copy.label}</span>
+          {activity ? ` — ${activity}` : ''}
+        </div>
+      </div>
+
       <span
-        className="mono"
-        style={{
-          color: 'var(--ink-soft)',
-          fontSize: 'var(--t-xs)',
-          maxWidth: 280,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
+        style={{ fontSize: 'var(--t-xs)', color: 'var(--st-rest)', whiteSpace: 'nowrap' }}
+        title={new Date(at).toLocaleString()}
       >
-        {task.agent?.activity_text ?? ''}
+        {ago(at)}
       </span>
     </div>
   );
 }
 
-function Empty({ connection }: { connection: string }): JSX.Element {
-  // §19.4 — empty states name the next action.
-  return (
-    <div style={{ padding: 28, color: 'var(--ink-soft)', maxWidth: 520 }}>
-      <p style={{ marginTop: 0 }}>
-        {connection === 'live'
-          ? 'No tasks yet.'
-          : 'Waiting for the daemon. Agents keep running while this window is closed.'}
-      </p>
-      <p className="mono" style={{ fontSize: 'var(--t-xs)' }}>
-        osade task create &lt;repo&gt; &lt;title&gt;
-      </p>
-    </div>
-  );
-}
-
-function Detail({ task }: { task: TaskView | null }): JSX.Element {
-  if (!task) {
+function Empty({ connection, onNew }: { connection: string; onNew: () => void }): JSX.Element {
+  // §19.4 — an empty screen is an invitation to act, not a mood.
+  if (connection !== 'live') {
     return (
-      <aside style={{ padding: 28, color: 'var(--ink-soft)' }}>
-        <p style={{ marginTop: 0 }}>Select a row.</p>
-      </aside>
+      <div style={{ padding: '34px 22px', maxWidth: 460 }}>
+        <p style={{ marginTop: 0, fontSize: 'var(--t-m)' }}>Connecting to the daemon.</p>
+        <p style={{ color: 'var(--ink-soft)', lineHeight: 1.55 }}>
+          Agents keep running while this window is closed, so nothing has been lost. This should
+          only take a moment.
+        </p>
+      </div>
     );
   }
 
   return (
-    <aside style={{ padding: '18px 20px', overflow: 'auto' }}>
-      <h1 style={{ fontSize: 'var(--t-l)', fontWeight: 600, margin: '0 0 4px' }}>
-        {task.task.title}
-      </h1>
-      <p style={{ color: toneFor(task.status), margin: '0 0 18px' }}>{LABEL[task.status]}</p>
-
-      <Field label="branch" value={task.task.branch} mono />
-      <Field label="base" value={`${task.task.base_sha.slice(0, 12)} on ${task.task.base_ref}`} mono />
-      <Field label="worktree" value={task.task.worktree_path} mono />
-      <Field label="herdr" value={task.task.herdr_workspace_id ?? '—'} mono />
-      <Field label="pane" value={task.agent?.herdr_pane_id ?? '—'} mono />
-      <Field label="agent state" value={task.agent?.herdr_state ?? '—'} />
-      <Field label="last event" value={task.agent?.last_event ?? '—'} />
-      <Field label="open gates" value={String(task.openGates.length)} />
-
-      {/* §5.2 — probe_failures surface as a degraded-confidence note and nothing else. */}
-      {(task.agent?.probe_failures ?? 0) > 0 && (
-        <p style={{ color: 'var(--st-rest)', fontSize: 'var(--t-xs)' }}>
-          degraded confidence: {task.agent?.probe_failures} failed probes
-        </p>
-      )}
-
-      <section style={{ marginTop: 18, borderTop: '1px solid var(--rule)', paddingTop: 12 }}>
-        <h2 style={{ fontSize: 'var(--t-s)', fontWeight: 600, margin: '0 0 4px' }}>Verification</h2>
-        <VerifyPlanReview taskId={task.task.id} />
-      </section>
-
-      <section style={{ marginTop: 18, borderTop: '1px solid var(--rule)', paddingTop: 12 }}>
-        <h2 style={{ fontSize: 'var(--t-s)', fontWeight: 600, margin: '0 0 4px' }}>
-          Pull request
-        </h2>
-        <PrOpen task={task} />
-      </section>
-
-      {/* §13 — the repository's own conventions, per repo rather than per task. */}
-      <section style={{ marginTop: 18, borderTop: '1px solid var(--rule)', paddingTop: 12 }}>
-        <Conventions repoId={task.task.repo_id} />
-      </section>
-
-      <button
-        onClick={() => void window.osade?.openInHerdr()}
-        style={{
-          marginTop: 18,
-          padding: '6px 12px',
-          border: '1px solid var(--rule)',
-          borderRadius: 'var(--radius)',
-          background: 'var(--field)',
-          color: 'var(--ink)',
-          font: 'inherit',
-          cursor: 'pointer',
-        }}
-      >
-        Open in herdr
-      </button>
-      <p style={{ color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
-        Osade does not embed the terminal (ADR 0001). This attaches a real herdr client.
+    <div style={{ padding: '34px 22px', maxWidth: 490 }}>
+      <p style={{ marginTop: 0, fontSize: 'var(--t-m)' }}>No tasks yet.</p>
+      <p style={{ color: 'var(--ink-soft)', lineHeight: 1.55 }}>
+        A task is one piece of work on one repository. Osade gives it its own git worktree, runs an
+        agent inside it, and stops for you before anything is published.
       </p>
-    </aside>
+      <button className="primary" onClick={onNew} style={{ marginTop: 8 }}>
+        New task
+      </button>
+    </div>
   );
 }
 
-function Field({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}): JSX.Element {
+function NothingSelected({ hasTasks }: { hasTasks: boolean }): JSX.Element {
   return (
-    <div style={{ display: 'flex', gap: 10, padding: '4px 0', alignItems: 'baseline' }}>
-      <span style={{ width: 96, color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>{label}</span>
-      <span
-        className={mono ? 'mono' : undefined}
-        style={{ fontSize: 'var(--t-xs)', wordBreak: 'break-all' }}
-      >
-        {value}
-      </span>
+    <div style={{ padding: '34px 24px', color: 'var(--ink-soft)', maxWidth: 380 }}>
+      <p style={{ marginTop: 0, lineHeight: 1.55 }}>
+        {hasTasks
+          ? 'Pick a task to see what it has done, and what it needs from you.'
+          : 'Nothing to show yet.'}
+      </p>
     </div>
   );
 }
