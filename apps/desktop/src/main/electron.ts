@@ -50,10 +50,21 @@ let spawnedDaemon: ChildProcess | null = null;
 /** The repository this window is scoped to — `osade .`'s argument. */
 let openedRepo: string | null = null;
 
-/** `--repo <path>` out of a command line, wherever the runner left it. */
+/**
+ * `--repo=<path>` out of a command line, wherever the runner left it.
+ *
+ * One token, not two. Electron injects its own switches into the argv handed to
+ * `second-instance`, so "the element after `--repo`" is not reliably the path — it arrived once
+ * as `--allow-file-access-from-files`. The two-token form is still read for anything that types
+ * it by hand, but only when what follows is not itself a flag.
+ */
 function repoFromArgv(argv: readonly string[]): string | null {
+  const joined = argv.find((arg) => arg.startsWith('--repo='));
+  if (joined) return joined.slice('--repo='.length) || null;
+
   const at = argv.indexOf('--repo');
-  return at >= 0 ? (argv[at + 1] ?? null) : null;
+  const next = at >= 0 ? argv[at + 1] : undefined;
+  return next && !next.startsWith('-') ? next : null;
 }
 
 /**
@@ -65,12 +76,16 @@ function repoFromArgv(argv: readonly string[]): string | null {
  * arguing over the same ledger.
  */
 if (!app.requestSingleInstanceLock()) {
-  app.quit();
+  // `app.exit`, not `app.quit`. Quit is asynchronous, so `whenReady` still fires and the losing
+  // instance boots far enough to adopt herdr and open a daemon connection before it dies —
+  // observed doing exactly that. Exit stops here.
+  app.exit(0);
 } else {
   app.on('second-instance', (_event, argv) => {
     const repo = repoFromArgv(argv);
     if (repo) {
       openedRepo = repo;
+      say(`re-scoping to ${repo}`);
       window?.webContents.send('osade:repo-opened', repo);
     }
     if (window) {

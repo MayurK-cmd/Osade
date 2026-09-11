@@ -68,7 +68,9 @@ export async function openRepo(pathArg: string, io: Io): Promise<number> {
 
   // Detached, because the terminal that launched the window should not own it — closing the
   // shell must not take the app with it, exactly as §18.1 says of the daemon and the substrate.
-  const child = spawn(app.command, [...app.args, '--repo', repo.path], {
+  // `--repo=<path>` as one token: Electron rewrites the argv it hands a second instance, and a
+  // two-token flag loses its value there.
+  const child = spawn(app.command, [...app.args, `--repo=${repo.path}`], {
     detached: true,
     stdio: 'ignore',
     windowsHide: false,
@@ -105,24 +107,20 @@ function findApp(): { command: string; args: string[] } | null {
 
   // A source checkout: <repo>/packages/cli/{src,dist} → repo root.
   const repoRoot = resolve(here, '..', '..', '..');
-  const electron = join(
-    repoRoot,
-    'node_modules',
-    '.pnpm',
-    'node_modules',
-    'electron',
-    'dist',
-    process.platform === 'win32' ? 'electron.exe' : 'electron',
-  );
   const appDir = join(repoRoot, 'apps', 'desktop');
-  if (existsSync(join(appDir, 'dist', 'main', 'electron.js'))) {
-    const binary = existsSync(electron) ? electron : electronFromPackage(appDir);
-    if (binary) return { command: binary, args: [appDir] };
-  }
+  if (!existsSync(join(appDir, 'dist', 'main', 'electron.js'))) return null;
 
-  return null;
+  const electron = electronFromPackage(appDir);
+  return electron ? { command: electron, args: [appDir] } : null;
 }
 
+/**
+ * Electron's binary, through the package that declares it.
+ *
+ * `apps/desktop/node_modules/electron` rather than anything under `.pnpm`: the store's internal
+ * layout is pnpm's business and has changed before, while the package's own node_modules entry is
+ * the documented way to find it and is a symlink to whatever the store currently does.
+ */
 function electronFromPackage(appDir: string): string | null {
   const local = join(
     appDir,
