@@ -30,7 +30,16 @@ export function App(): JSX.Element {
 
   return (
     <div
-      style={{ display: 'grid', gridTemplateColumns: 'minmax(420px, 1fr) 470px', height: '100%' }}
+      /*
+       * The ledger is a scannable list of short rows; the detail pane is where reading and
+       * deciding happen. Giving the list the flexible column left a 970px void beside one task
+       * and squeezed the thing being read, so the weight is the other way round.
+       */
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(340px, 460px) minmax(0, 1fr)',
+        height: '100%',
+      }}
     >
       <main style={{ overflow: 'auto', borderRight: '1px solid var(--rule)' }}>
         <Header

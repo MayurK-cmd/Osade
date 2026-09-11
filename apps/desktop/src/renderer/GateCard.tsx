@@ -60,15 +60,10 @@ export function GateCard({
   }
 
   return (
-    <section
-      style={{
-        border: '1px solid var(--rule)',
-        borderLeft: `3px solid var(--st-needs)`,
-        padding: '14px 16px',
-        marginBottom: 12,
-        background: 'var(--field)',
-      }}
-    >
+    // No box of its own: whatever renders this already frames it (the detail pane puts it on a
+    // tinted band with an amber edge). A card inside a highlighted region is two frames saying
+    // the same thing.
+    <section style={{ marginBottom: 12 }}>
       <header style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
         <span className="mono" style={{ color: 'var(--st-needs)' }}>
           ⚑
@@ -110,22 +105,7 @@ export function GateCard({
           }}
         />
       ) : (
-        <pre
-          className="mono"
-          style={{
-            fontSize: 'var(--t-xs)',
-            margin: 0,
-            padding: 8,
-            background: 'var(--paper)',
-            border: '1px solid var(--rule)',
-            maxHeight: 260,
-            overflow: 'auto',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-          }}
-        >
-          {pretty(gate.payload_json)}
-        </pre>
+        <Payload json={gate.payload_json} />
       )}
 
       {error && (
@@ -137,33 +117,33 @@ export function GateCard({
       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
         {editing ? (
           <>
-            <Button
+            <button
+              className="primary"
               disabled={busy}
-              tone="needs"
               onClick={() => void run(() => api.gateEditAndApprove(gate.id, parse(draft)))}
             >
               Approve edited
-            </Button>
-            <Button disabled={busy} onClick={() => setEditing(false)}>
+            </button>
+            <button disabled={busy} onClick={() => setEditing(false)}>
               Cancel
-            </Button>
+            </button>
           </>
         ) : (
           <>
             {/* §19.4 — an action keeps its name through the whole flow. */}
-            <Button
+            <button
+              className="primary"
               disabled={busy}
-              tone="live"
               onClick={() => void run(() => api.gateDecide(gate.id, 'approve'))}
             >
               {approveLabel(gate.gate)}
-            </Button>
-            <Button disabled={busy} onClick={() => void run(() => api.gateDecide(gate.id, 'deny'))}>
+            </button>
+            <button disabled={busy} onClick={() => void run(() => api.gateDecide(gate.id, 'deny'))}>
               Deny
-            </Button>
-            <Button disabled={busy} onClick={() => setEditing(true)}>
+            </button>
+            <button disabled={busy} onClick={() => setEditing(true)}>
               Edit
-            </Button>
+            </button>
           </>
         )}
       </div>
@@ -172,39 +152,6 @@ export function GateCard({
         Approving binds this exact text. If it changes before it runs, Osade refuses it.
       </p>
     </section>
-  );
-}
-
-function Button({
-  children,
-  onClick,
-  disabled,
-  tone,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  tone?: 'live' | 'needs';
-}): JSX.Element {
-  const color =
-    tone === 'live' ? 'var(--st-live)' : tone === 'needs' ? 'var(--st-needs)' : 'var(--ink)';
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        padding: '5px 12px',
-        border: `1px solid ${tone ? color : 'var(--rule)'}`,
-        borderRadius: 'var(--radius)',
-        background: 'var(--paper)',
-        color,
-        font: 'inherit',
-        cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
-      }}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -229,6 +176,74 @@ function approveLabel(gate: string): string {
 
 function describe(gate: string): string {
   return approveLabel(gate) === 'Approve' ? gate.replace('gate.', '') : approveLabel(gate);
+}
+
+/**
+ * What is about to be sent, as a person would read it.
+ *
+ * This used to be pretty-printed JSON, which asks a maintainer to parse `{"head": "...", "base":
+ * "..."}` in their head to decide whether to publish under their own name. The bytes are still
+ * exactly what is bound (§11.2) — this is a reading of them, and `Edit` still shows the JSON,
+ * because editing the thing that gets hashed should show the thing that gets hashed.
+ */
+function Payload({ json }: { json: string }): JSX.Element {
+  let value: Record<string, unknown> | null = null;
+  try {
+    const parsed: unknown = JSON.parse(json);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      value = parsed as Record<string, unknown>;
+    }
+  } catch {
+    value = null;
+  }
+
+  const box: React.CSSProperties = {
+    background: 'var(--paper)',
+    border: '1px solid var(--rule)',
+    borderRadius: 'var(--radius)',
+    padding: '10px 12px',
+    maxHeight: 300,
+    overflow: 'auto',
+  };
+
+  // Anything unrecognised falls back to the raw text rather than guessing at a shape.
+  if (!value) {
+    return (
+      <pre className="mono" style={{ ...box, margin: 0, fontSize: 'var(--t-xs)', whiteSpace: 'pre-wrap' }}>
+        {pretty(json)}
+      </pre>
+    );
+  }
+
+  const title = typeof value.title === 'string' ? value.title : null;
+  const body = typeof value.body === 'string' ? value.body : null;
+  const head = typeof value.head === 'string' ? value.head : null;
+  const base = typeof value.base === 'string' ? value.base : null;
+  const draft = value.draft === true;
+
+  return (
+    <div style={box}>
+      {title && (
+        <div style={{ fontSize: 'var(--t-m)', fontWeight: 600, lineHeight: 1.3 }}>{title}</div>
+      )}
+      {body && (
+        <p style={{ margin: title ? '6px 0 0' : 0, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+          {body}
+        </p>
+      )}
+      {head && base && (
+        <p className="mono" style={{ margin: '10px 0 0', fontSize: 'var(--t-xs)', color: 'var(--ink-soft)' }}>
+          {head} → {base}
+          {draft ? '  ·  as a draft' : ''}
+        </p>
+      )}
+      {!title && !body && (
+        <pre className="mono" style={{ margin: 0, fontSize: 'var(--t-xs)', whiteSpace: 'pre-wrap' }}>
+          {pretty(json)}
+        </pre>
+      )}
+    </div>
+  );
 }
 
 function pretty(json: string): string {

@@ -10,7 +10,7 @@
     "build": "pnpm build:main && pnpm build:renderer",
     "start": "pnpm build && electron .",
     "smoke": "pnpm build && cross-env OSADE_HOME=.smoke OSADE_SMOKE_SHOT=smoke.png electron .",
-    "smoke:panels": "pnpm build && pnpm --filter @osade/daemon exec vite-node scripts/seed-smoke-fixture.mjs ../../apps/desktop/.smoke && cross-env OSADE_HOME=.smoke OSADE_SMOKE_SHOT=smoke.png OSADE_SMOKE_CLICK=[data-task-id] OSADE_SMOKE_EXPECT=\"Retry the flaky poller test|needs approval|Approving binds this exact text|pnpm typecheck|from CI config|Pull request|What this project expects|Add a regression test with every bug fix.|too many things at once\" electron ."
+    "smoke:panels": "pnpm build && pnpm --filter @osade/daemon exec vite-node scripts/seed-smoke-fixture.mjs ../../apps/desktop/.smoke && cross-env OSADE_HOME=.smoke OSADE_SMOKE_SHOT=smoke.png OSADE_SMOKE_CLICK=[data-task-id] OSADE_SMOKE_EXPECT=\"Retry the flaky poller test|Needs your approval|Nothing leaves this machine until you say so.|Open pull request|osade/retry-flaky-poller|Approving binds this exact text|Checks|pnpm typecheck|from CI config|Where this is running\" electron ."
   },
   "dependencies": {
     "@osade/contract": "workspace:*"

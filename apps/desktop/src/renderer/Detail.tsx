@@ -115,9 +115,19 @@ export function Detail({ task }: { task: TaskView }): JSX.Element {
         </Panel>
       )}
 
-      <Panel title={null}>
-        <Conventions repoId={task.task.repo_id} />
-      </Panel>
+      {/*
+        * Repo-level, not task-level — the same rules appear on every task of the repository. It
+        * is collapsed so it stops competing with the task's own gate for "needs you" attention,
+        * and left open enough to notice: the summary carries the counts.
+        */}
+      <section style={{ padding: '14px 24px', borderBottom: '1px solid var(--rule)' }}>
+        <details>
+          <summary style={{ cursor: 'default' }}>What this project expects of contributors</summary>
+          <div style={{ marginTop: 6 }}>
+            <Conventions repoId={task.task.repo_id} />
+          </div>
+        </details>
+      </section>
 
       {/* 4. The identifiers, for when something has gone wrong. */}
       <TechnicalDetails task={task} />

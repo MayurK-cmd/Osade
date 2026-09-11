@@ -90,17 +90,14 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
 
   return (
     <section style={{ padding: '8px 0' }}>
-      <header style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <h3 style={{ font: 'inherit', fontSize: 'var(--t-m)', margin: 0 }}>
-          What this project expects
-        </h3>
-        <span style={{ color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
+      {/* The heading lives on the disclosure that wraps this; repeating it here read as two
+          panels stacked. The counts stay, because they are the reason to open it. */}
+      <p style={{ color: 'var(--ink-soft)', fontSize: 'var(--t-xs)', margin: '0 0 10px' }}>
+        <strong style={{ color: 'var(--ink)', fontWeight: 600 }}>
           {active.length} in use
-          {candidates.length > 0 && ` · ${candidates.length} awaiting you`}
-        </span>
-      </header>
-
-      <p style={{ color: 'var(--ink-soft)', fontSize: 'var(--t-xs)', margin: '4px 0 10px' }}>
+          {candidates.length > 0 ? ` · ${candidates.length} awaiting you` : ''}
+        </strong>
+        <br />
         Mined from this repository&rsquo;s own review record. Every rule cites what it came from —
         check it before you turn it on, because active rules are given to every agent you launch.
       </p>
@@ -141,7 +138,7 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
       )}
 
       {candidates.length > 0 && (
-        <Group title="Waiting on you" hint="Not given to any agent until you confirm it.">
+        <Group title="Not in use yet" hint="Confirm one and every agent you launch is told about it.">
           {candidates.map((rule) => (
             <Rule
               key={rule.id}

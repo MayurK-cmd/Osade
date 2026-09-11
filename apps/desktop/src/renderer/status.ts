@@ -151,7 +151,7 @@ export function summarise(counts: { needsYou: number; working: number; total: nu
   const parts: string[] = [];
   if (counts.working > 0) parts.push(`${counts.working} working`);
   if (counts.needsYou > 0) {
-    parts.push(`${counts.needsYou} ${counts.needsYou === 1 ? 'needs' : 'need'} you`);
+    parts.push(`${counts.needsYou} ${counts.needsYou === 1 ? 'task needs' : 'tasks need'} you`);
   }
   if (parts.length === 0) return `${counts.total} ${counts.total === 1 ? 'task' : 'tasks'}, idle`;
   return parts.join(' · ');

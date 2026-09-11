@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron';
 import type { ChildProcess } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -94,6 +94,11 @@ function daemonEntry(): string {
 }
 
 function createWindow(): void {
+  // §19.2 ships light and dark as peers, which is only true if both get looked at. A smoke run
+  // can pin one; left alone, the app follows the machine.
+  const theme = process.env.OSADE_SMOKE_THEME;
+  if (theme === 'light' || theme === 'dark') nativeTheme.themeSource = theme;
+
   window = new BrowserWindow({
     width: 1440,
     height: 900,
