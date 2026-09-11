@@ -66,6 +66,17 @@ export interface PlanStep {
 }
 
 export const api = {
+  /** §17 — the same call `osade .` makes. Idempotent, resolves to the repository root. */
+  repoOpen: (path: string) =>
+    call('mutation', 'repoOpen', { path }) as Promise<{
+      repoId: string;
+      path: string;
+      name: string;
+      slug: string | null;
+      defaultBranch: string;
+      taskCount: number;
+    }>,
+
   /** §8.2 — creating a task prepares a worktree. It does not start an agent. */
   taskCreate: (input: { repoPath: string; title: string; intent: string }) =>
     call('mutation', 'taskCreate', input) as Promise<{ taskId: string }>,

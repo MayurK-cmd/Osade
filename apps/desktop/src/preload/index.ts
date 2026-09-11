@@ -11,4 +11,18 @@ contextBridge.exposeInMainWorld('osade', {
   daemonPort: (): Promise<number | null> => ipcRenderer.invoke('osade:daemon-port'),
   openInHerdr: (): Promise<{ command: string; hint: string }> =>
     ipcRenderer.invoke('osade:open-in-herdr'),
+
+  /** The repository `osade .` opened on, or null when the window was opened on its own. */
+  openedRepo: (): Promise<string | null> => ipcRenderer.invoke('osade:opened-repo'),
+
+  /**
+   * A second `osade .` in another repository re-scopes this window rather than opening another.
+   * Returns an unsubscribe, because a renderer that leaks listeners across reloads leaks them
+   * forever.
+   */
+  onRepoOpened: (handler: (path: string) => void): (() => void) => {
+    const listener = (_event: unknown, path: string): void => handler(path);
+    ipcRenderer.on('osade:repo-opened', listener);
+    return () => ipcRenderer.removeListener('osade:repo-opened', listener);
+  },
 });

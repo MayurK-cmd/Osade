@@ -6,6 +6,7 @@ import { Detail } from './Detail.js';
 import { NewTask } from './NewTask.js';
 import { GLYPH, STATUS, TONE_COLOUR, ago, summarise } from './status.js';
 import { useLedger } from './useLedger.js';
+import { useRepo } from './useRepo.js';
 
 /**
  * The ledger — OSADE.md §19.
@@ -19,9 +20,13 @@ import { useLedger } from './useLedger.js';
  */
 
 export function App(): JSX.Element {
-  const { tasks, connection, error } = useLedger();
+  const { tasks: allTasks, connection, error } = useLedger();
+  const { repo, error: repoError } = useRepo();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
+
+  // `osade .` scopes the window to one repository. Opened on its own, it shows everything.
+  const tasks = repo ? allTasks.filter((t) => t.task.repo_id === repo.repoId) : allTasks;
 
   const working = tasks.filter((t) => t.status === 'implementing' || t.status === 'verifying');
   const needsYou = tasks.filter((t) => t.needsYou);
@@ -51,8 +56,9 @@ export function App(): JSX.Element {
         }}
       >
         <Header
+          repo={repo}
           connection={connection}
-          error={error}
+          error={error ?? repoError}
           summary={summarise({
             needsYou: needsYou.length,
             working: working.length,
@@ -63,6 +69,7 @@ export function App(): JSX.Element {
 
         {composing && (
           <NewTask
+            repoPath={repo?.path ?? ''}
             onClose={() => setComposing(false)}
             onCreated={(id) => {
               setSelectedId(id);
@@ -72,7 +79,7 @@ export function App(): JSX.Element {
         )}
 
         {tasks.length === 0 && !composing ? (
-          <Empty connection={connection} onNew={() => setComposing(true)} />
+          <Empty connection={connection} repo={repo} onNew={() => setComposing(true)} />
         ) : (
           <>
             {needsYou.length > 0 && (
@@ -184,11 +191,13 @@ function FootRow({
 }
 
 function Header({
+  repo,
   connection,
   error,
   summary,
   onNew,
 }: {
+  repo: { name: string; slug: string | null } | null;
   connection: string;
   error: string | null;
   summary: string;
@@ -210,7 +219,20 @@ function Header({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, minWidth: 0 }}>
-        <span style={{ fontSize: 'var(--t-m)', fontWeight: 600 }}>osade</span>
+        {/* Which repository you are in comes first: with `osade .` it is the answer to "where
+            am I", and the product name is the one thing nobody needs telling. */}
+        <span
+          style={{
+            fontSize: 'var(--t-m)',
+            fontWeight: 600,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+          title={repo?.slug ?? undefined}
+        >
+          {repo ? repo.name : 'osade'}
+        </span>
         <span style={{ color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>{summary}</span>
       </div>
 
@@ -355,7 +377,15 @@ function Row({
   );
 }
 
-function Empty({ connection, onNew }: { connection: string; onNew: () => void }): JSX.Element {
+function Empty({
+  connection,
+  repo,
+  onNew,
+}: {
+  connection: string;
+  repo: { name: string } | null;
+  onNew: () => void;
+}): JSX.Element {
   // §19.4 — an empty screen is an invitation to act, not a mood.
   if (connection !== 'live') {
     return (
@@ -371,7 +401,7 @@ function Empty({ connection, onNew }: { connection: string; onNew: () => void })
 
   return (
     <div style={{ padding: '34px 22px', maxWidth: 490 }}>
-      <p style={{ marginTop: 0 }}>no tasks yet</p>
+      <p style={{ marginTop: 0 }}>{repo ? `no tasks in ${repo.name} yet` : 'no tasks yet'}</p>
       <p style={{ color: 'var(--ink-soft)', lineHeight: 1.55 }}>
         A task is one piece of work on one repository. Osade gives it its own git worktree, runs an
         agent inside it, and stops for you before anything is published.

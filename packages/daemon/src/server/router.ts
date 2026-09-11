@@ -1,3 +1,5 @@
+import { basename } from 'node:path';
+
 import { initTRPC, TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
@@ -16,6 +18,7 @@ import { getTask, getTaskFacts, listTaskFacts } from '../db/task-repo.js';
 import { deriveStatus } from '../domain/derive-status.js';
 import type { Gates } from '../domain/gates.js';
 import type { LaunchTask } from '../domain/launch-task.js';
+import { repoRoot } from '../domain/git.js';
 import { deriveVerifyPlan, type VerifyStep } from '../domain/verify-plan.js';
 import type { Triage, TriageKind } from '../domain/triage.js';
 import type { VerifyRunner } from '../domain/verify-run.js';
@@ -157,6 +160,57 @@ export const appRouter = t.router({
     .mutation(({ ctx, input }) => {
       ctx.db.prepare('UPDATE task SET archived_at = ? WHERE id = ?').run(ctx.now(), input.taskId);
       return { ok: true as const };
+    }),
+
+  /**
+   * Open a repository — what `osade .` calls.
+   *
+   * Idempotent, and resolves the *root* rather than taking the path literally: `osade .` is typed
+   * from wherever you happen to be standing, which is usually a subdirectory. Registering here
+   * rather than waiting for a first task is what lets the window open on a repo with nothing in
+   * it yet and still know whose repo it is.
+   */
+  repoOpen: t.procedure
+    .input(z.object({ path: z.string().min(1) }))
+    .output(
+      z.object({
+        repoId: z.string(),
+        path: z.string(),
+        name: z.string(),
+        /** `owner/name` when there is a GitHub remote; null for a local-only repo. */
+        slug: z.string().nullable(),
+        defaultBranch: z.string(),
+        taskCount: z.number().int(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const root = await repoRoot(input.path);
+      if (!root) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: `${input.path} is not inside a git repository.`,
+        });
+      }
+
+      const repoId = await ctx.launcher.ensureRepo(root);
+      const repo = ctx.db.prepare('SELECT * FROM repo WHERE id = ?').get(repoId) as {
+        path: string;
+        default_branch: string;
+        gh_owner: string | null;
+        gh_name: string | null;
+      };
+      const counted = ctx.db
+        .prepare('SELECT COUNT(*) AS n FROM task WHERE repo_id = ? AND archived_at IS NULL')
+        .get(repoId) as { n: number };
+
+      return {
+        repoId,
+        path: repo.path,
+        name: basename(repo.path) || repo.path,
+        slug: repo.gh_owner && repo.gh_name ? `${repo.gh_owner}/${repo.gh_name}` : null,
+        defaultBranch: repo.default_branch,
+        taskCount: counted.n,
+      };
     }),
 
   // ── verification (§10) ───────────────────────────────────────────────────

@@ -30,6 +30,23 @@ export async function git(cwd: string, args: string[], timeoutMs = 30_000): Prom
 }
 
 /** §9 rule 3 — an interrupted removal leaves a registration behind and `add` then fails. */
+/**
+ * The repository root containing `path`, or null when there is none.
+ *
+ * `osade .` is typed from wherever you happen to be standing — usually a subdirectory — so the
+ * path has to be resolved to the repository it belongs to rather than taken literally. Asking git
+ * is the only correct way: worktrees, submodules and `.git` files are all things a hand-rolled
+ * walk up looking for a `.git` directory gets wrong.
+ */
+export async function repoRoot(path: string): Promise<string | null> {
+  try {
+    const root = await git(path, ['rev-parse', '--show-toplevel']);
+    return root.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function pruneWorktrees(repoPath: string): Promise<void> {
   await git(repoPath, ['worktree', 'prune']);
 }

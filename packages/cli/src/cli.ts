@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import type { TaskStatus, TaskView } from '@osade/contract';
 
 import { api, OsadeCliError } from './client.js';
+import { looksLikePath, openRepo } from './open.js';
 
 /**
  * `osade` — the same surface for humans and agents (OSADE.md §17).
@@ -76,9 +77,15 @@ function currentTaskId(explicit?: string): string {
   return id;
 }
 
+/** Command groups, so a bare word is never mistaken for a directory of the same name. */
+const GROUPS = ['task', 'help'];
+
 const HELP = `osade — run coding agents as open-source contributors
 
 Usage:
+  osade .                                  open the window on this repository
+  osade <path>                             open the window on a repository
+
   osade task list                          the ledger, needs-you first
   osade task create <repo> <title> [intent]  register a task (does not launch)
   osade task start <task-id>               run the launch sequence (§8.2)
@@ -99,8 +106,11 @@ export async function main(argv: string[], io: Io = processIo): Promise<number> 
     return 0;
   }
 
+  // `osade .` and `osade <path>` — the shape people already know from `code .`.
+  if (looksLikePath(group, GROUPS)) return openRepo(group, io);
+
   if (group !== 'task') {
-    io.err(`unknown command group: ${group}\n`);
+    io.err(`unknown command: ${group}\n  try: osade help, or osade . to open this repository\n`);
     return 2;
   }
 

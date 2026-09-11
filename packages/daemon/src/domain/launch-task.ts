@@ -137,7 +137,7 @@ export class LaunchTask {
 
   /** Registers a repo and a task row. No herdr calls, no worktree — that is `launch`. */
   async createTask(input: CreateTaskInput): Promise<string> {
-    const repoId = await this.#ensureRepo(input.repoPath);
+    const repoId = await this.ensureRepo(input.repoPath);
     const repo = this.#db.prepare('SELECT * FROM repo WHERE id = ?').get(repoId) as {
       path: string;
       default_branch: string;
@@ -791,7 +791,7 @@ export class LaunchTask {
    * The async work happens first, then a single atomic upsert: sqlite serializes statements, so
    * `ON CONFLICT DO NOTHING` followed by a read is race-free without a lock of our own.
    */
-  async #ensureRepo(repoPath: string): Promise<string> {
+  async ensureRepo(repoPath: string): Promise<string> {
     const existing = this.#db.prepare('SELECT id FROM repo WHERE path = ?').get(repoPath) as
       | { id: string }
       | undefined;

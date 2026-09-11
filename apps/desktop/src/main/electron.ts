@@ -47,6 +47,38 @@ let window: BrowserWindow | null = null;
 let daemonPort: number | null = null;
 /** Non-null only when *this* process started the daemon. §18.1 — an adopted one is not ours. */
 let spawnedDaemon: ChildProcess | null = null;
+/** The repository this window is scoped to — `osade .`'s argument. */
+let openedRepo: string | null = null;
+
+/** `--repo <path>` out of a command line, wherever the runner left it. */
+function repoFromArgv(argv: readonly string[]): string | null {
+  const at = argv.indexOf('--repo');
+  return at >= 0 ? (argv[at + 1] ?? null) : null;
+}
+
+/**
+ * One window, re-scoped — not one window per repository.
+ *
+ * `osade .` in a second repository should bring the window you already have to the front and
+ * point it at the new repo, the way `code .` does. Without the lock, the second invocation gets
+ * its own process, which then finds the daemon already running, adopts it, and leaves two windows
+ * arguing over the same ledger.
+ */
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    const repo = repoFromArgv(argv);
+    if (repo) {
+      openedRepo = repo;
+      window?.webContents.send('osade:repo-opened', repo);
+    }
+    if (window) {
+      if (window.isMinimized()) window.restore();
+      window.focus();
+    }
+  });
+}
 
 /**
  * Startup order, and it matters (§18.1):
@@ -59,6 +91,9 @@ let spawnedDaemon: ChildProcess | null = null;
  * There is no surface port in M0: the embedded terminal is deferred (§4.4, ADR 0001).
  */
 async function boot(): Promise<void> {
+  openedRepo = repoFromArgv(process.argv);
+  if (openedRepo) say(`boot: opening on ${openedRepo}`);
+
   say('boot: adopting or spawning herdr');
   await adoptOrSpawnHerdr({ onInfo: (m) => say(`[herdr] ${m}`) });
 
@@ -290,6 +325,7 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
 }
 
 ipcMain.handle('osade:daemon-port', () => daemonPort);
+ipcMain.handle('osade:opened-repo', () => openedRepo);
 
 /**
  * §4.4 — "Open in herdr" replaces the embedded terminal in M0. A real herdr client, full

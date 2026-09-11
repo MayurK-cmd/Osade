@@ -1599,6 +1599,15 @@ Mechanism:
 1. `packages/cli` provides `osade` verbs: `task list`, `task create`, `task show`,
    `task send`, `verify run`, `gate request`, `memory write`, `conventions show`,
    `review request`.
+   
+   Added 2026-09-11: **`osade .`** — open the window on the repository you are standing in, the
+   shape people already know from `code .`. It registers the repo and scopes the window to it,
+   and `osade <path>` does the same for somewhere else. The path is resolved to the repository
+   *root* by the daemon, because `osade .` is typed from wherever you happen to be, usually a
+   subdirectory; asking git is the only thing that gets worktrees and submodules right. A bare
+   word is only read as a path when a directory of that name exists **and** it is not a verb, so
+   `osade task` can never become "open ./task". A second `osade .` elsewhere re-scopes the window
+   you already have rather than opening a second one.
 2. The daemon embeds a **skill asset** describing those verbs and installs it to
    `~/.osade/skills/using-osade/` at boot, so any agent in any worktree has a stable absolute
    path to the catalog. Mirrors herdr's own `skillassets` approach.

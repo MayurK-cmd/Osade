@@ -63,6 +63,17 @@ async function call(kind: 'query' | 'mutation', path: string, input: unknown): P
 }
 
 export const api = {
+  /** §17 — what `osade .` calls. Idempotent, and resolves to the repository root. */
+  repoOpen: (path: string) =>
+    call('mutation', 'repoOpen', { path }) as Promise<{
+      repoId: string;
+      path: string;
+      name: string;
+      slug: string | null;
+      defaultBranch: string;
+      taskCount: number;
+    }>,
+
   taskList: () => call('query', 'taskList', undefined) as Promise<TaskView[]>,
   taskGet: (taskId: string) =>
     call('query', 'taskGet', { taskId }) as Promise<TaskView | null>,

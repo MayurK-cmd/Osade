@@ -1,5 +1,6 @@
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import Database from 'better-sqlite3';
 
@@ -16,13 +17,7 @@ export type Db = Database.Database;
 export function openDb(path: string): Db {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
 
-  // A packaged app says where the native addon is; a checkout lets better-sqlite3 find it.
-  //
-  // Left to itself, better-sqlite3 resolves the addon through the `bindings` package, which walks
-  // for a `node_modules` layout that a packaged app does not have — the daemon ships as one
-  // bundled file beside one `.node`. Passing the path skips that search entirely, and skips
-  // `require('bindings')` with it, which is why nothing else from the dependency has to ship.
-  const nativeBinding = process.env.OSADE_SQLITE_BINDING;
+  const nativeBinding = sqliteAddon();
   const db = nativeBinding ? new Database(path, { nativeBinding }) : new Database(path);
 
   // WAL so the CDC poller can read while writers commit.
@@ -33,6 +28,37 @@ export function openDb(path: string): Db {
 
   migrate(db);
   return db;
+}
+
+/**
+ * Where better-sqlite3's native addon is, when it cannot find it itself.
+ *
+ * Left alone, better-sqlite3 resolves through the `bindings` package, which walks upward looking
+ * for a `node_modules/better-sqlite3/build`. That works in a checkout running from source and
+ * fails for a *bundle*, which is one file with no such layout above it — packaged beside its
+ * addon, or built to `dist/` beside the package's own node_modules.
+ *
+ * Checked in order, and null when none exists, because letting `bindings` try is the right
+ * answer for the unbundled case rather than an error.
+ */
+function sqliteAddon(): string | undefined {
+  const explicit = process.env.OSADE_SQLITE_BINDING;
+  if (explicit && existsSync(explicit)) return explicit;
+
+  let here: string;
+  try {
+    here = dirname(fileURLToPath(import.meta.url));
+  } catch {
+    return undefined;
+  }
+
+  const candidates = [
+    // Packaged: the addon ships beside the bundle.
+    join(here, 'better_sqlite3.node'),
+    // Built to dist/: the package's own node_modules is one level up.
+    join(here, '..', 'node_modules/better-sqlite3/build/Release/better_sqlite3.node'),
+  ];
+  return candidates.find((candidate) => existsSync(candidate));
 }
 
 export function migrate(db: Db): void {

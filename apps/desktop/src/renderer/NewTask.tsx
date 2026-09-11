@@ -17,13 +17,16 @@ import { api } from './api.js';
  * button that quietly spawned a process would be the wrong lesson to teach on first use.
  */
 export function NewTask({
+  repoPath: initialRepo = '',
   onClose,
   onCreated,
 }: {
+  /** Prefilled when the window was opened on a repository — `osade .` already answered this. */
+  repoPath?: string;
   onClose: () => void;
   onCreated: (taskId: string) => void;
 }): JSX.Element {
-  const [repoPath, setRepoPath] = useState('');
+  const [repoPath, setRepoPath] = useState(initialRepo);
   const [intent, setIntent] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +61,7 @@ export function NewTask({
         </span>
         <input
           className="mono"
-          autoFocus
+          autoFocus={initialRepo === ''}
           value={repoPath}
           placeholder="/path/to/the/repository"
           onChange={(event) => setRepoPath(event.target.value)}
@@ -83,6 +86,7 @@ export function NewTask({
         </span>
         <textarea
           rows={3}
+          autoFocus={initialRepo !== ''}
           value={intent}
           placeholder="Fix the flaky retry test in the poller — it fails intermittently on slow machines."
           onChange={(event) => setIntent(event.target.value)}

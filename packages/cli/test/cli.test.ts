@@ -1,12 +1,12 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { openDb, type Db } from '@osade/daemon/src/db/index.js';
 import type { Gates } from '@osade/daemon/src/domain/gates.js';
-import type { LaunchTask } from '@osade/daemon/src/domain/launch-task.js';
+import { LaunchTask } from '@osade/daemon/src/domain/launch-task.js';
 import type { Triage } from '@osade/daemon/src/domain/triage.js';
 import type { VerifyRunner } from '@osade/daemon/src/domain/verify-run.js';
 import type { ScmPoller } from '@osade/daemon/src/scm/poller.js';
@@ -14,6 +14,7 @@ import type { ScmWrites } from '@osade/daemon/src/scm/writes.js';
 import { startDaemonServer, type RunningDaemon } from '@osade/daemon/src/server/index.js';
 
 import { main, type Io } from '../src/cli.js';
+import { looksLikePath } from '../src/open.js';
 import { daemonBaseUrl, OsadeCliError } from '../src/client.js';
 
 /**
@@ -91,9 +92,16 @@ beforeEach(async () => {
     NOW,
   );
 
+  // `repoOpen` delegates to the real registration path, so the real launcher is what is under
+  // test. It never reaches herdr for this, which is why the client and subscriber can be stubs.
+  const launcher = Object.assign(
+    new LaunchTask(db, stub, stub, { now: () => NOW }),
+    { readTranscript: recordingLauncher.readTranscript },
+  ) as unknown as LaunchTask;
+
   daemon = await startDaemonServer({
     db,
-    launcher: recordingLauncher,
+    launcher,
     gates: stub as Gates,
     verifier: stub as VerifyRunner,
     triage: stub as Triage,
@@ -110,6 +118,21 @@ afterEach(async () => {
   delete process.env.OSADE_TASK_ID;
   rmSync(home, { recursive: true, force: true });
 });
+
+/** Calls a procedure the way the CLI does, without going through argv parsing. */
+async function trpc(path: string, input: unknown): Promise<unknown> {
+  const res = await fetch(`http://127.0.0.1:${daemon.port}/${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const body = (await res.json()) as {
+    result?: { data?: unknown };
+    error?: { json?: { message?: string }; message?: string };
+  };
+  if (body.error) throw new Error(body.error.json?.message ?? body.error.message ?? 'daemon error');
+  return body.result?.data;
+}
 
 describe('finding the daemon', () => {
   it('reads the port the daemon wrote, without being told', () => {
@@ -332,5 +355,58 @@ describe('argument handling', () => {
     const io = capture();
     expect(await main(['task', 'create', '/only/a/repo'], io)).toBe(2);
     expect(io.stderr.join('')).toContain('usage:');
+  });
+});
+
+const BACKSLASH = String.fromCharCode(92);
+
+/** One separator, so a Windows path and a posix one can be compared for sameness. */
+function slashes(path: string): string {
+  return path.split(String.fromCharCode(92)).join('/');
+}
+
+describe('osade . — opening a repository', () => {
+  it('treats a path as a path and a command as a command', () => {
+    const commands = ['task', 'help'];
+
+    expect(looksLikePath('.', commands)).toBe(true);
+    expect(looksLikePath('..', commands)).toBe(true);
+    expect(looksLikePath('/srv/widget', commands)).toBe(true);
+    expect(looksLikePath(`C:${BACKSLASH}code${BACKSLASH}widget`, commands)).toBe(true);
+    expect(looksLikePath('./widget', commands)).toBe(true);
+    expect(looksLikePath('~/code/widget', commands)).toBe(true);
+
+    // The disambiguation that matters: a command name is never a path, even when a directory of
+    // that name exists beside you.
+    expect(looksLikePath('task', commands)).toBe(false);
+    expect(looksLikePath('help', commands)).toBe(false);
+    expect(looksLikePath('nonsense', commands)).toBe(false);
+  });
+
+  it('resolves a subdirectory to the repository root', async () => {
+    // `osade .` is typed from wherever you are standing, which is usually not the root.
+    const root = resolve(join(import.meta.dirname, '..', '..', '..'));
+    const result = await trpc('repoOpen', { path: join(root, 'docs') });
+
+    expect(slashes((result as { path: string }).path)).toBe(slashes(root));
+  });
+
+  it('refuses a directory that is not in a git repository', async () => {
+    await expect(trpc('repoOpen', { path: tmpdir() })).rejects.toThrow(/not inside a git/);
+  });
+
+  it('is idempotent — opening twice is opening once', async () => {
+    const root = resolve(join(import.meta.dirname, '..', '..', '..'));
+    const first = (await trpc('repoOpen', { path: root })) as { repoId: string };
+    const second = (await trpc('repoOpen', { path: root })) as { repoId: string };
+
+    expect(second.repoId).toBe(first.repoId);
+
+    // One row for that path, however many times it is opened. The fixture seeds another repo, so
+    // count this one rather than the table.
+    const rows = db.prepare('SELECT COUNT(*) AS n FROM repo WHERE id = ?').get(first.repoId) as {
+      n: number;
+    };
+    expect(rows.n).toBe(1);
   });
 });
