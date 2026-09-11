@@ -65,7 +65,7 @@ stays out of the business of rendering cells.
 
 Watching a terminal live opens it in a real terminal client attached to the same session.
 Embedding the terminal in the Osade window is deliberately deferred — see
-[ADR 0001](docs/adr/0001-no-embedded-terminal-in-m0.md).
+[ADR 0001](docs/architechture/adr/0001-no-embedded-terminal-in-m0.md).
 
 **Agents keep running when you close the window.** The substrate and the daemon both survive it.
 
@@ -264,11 +264,11 @@ osade/
 
 | Document | What it is |
 | --- | --- |
-| [`docs/OSADE.md`](docs/OSADE.md) | Product requirements and build spec. Start here. |
-| [`docs/HERDR-CONTRACT.md`](docs/HERDR-CONTRACT.md) | The verified substrate integration surface — real method names, event names and payloads, with citations. What the daemon codes against. |
+| [`docs/architechture/OSADE.md`](docs/architechture/OSADE.md) | Product requirements and build spec. Start here. |
+| [`docs/architechture/HERDR-CONTRACT.md`](docs/architechture/HERDR-CONTRACT.md) | The verified substrate integration surface — real method names, event names and payloads, with citations. What the daemon codes against. |
 | [`docs/PRD-DELTA.md`](docs/PRD-DELTA.md) | Where the spec was wrong about the substrate, and the correction. |
-| [`docs/adr/`](docs/adr) | One record per DECISION taken during the build. |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Architecture notes. |
+| [`docs/adr/`](docs/architechture/adr) | One record per DECISION taken during the build. |
+| [`docs/architechture/ARCHITECTURE.md`](docs/architechture/ARCHITECTURE.md) | Architecture notes. |
 
 Sections in `OSADE.md` marked **INVARIANT** are load-bearing. Sections marked **DECISION**
 record a choice made deliberately over a plausible alternative.
