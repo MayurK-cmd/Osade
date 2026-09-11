@@ -46,6 +46,5 @@
     ]
   },
   "description": "Run coding agents as open-source contributors",
-  "author": "Osade contributors",
-  "main": "apps/desktop/dist/main/electron.js"
+  "author": "Osade contributors"
 }

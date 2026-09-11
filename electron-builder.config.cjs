@@ -36,9 +36,14 @@ module.exports = {
   copyright: 'Copyright © 2026 Osade contributors',
   electronVersion: declaredElectron.replace(/^[\^~]/, ''),
 
-  directories: { output: 'release', buildResources: 'build' },
+  // The app is `apps/desktop`, not the repo root — and that is load-bearing, not tidiness. The
+  // root package.json is `"type": "module"` (vitest, vite-node, the ESM tooling), while the
+  // Electron main compiles to CommonJS. Packaging the root manifest made Electron parse
+  // `require(...)` as ESM and fail at load — which in a packaged app is a modal dialog nobody
+  // sees, so the process just hangs. `apps/desktop/package.json` declares no type, so CommonJS.
+  directories: { app: 'apps/desktop', output: 'release', buildResources: 'build' },
 
-  files: ['apps/desktop/dist/**/*', 'package.json', '!**/*.map'],
+  files: ['dist/**/*', 'package.json', '!**/*.map'],
 
   // Everything the app *spawns* rather than imports. These stay real files on disk because they
   // are executed, not required.

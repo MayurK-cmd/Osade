@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 
@@ -151,6 +151,25 @@ function viteNodeCli(daemonEntry: string): string {
   );
 }
 
+/**
+ * Where the daemon's output goes — `~/.osade/logs/daemon.log`.
+ *
+ * Not the parent's stdout. A packaged app on Windows is a GUI binary with **no console**, so
+ * `stdio: 'inherit'` hands the child handles that are not there and the daemon dies on spawn
+ * without saying anything — the app then waits out its 30-second health timeout and reports that
+ * the daemon "did not become healthy", which is true and useless. That is what a packaged build
+ * actually did.
+ *
+ * Inheriting was wrong even where it worked: a *detached* child holding the parent's stdout keeps
+ * a terminal pipeline open long after the app exits, and §2.2 says everything Osade writes lives
+ * under `~/.osade` anyway.
+ */
+function daemonLog(): number {
+  const dir = join(osadeRoot(), 'logs');
+  mkdirSync(dir, { recursive: true });
+  return openSync(join(dir, 'daemon.log'), 'a');
+}
+
 export interface DaemonSupervisorOptions {
   /** Node entry for the daemon CLI. */
   entry: string;
@@ -183,9 +202,10 @@ export async function adoptOrSpawnDaemon(
   }
 
   const { command, args, env } = daemonCommand(options.entry);
+  const log = daemonLog();
   const child = spawn(command, args, {
     env,
-    stdio: ['ignore', 'inherit', 'inherit'],
+    stdio: ['ignore', log, log],
     detached: true,
     windowsHide: true,
   });

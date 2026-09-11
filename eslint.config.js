@@ -19,7 +19,14 @@ import tseslint from 'typescript-eslint';
  * quietly not applied is worse than no rule at all.
  */
 
-const GENERATED = ['**/generated/**', '**/dist/**', '**/node_modules/**', 'backend/**'];
+const GENERATED = [
+  '**/generated/**',
+  '**/dist/**',
+  '**/node_modules/**',
+  'backend/**',
+  // Packaging output: a copy of the built app, not source.
+  'release/**',
+];
 
 
 // ── selectors, declared once ────────────────────────────────────────────────
@@ -218,6 +225,21 @@ export default tseslint.config(
       'no-restricted-syntax': 'off',
       'no-console': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+
+  // ── build configuration is CommonJS on purpose ────────────────────────────
+  // electron-builder loads its config with `require`, and the Electron main compiles to
+  // CommonJS, so this one file is CJS in an ESM workspace. See the comment in it.
+  {
+    files: ['*.config.cjs', '**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: { require: 'readonly', module: 'writable', __dirname: 'readonly' },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      'no-undef': 'off',
     },
   },
 

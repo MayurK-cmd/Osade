@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import type { ChildProcess } from 'node:child_process';
-import { existsSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -25,6 +25,24 @@ import { adoptOrSpawnHerdr } from './supervisor/herdr.js';
 
 const isDev = !app.isPackaged;
 
+/**
+ * The app's own log — `~/.osade/logs/app.log`.
+ *
+ * A packaged app on Windows is a GUI binary with no console, so `console.log` goes nowhere and a
+ * boot that hangs is indistinguishable from a boot that is slow. Everything the main process says
+ * is teed to a file as well, under `~/.osade` like everything else (§2.2).
+ */
+function say(message: string): void {
+  console.log(message);
+  try {
+    const dir = join(OSADE_ROOT, 'logs');
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(join(dir, 'app.log'), `${new Date().toISOString()} ${message}\n`);
+  } catch {
+    // A log that cannot be written must not take the app down with it.
+  }
+}
+
 let window: BrowserWindow | null = null;
 let daemonPort: number | null = null;
 /** Non-null only when *this* process started the daemon. §18.1 — an adopted one is not ours. */
@@ -41,15 +59,16 @@ let spawnedDaemon: ChildProcess | null = null;
  * There is no surface port in M0: the embedded terminal is deferred (§4.4, ADR 0001).
  */
 async function boot(): Promise<void> {
-  await adoptOrSpawnHerdr({ onInfo: (m) => console.log(`[herdr] ${m}`) });
+  say('boot: adopting or spawning herdr');
+  await adoptOrSpawnHerdr({ onInfo: (m) => say(`[herdr] ${m}`) });
 
-  const daemon = await adoptOrSpawnDaemon({
-    entry: process.env.OSADE_DAEMON_ENTRY ?? daemonEntry(),
-    onInfo: (m) => console.log(`[daemon] ${m}`),
-  });
+  const entry = process.env.OSADE_DAEMON_ENTRY ?? daemonEntry();
+  say(`boot: daemon entry ${entry}`);
+  const daemon = await adoptOrSpawnDaemon({ entry, onInfo: (m) => say(`[daemon] ${m}`) });
   daemonPort = daemon.port;
   spawnedDaemon = daemon.child;
 
+  say('boot: creating the window');
   createWindow();
 }
 
@@ -177,7 +196,7 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
       const missing = expected.filter((phrase) => !text.includes(phrase));
       for (const phrase of missing) failures.push(`expected on screen, absent: ${phrase}`);
       if (missing.length === 0) {
-        console.log(`[smoke] all ${expected.length} expected phrases are on screen`);
+        say(`[smoke] all ${expected.length} expected phrases are on screen`);
       }
     }
 
@@ -196,12 +215,12 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
     if (png.length === 0) throw new Error('captured an empty image: the window never painted');
 
     writeFileSync(path, png);
-    console.log(`[smoke] wrote ${path} (${png.length} bytes)`);
+    say(`[smoke] wrote ${path} (${png.length} bytes)`);
 
-    for (const failure of failures) console.error(`[smoke] renderer error: ${failure}`);
+    for (const failure of failures) say(`[smoke] renderer error: ${failure}`);
     if (failures.length > 0) failed = true;
   } catch (err) {
-    console.error(`[smoke] ${(err as Error).message}`);
+    say(`[smoke] ${(err as Error).message}`);
     failed = true;
   } finally {
     // §18.1 says shutdown detaches and the daemon outlives the window — which is right for a
@@ -210,7 +229,7 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
     if (spawnedDaemon?.pid) {
       try {
         process.kill(spawnedDaemon.pid);
-        console.log('[smoke] stopped the daemon this run started');
+        say('[smoke] stopped the daemon this run started');
       } catch {
         // Already gone. Nothing to do, and nothing worth saying.
       }
@@ -248,7 +267,7 @@ ipcMain.handle('osade:open-in-herdr', async () => {
 app.whenReady().then(
   () => {
     void boot().catch((err: Error) => {
-      console.error(`osade failed to start: ${err.message}`);
+      say(`osade failed to start: ${err.message}`);
       app.quit();
     });
 
