@@ -17,7 +17,7 @@ declare global {
   interface Window {
     osade?: {
       daemonPort(): Promise<number | null>;
-      openInHerdr(): Promise<{ command: string; hint: string }>;
+      openInSubstrate(): Promise<{ command: string; hint: string }>;
       openedRepo(): Promise<string | null>;
       onRepoOpened(handler: (path: string) => void): () => void;
     };

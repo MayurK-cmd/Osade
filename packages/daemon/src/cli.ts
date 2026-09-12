@@ -3,7 +3,7 @@
  *
  * This is the ONE file in `daemon/src/**` allowed `console.*` and `process.exit`. It stays off
  * the server import graph: the runtime is loaded with a lazy `await import(...)` inside
- * `main`, so a short-lived subcommand does not eagerly pull in sqlite, herdr and the whole
+ * `main`, so a short-lived subcommand does not eagerly pull in sqlite, the substrate and the whole
  * stack and then stay alive after printing its result. That was a real bug in Kanban.
  */
 
@@ -23,7 +23,7 @@ async function main(argv: string[]): Promise<number> {
       });
 
       const shutdown = async () => {
-        // §18.1 — quitting detaches. It does not stop herdr and does not stop agents.
+        // §18.1 — quitting detaches. It does not stop the substrate and does not stop agents.
         console.log('osade daemon detaching; agents keep running');
         await daemon.close();
         process.exit(0);
@@ -36,14 +36,14 @@ async function main(argv: string[]): Promise<number> {
     }
 
     case 'drift': {
-      const { assertNoDrift, HerdrDriftError } = await import('./herdr/drift-check.js');
+      const { assertNoDrift, SubstrateDriftError } = await import('./substrate/drift-check.js');
       try {
         const result = await assertNoDrift(argv[1] ?? 'herdr');
         console.log(result.ok ? `ok: ${result.message}` : `warning: ${result.message}`);
         return 0;
       } catch (err) {
         console.error(
-          `fatal: ${err instanceof HerdrDriftError ? err.message : (err as Error).message}`,
+          `fatal: ${err instanceof SubstrateDriftError ? err.message : (err as Error).message}`,
         );
         return 1;
       }
@@ -58,7 +58,7 @@ async function main(argv: string[]): Promise<number> {
           '',
           'Usage:',
           '  osade-daemon start [--port N]   run the daemon (default)',
-          '  osade-daemon drift [path]       run the herdr boot drift check',
+          '  osade-daemon drift [path]       run the substrate boot drift check',
           '',
           'The daemon binds 127.0.0.1 only and writes its port to ~/.osade/daemon.port.',
         ].join('\n'),

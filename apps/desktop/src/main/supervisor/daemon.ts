@@ -7,7 +7,7 @@ import { delimiter, dirname, join } from 'node:path';
  * Spawn and adopt the Osade daemon — OSADE.md §18.1.
  *
  * The daemon owns tasks, gates, verification and the GitHub poller, and it must survive the
- * window closing exactly as herdr does: agents keep running, and half the system does not die
+ * window closing exactly as the substrate does: agents keep running, and half the system does not die
  * because someone closed a window.
  */
 

@@ -93,7 +93,7 @@ beforeEach(async () => {
   );
 
   // `repoOpen` delegates to the real registration path, so the real launcher is what is under
-  // test. It never reaches herdr for this, which is why the client and subscriber can be stubs.
+  // test. It never reaches the substrate for this, which is why the client and subscriber can be stubs.
   const launcher = Object.assign(
     new LaunchTask(db, stub, stub, { now: () => NOW }),
     { readTranscript: recordingLauncher.readTranscript },
@@ -170,7 +170,7 @@ describe('osade task list', () => {
   });
 
   it('separates the needs-you set with one blank line — §19.3', async () => {
-    seedTask('t_block', 'blocked one', { herdr_state: 'blocked', pane_alive: 1 });
+    seedTask('t_block', 'blocked one', { substrate_state: 'blocked', pane_alive: 1 });
     seedTask('t_quiet', 'quiet one');
 
     const io = capture();
@@ -183,7 +183,7 @@ describe('osade task list', () => {
   });
 
   it('does not emit a leading blank line when everything needs you', async () => {
-    seedTask('t_block', 'blocked one', { herdr_state: 'blocked', pane_alive: 1 });
+    seedTask('t_block', 'blocked one', { substrate_state: 'blocked', pane_alive: 1 });
 
     const io = capture();
     await main(['task', 'list'], io);
@@ -213,7 +213,7 @@ describe('osade task show', () => {
   });
 
   it('marks a task that needs you', async () => {
-    seedTask('t_one', 'blocked', { herdr_state: 'blocked', pane_alive: 1 });
+    seedTask('t_one', 'blocked', { substrate_state: 'blocked', pane_alive: 1 });
     const io = capture();
 
     await main(['task', 'show', 't_one'], io);

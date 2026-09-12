@@ -46,7 +46,7 @@ try {
   db.prepare(
     `INSERT OR REPLACE INTO task
        (id, repo_id, title, intent, origin_kind, base_ref, base_sha, branch, worktree_path,
-        herdr_workspace_id, created_at)
+        substrate_workspace_id, created_at)
      VALUES ('t_smoke01', 'r_smoke', 'Retry the flaky poller test',
              'The poller test fails intermittently on slow machines.', 'manual',
              'main', 'c820293d7c52', 'osade/retry-flaky-poller', '/wt/t_smoke01', 'w3', ?)`,
@@ -61,7 +61,7 @@ try {
 
   db.prepare(
     `INSERT OR REPLACE INTO agent_fact
-       (task_id, herdr_pane_id, herdr_state, last_event, last_event_at, activity_text, pane_alive)
+       (task_id, substrate_pane_id, substrate_state, last_event, last_event_at, activity_text, pane_alive)
      VALUES ('t_smoke01', 'p7', 'working', 'to_review', ?, 'waiting on your approval', 1)`,
   ).run(NOW);
 

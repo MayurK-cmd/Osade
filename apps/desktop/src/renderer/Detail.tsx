@@ -210,8 +210,8 @@ function TechnicalDetails({ task }: { task: TaskView }): JSX.Element {
           <Field label="Branch" value={task.task.branch} mono />
           <Field label="Based on" value={`${task.task.base_sha.slice(0, 12)} on ${task.task.base_ref}`} mono />
           <Field label="Worktree" value={task.task.worktree_path} mono />
-          <Field label="Workspace" value={task.task.herdr_workspace_id ?? 'not created yet'} mono />
-          <Field label="Pane" value={task.agent?.herdr_pane_id ?? 'no agent running'} mono />
+          <Field label="Workspace" value={task.task.substrate_workspace_id ?? 'not created yet'} mono />
+          <Field label="Pane" value={task.agent?.substrate_pane_id ?? 'no agent running'} mono />
           {task.scm?.pr_url && <Field label="Pull request" value={task.scm.pr_url} mono />}
 
           {/* §5.2 — a failed probe is a note about confidence, never a state change. */}
@@ -225,7 +225,7 @@ function TechnicalDetails({ task }: { task: TaskView }): JSX.Element {
       </details>
 
       <div style={{ marginTop: 14 }}>
-        <button onClick={() => void window.osade?.openInHerdr()}>open the terminal</button>
+        <button onClick={() => void window.osade?.openInSubstrate()}>open the terminal</button>
         <p style={{ margin: '8px 0 0', color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
           Watch the agent work, or talk to it directly. Osade does not embed a terminal
           (ADR 0001); this opens a real one on the same session.

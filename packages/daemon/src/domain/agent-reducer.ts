@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentFact, HerdrAgentStatus } from '@osade/contract';
+import type { AgentEvent, AgentFact, SubstrateAgentStatus } from '@osade/contract';
 
 /**
  * OSADE.md §6.1 — the narrow event vocabulary, and §5.4.1 — the monotonic fact gate.
@@ -6,21 +6,21 @@ import type { AgentEvent, AgentFact, HerdrAgentStatus } from '@osade/contract';
  * Pure. `(facts, event) -> factPatch`. No I/O.
  */
 
-/** A herdr `pane.agent_status_changed` event, reduced to what Osade actually consumes. */
+/** A substrate `pane.agent_status_changed` event, reduced to what Osade actually consumes. */
 export interface StatusChangedInput {
   kind: 'status';
-  status: HerdrAgentStatus;
+  status: SubstrateAgentStatus;
   /**
    * `AgentInfo.state_change_seq`, or `PaneInfo.revision` where that is what the payload
    * carries. §5.4.1 — writes are gated on this being strictly greater than what is stored.
    */
   seq: number;
   at: number;
-  /** `terminal_title_stripped` when herdr sent one. Display only. */
+  /** `terminal_title_stripped` when substrate sent one. Display only. */
   activityText?: string | null;
 }
 
-/** A herdr `pane.exited`. §5.2 — pane death is not agent termination unless it was explicit. */
+/** A substrate `pane.exited`. §5.2 — pane death is not agent termination unless it was explicit. */
 export interface PaneExitedInput {
   kind: 'pane_exited';
   seq: number;
@@ -30,7 +30,7 @@ export interface PaneExitedInput {
 }
 
 /**
- * An `AgentInfo.agent_session` binding, for resume after a herdr restart (§8.2.1).
+ * An `AgentInfo.agent_session` binding, for resume after a substrate restart (§8.2.1).
  *
  * Deliberately carries no `seq`: a session binding is not a state change, so it must not
  * advance `state_change_seq`. See `reduceAgentInput` for why that distinction is load-bearing.
@@ -55,14 +55,14 @@ export interface ReduceResult {
 /**
  * INVARIANT (§6.1): exactly three internal events, and `idle` is never a transition.
  *
- * herdr reports `done` when a pane is idle **and unseen**, `idle` once seen — the difference is
+ * the substrate reports `done` when a pane is idle **and unseen**, `idle` once seen — the difference is
  * about the viewer, not the agent (`backend/src/app/api_helpers.rs:100-106`). So opening a task
- * in herdr flips `done → idle` for the same agent in the same state. If `idle` mapped to
+ * in the substrate flips `done → idle` for the same agent in the same state. If `idle` mapped to
  * `to_in_progress` that would silently clear the task's `awaiting_review`; if it mapped to
  * `to_review` a freshly launched, never-prompted agent would land in the needs-you set at once.
  * Both were live bugs in the original §7 table. `idle` is therefore inert in both directions.
  */
-export function eventForStatus(status: HerdrAgentStatus): AgentEvent | null {
+export function eventForStatus(status: SubstrateAgentStatus): AgentEvent | null {
   switch (status) {
     case 'working':
       return 'to_in_progress';
@@ -76,9 +76,9 @@ export function eventForStatus(status: HerdrAgentStatus): AgentEvent | null {
 }
 
 /**
- * Applies one herdr input to the stored fact.
+ * Applies one the substrate input to the stored fact.
  *
- * §5.4.1 — INVARIANT: herdr's event stream replays the ring buffer on connect and can drop
+ * §5.4.1 — INVARIANT: the substrate's event stream replays the ring buffer on connect and can drop
  * silently, and its envelopes carry no sequence number. So a **state change** whose `seq` is
  * not strictly greater than the stored `state_change_seq` is dropped, not merged. This is what
  * stops a replayed `working` from clobbering a live `done`.
@@ -109,7 +109,7 @@ export function reduceAgentInput(current: AgentFact | null, input: AgentInput): 
       const event = eventForStatus(input.status);
       const patch: AgentFactPatch = {
         ...base,
-        herdr_state: input.status,
+        substrate_state: input.status,
         pane_alive: true,
         // An agent reporting status is alive; a prior probe failure is no longer interesting.
         probe_failures: 0,
@@ -134,8 +134,8 @@ export function reduceAgentInput(current: AgentFact | null, input: AgentInput): 
         patch: {
           ...base,
           pane_alive: false,
-          herdr_state: 'unknown',
-          // §5.2 — `terminated` is set only by an explicit exit. A pane vanishing because herdr
+          substrate_state: 'unknown',
+          // §5.2 — `terminated` is set only by an explicit exit. A pane vanishing because the substrate
           // restarted is not a death: §8.2.1 relaunches into the restored pane.
           ...(input.explicit ? { terminated: true } : {}),
         },
@@ -149,8 +149,8 @@ export function reduceAgentInput(current: AgentFact | null, input: AgentInput): 
 export function emptyAgentFact(taskId: string): AgentFact {
   return {
     task_id: taskId,
-    herdr_pane_id: null,
-    herdr_state: null,
+    substrate_pane_id: null,
+    substrate_state: null,
     last_event: null,
     last_event_at: null,
     activity_text: null,

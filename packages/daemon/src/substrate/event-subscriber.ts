@@ -1,15 +1,15 @@
-import type { HerdrAgentStatus } from '@osade/contract';
+import type { SubstrateAgentStatus } from '@osade/contract';
 
 import type { Db } from '../db/index.js';
 import { getAgentFact } from '../db/task-repo.js';
 import { reduceAgentInput, type AgentInput } from '../domain/agent-reducer.js';
-import type { HerdrClient } from './client.js';
-import { HerdrEventStream, type HerdrEventEnvelope, type Subscription } from './event-stream.js';
+import type { SubstrateClient } from './client.js';
+import { SubstrateEventStream, type SubstrateEventEnvelope, type Subscription } from './event-stream.js';
 
 /**
- * The herdr event subscriber — OSADE.md §7.2.
+ * The substrate event subscriber — OSADE.md §7.2.
  *
- * INVARIANT: this is a **connection manager, not a socket**. herdr's `events.subscribe` has two
+ * INVARIANT: this is a **connection manager, not a socket**. the substrate's `events.subscribe` has two
  * families: global lifecycle events take no parameters, but `pane.agent_status_changed`
  * requires a `pane_id` and rejects a subscription without one. And `pane.updated` is *not* a
  * status feed — it fires only on agent-name change and a few unrelated actions, verified by
@@ -19,7 +19,7 @@ import { HerdrEventStream, type HerdrEventEnvelope, type Subscription } from './
  * closed on `pane.exited` / `pane.closed`. ~15 concurrent tasks is ~16 connections.
  *
  * INVARIANT (§5.4.1): every fact write is gated on a monotonic counter and every (re)connect
- * reconciles against `session.snapshot` before the stream is trusted. herdr replays its
+ * reconciles against `session.snapshot` before the stream is trusted. the substrate replays its
  * 512-entry ring buffer on connect and can drop silently, and its envelopes carry no sequence
  * number, so neither guard is optional.
  */
@@ -40,31 +40,31 @@ const GLOBAL_SUBSCRIPTIONS: readonly Subscription[] = [
 
 export interface EventSubscriberOptions {
   now?: () => number;
-  /** Injected in tests so a fake herdr can be driven without a socket. */
-  createStream?: (socketPath: string, subs: readonly Subscription[]) => HerdrEventStream;
+  /** Injected in tests so a fake substrate can be driven without a socket. */
+  createStream?: (socketPath: string, subs: readonly Subscription[]) => SubstrateEventStream;
   onWarning?: (message: string) => void;
 }
 
 interface PaneBinding {
   taskId: string;
-  stream: HerdrEventStream;
+  stream: SubstrateEventStream;
 }
 
-export class HerdrEventSubscriber {
+export class SubstrateEventSubscriber {
   readonly #db: Db;
-  readonly #client: HerdrClient;
+  readonly #client: SubstrateClient;
   readonly #now: () => number;
-  readonly #createStream: (socketPath: string, subs: readonly Subscription[]) => HerdrEventStream;
+  readonly #createStream: (socketPath: string, subs: readonly Subscription[]) => SubstrateEventStream;
   readonly #onWarning: (message: string) => void;
   readonly #panes = new Map<string, PaneBinding>();
-  #global: HerdrEventStream | null = null;
+  #global: SubstrateEventStream | null = null;
 
-  constructor(db: Db, client: HerdrClient, options: EventSubscriberOptions = {}) {
+  constructor(db: Db, client: SubstrateClient, options: EventSubscriberOptions = {}) {
     this.#db = db;
     this.#client = client;
     this.#now = options.now ?? Date.now;
     this.#createStream =
-      options.createStream ?? ((path, subs) => new HerdrEventStream(path, subs));
+      options.createStream ?? ((path, subs) => new SubstrateEventStream(path, subs));
     this.#onWarning = options.onWarning ?? (() => {});
   }
 
@@ -82,7 +82,7 @@ export class HerdrEventSubscriber {
       // A reconnect replays the ring buffer, so reconcile again before trusting the stream.
       if (willRetry) void this.reconcile().catch(() => {});
     });
-    stream.on('error', (err) => this.#onWarning(`herdr global event stream: ${err.message}`));
+    stream.on('error', (err) => this.#onWarning(`the substrate global event stream: ${err.message}`));
     stream.start();
     this.#global = stream;
   }
@@ -113,7 +113,7 @@ export class HerdrEventSubscriber {
     for (const raw of snapshot.agents ?? []) {
       const agent = raw as {
         pane_id?: string;
-        agent_status?: HerdrAgentStatus;
+        agent_status?: SubstrateAgentStatus;
         state_change_seq?: number;
         terminal_title_stripped?: string | null;
         agent_session?: { value?: string } | null;
@@ -160,7 +160,7 @@ export class HerdrEventSubscriber {
     this.#panes.set(paneId, { taskId, stream });
 
     this.#db
-      .prepare('UPDATE agent_fact SET herdr_pane_id = ? WHERE task_id = ?')
+      .prepare('UPDATE agent_fact SET substrate_pane_id = ? WHERE task_id = ?')
       .run(paneId, taskId);
   }
 
@@ -171,7 +171,7 @@ export class HerdrEventSubscriber {
     this.#panes.delete(paneId);
   }
 
-  #handleGlobal(envelope: HerdrEventEnvelope): void {
+  #handleGlobal(envelope: SubstrateEventEnvelope): void {
     const paneId = (envelope.data.pane_id ?? (envelope.data.pane as { pane_id?: string })?.pane_id) as
       | string
       | undefined;
@@ -192,8 +192,8 @@ export class HerdrEventSubscriber {
         this.unwatchPane(paneId);
         if (taskId) {
           // §5.2 — a pane exiting is not a death certificate. `terminated` is set only by an
-          // explicit process exit, and herdr's `pane.exited` does not distinguish a crash from
-          // a herdr restart, so Osade does not infer one. §8.2.1 relaunches instead.
+          // explicit process exit, and the substrate's `pane.exited` does not distinguish a crash from
+          // a substrate restart, so Osade does not infer one. §8.2.1 relaunches instead.
           this.#apply(taskId, {
             kind: 'pane_exited',
             seq: this.#nextSeqFor(taskId),
@@ -215,9 +215,9 @@ export class HerdrEventSubscriber {
     }
   }
 
-  #handlePaneEvent(taskId: string, envelope: HerdrEventEnvelope): void {
+  #handlePaneEvent(taskId: string, envelope: SubstrateEventEnvelope): void {
     const data = envelope.data as {
-      agent_status?: HerdrAgentStatus;
+      agent_status?: SubstrateAgentStatus;
       title?: string | null;
       state_change_seq?: number;
     };
@@ -226,9 +226,9 @@ export class HerdrEventSubscriber {
     this.#apply(taskId, {
       kind: 'status',
       status: data.agent_status,
-      // herdr's subscription envelope carries no sequence number (§5.4.1), so synthesise a
+      // the substrate's subscription envelope carries no sequence number (§5.4.1), so synthesise a
       // monotonic one per task. It only has to order this daemon's own writes; the snapshot
-      // reconcile is what re-anchors to herdr's authoritative counter.
+      // reconcile is what re-anchors to the substrate's authoritative counter.
       seq: this.#nextSeqFor(taskId),
       at: this.#now(),
       activityText: data.title ?? undefined,
@@ -277,7 +277,7 @@ export class HerdrEventSubscriber {
 
   #taskForPane(paneId: string): string | null {
     const row = this.#db
-      .prepare('SELECT task_id FROM agent_fact WHERE herdr_pane_id = ?')
+      .prepare('SELECT task_id FROM agent_fact WHERE substrate_pane_id = ?')
       .get(paneId) as { task_id: string } | undefined;
     return row?.task_id ?? null;
   }

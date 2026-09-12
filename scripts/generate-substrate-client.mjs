@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Generates the typed herdr client from the PINNED schema.
+ * Generates the typed substrate client from the PINNED schema.
  *
  * OSADE.md §4.1 — INVARIANT: `vendor/herdr/<version>-p<protocol>/api-schema.json` is the only
  * permitted codegen source. `backend/` is reference reading for behaviour and is never read
  * here. Method names are never hand-written; everything below is derived from the schema.
  *
- * Output: packages/daemon/src/herdr/generated/{types.ts,methods.ts,pin.ts,index.ts}
+ * Output: packages/daemon/src/substrate/generated/{types.ts,methods.ts,pin.ts,index.ts}
  *
- * Usage: node scripts/generate-herdr-client.mjs [--check]
+ * Usage: node scripts/generate-substrate-client.mjs [--check]
  *        --check  fail if the generated output would change (for CI)
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
@@ -17,10 +17,10 @@ import { fileURLToPath } from 'node:url';
 import { compile } from 'json-schema-to-typescript';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const OUT_DIR = join(ROOT, 'packages/daemon/src/herdr/generated');
+const OUT_DIR = join(ROOT, 'packages/daemon/src/substrate/generated');
 const CHECK_ONLY = process.argv.includes('--check');
 
-/** The five top-level schemas in herdr's bundle, and the TS module each becomes. */
+/** The five top-level schemas in substrate's bundle, and the TS module each becomes. */
 const SCHEMA_KEYS = [
   'request',
   'success_response',
@@ -32,16 +32,16 @@ const SCHEMA_KEYS = [
 function findPin() {
   const vendorDir = join(ROOT, 'vendor/herdr');
   if (!existsSync(vendorDir)) {
-    throw new Error(`no vendored herdr at ${vendorDir} — see OSADE.md §4.1`);
+    throw new Error(`no vendored substrate at ${vendorDir} — see OSADE.md §4.1`);
   }
   const targets = readdirSync(vendorDir, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .sort();
-  if (targets.length === 0) throw new Error(`no pinned herdr target in ${vendorDir}`);
+  if (targets.length === 0) throw new Error(`no pinned the substrate target in ${vendorDir}`);
   if (targets.length > 1) {
     throw new Error(
-      `multiple pinned herdr targets (${targets.join(', ')}); exactly one must be pinned`,
+      `multiple pinned the substrate targets (${targets.join(', ')}); exactly one must be pinned`,
     );
   }
   const dir = join(vendorDir, targets[0]);
@@ -54,7 +54,7 @@ function findPin() {
 }
 
 /**
- * herdr's bundle uses non-standard refs (`#/schemas/request/$defs/X`). Rewrite them to local
+ * the substrate's bundle uses non-standard refs (`#/schemas/request/$defs/X`). Rewrite them to local
  * `#/$defs/X` so each top-level schema stands alone.
  */
 function localiseRefs(node, schemaKey) {
@@ -99,9 +99,9 @@ const BANNER = (pinKey) => `/**
  * GENERATED — DO NOT EDIT.
  *
  * Source: vendor/herdr/${pinKey}/api-schema.json
- * Regenerate: pnpm herdr:codegen
+ * Regenerate: pnpm substrate:codegen
  *
- * OSADE.md §4.1 — the pinned schema is the only codegen source. Never hand-write a herdr
+ * OSADE.md §4.1 — the pinned schema is the only codegen source. Never hand-write a substrate
  * method name, and never derive one from backend/.
  */
 `;
@@ -110,14 +110,14 @@ async function main() {
   const { key, schema, pin } = findPin();
   const methods = extractMethods(schema.schemas.request);
 
-  if (methods.length !== pin.herdr.method_count) {
+  if (methods.length !== pin.substrate.method_count) {
     throw new Error(
-      `pin.json says ${pin.herdr.method_count} methods, schema has ${methods.length}`,
+      `pin.json says ${pin.substrate.method_count} methods, schema has ${methods.length}`,
     );
   }
 
   // ---- types/<schema>.ts --------------------------------------------------
-  // One module per top-level schema. They must not be concatenated: herdr's five bundles
+  // One module per top-level schema. They must not be concatenated: the substrate's five bundles
   // share `$defs` names (AgentStatus, ReadSource, EventData, …) with different shapes, so a
   // single file collides on every one of them.
   const files = {};
@@ -154,29 +154,29 @@ async function main() {
     `import type * as T from './types/request.js';
 
 /** Every method name in the pinned schema. Derived, never typed by hand. */
-export type HerdrMethod =
+export type SubstrateMethod =
 ${methodNames};
 
 /** Method name → params type, from the request schema's oneOf. */
-export interface HerdrMethodParams {
+export interface SubstrateMethodParams {
 ${paramsEntries}
 }
 
 /** Runtime list, for the drift check and for tests. */
-export const HERDR_METHODS: readonly HerdrMethod[] = Object.freeze([
+export const SUBSTRATE_METHODS: readonly SubstrateMethod[] = Object.freeze([
 ${methods.map((m) => `  '${m.method}',`).join('\n')}
-]) as readonly HerdrMethod[];
+]) as readonly SubstrateMethod[];
 `;
 
   // ---- pin.ts -------------------------------------------------------------
   const pinTs =
     BANNER(key) +
-    `/** Identity of the pinned herdr target. The version string is NOT a contract (§4.1). */
-export const HERDR_PIN = Object.freeze({
+    `/** Identity of the pinned the substrate target. The version string is NOT a contract (§4.1). */
+export const SUBSTRATE_PIN = Object.freeze({
   key: ${JSON.stringify(pin.identity.key)},
-  version: ${JSON.stringify(pin.herdr.version)},
-  protocol: ${pin.herdr.protocol},
-  schemaVersion: ${pin.herdr.schema_version},
+  version: ${JSON.stringify(pin.substrate.version)},
+  protocol: ${pin.substrate.protocol},
+  schemaVersion: ${pin.substrate.schema_version},
   methodCount: ${methods.length},
 });
 `;
@@ -185,7 +185,7 @@ export const HERDR_PIN = Object.freeze({
     BANNER(key) +
     `export * from './methods.js';
 export * from './pin.js';
-export * as HerdrSchema from './types.js';
+export * as SubstrateSchema from './types.js';
 `;
 
   files['types.ts'] = types;
@@ -202,11 +202,11 @@ export * as HerdrSchema from './types.js';
     }
     if (drifted.length) {
       console.error(
-        `generated herdr client is stale: ${drifted.join(', ')}\nrun: pnpm herdr:codegen`,
+        `generated substrate client is stale: ${drifted.join(', ')}\nrun: pnpm substrate:codegen`,
       );
       process.exit(1);
     }
-    console.log(`herdr client is current (${key}, ${methods.length} methods)`);
+    console.log(`the substrate client is current (${key}, ${methods.length} methods)`);
     return;
   }
 

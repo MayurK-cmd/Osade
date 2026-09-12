@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * The model port — OSADE.md §13.4.
  *
- * Osade's agents run as real processes under herdr; this is the one place the daemon itself
+ * Osade's agents run as real processes under the substrate; this is the one place the daemon itself
  * talks to a model, and it is deliberately the narrowest possible surface: a system prompt, a
  * user prompt, a token ceiling, text back. No streaming, no tools, no conversation.
  *

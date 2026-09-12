@@ -22,12 +22,12 @@ const DB = 'packages/daemon/src/db/probe.ts';
 const RENDERER = 'apps/desktop/src/renderer/probe.ts';
 
 describe('§20.1 lint boundaries actually fire', () => {
-  it('§4.2 — the generated herdr client is off-limits outside daemon/src/herdr/**', async () => {
-    const messages = await messagesFor(DOMAIN, "import '../herdr/generated/index.js';\n");
+  it('§4.2 — the generated substrate client is off-limits outside daemon/src/substrate/**', async () => {
+    const messages = await messagesFor(DOMAIN, "import '../substrate/generated/index.js';\n");
     expect(messages.join('\n')).toContain('§4.2');
   });
 
-  it('§4.2 — raw socket access is off-limits outside daemon/src/herdr/**', async () => {
+  it('§4.2 — raw socket access is off-limits outside daemon/src/substrate/**', async () => {
     const messages = await messagesFor(DOMAIN, "import net from 'node:net';\nexport const x = net;\n");
     expect(messages.join('\n')).toContain('raw socket access');
   });
@@ -105,9 +105,9 @@ describe('§20.1 lint boundaries actually fire', () => {
 });
 
 describe('the scopes that are deliberately exempt stay exempt', () => {
-  it('daemon/src/herdr/** may import the generated client', async () => {
+  it('daemon/src/substrate/** may import the generated client', async () => {
     const messages = await messagesFor(
-      'packages/daemon/src/herdr/probe.ts',
+      'packages/daemon/src/substrate/probe.ts',
       "import './generated/index.js';\n",
     );
     expect(messages.join('\n')).not.toContain('§4.2');

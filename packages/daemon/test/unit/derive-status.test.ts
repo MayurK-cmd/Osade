@@ -26,7 +26,7 @@ function task(over: Partial<Task> = {}): Task {
     base_sha: HEAD,
     branch: 'osade/fix-thing-t1',
     worktree_path: '/wt/t1',
-    herdr_workspace_id: null,
+    substrate_workspace_id: null,
     archived_at: null,
     created_at: NOW - 1000,
     ...over,
@@ -105,7 +105,7 @@ describe('deriveStatus — the §6 table, row by row', () => {
   it('2. archived outranks live agent signals', () => {
     expect(
       deriveStatus(
-        facts({ task: task({ archived_at: NOW }), agent: agent({ herdr_state: 'working' }) }),
+        facts({ task: task({ archived_at: NOW }), agent: agent({ substrate_state: 'working' }) }),
         NOW,
       ),
     ).toBe('archived');
@@ -114,7 +114,7 @@ describe('deriveStatus — the §6 table, row by row', () => {
   it('3. an undecided gate outranks a blocked agent', () => {
     expect(
       deriveStatus(
-        facts({ openGates: [gate()], agent: agent({ herdr_state: 'blocked' }) }),
+        facts({ openGates: [gate()], agent: agent({ substrate_state: 'blocked' }) }),
         NOW,
       ),
     ).toBe('awaiting_approval');
@@ -130,7 +130,7 @@ describe('deriveStatus — the §6 table, row by row', () => {
   });
 
   it('4. blocked → needs_input', () => {
-    expect(deriveStatus(facts({ agent: agent({ herdr_state: 'blocked' }) }), NOW)).toBe(
+    expect(deriveStatus(facts({ agent: agent({ substrate_state: 'blocked' }) }), NOW)).toBe(
       'needs_input',
     );
   });
@@ -195,7 +195,7 @@ describe('deriveStatus — the §6 table, row by row', () => {
     expect(
       deriveStatus(
         facts({
-          agent: agent({ last_event: 'to_in_progress', herdr_state: 'working', pane_alive: true }),
+          agent: agent({ last_event: 'to_in_progress', substrate_state: 'working', pane_alive: true }),
         }),
         NOW,
       ),
@@ -204,14 +204,14 @@ describe('deriveStatus — the §6 table, row by row', () => {
 
   it('11. working → implementing', () => {
     expect(
-      deriveStatus(facts({ agent: agent({ herdr_state: 'working', pane_alive: true }) }), NOW),
+      deriveStatus(facts({ agent: agent({ substrate_state: 'working', pane_alive: true }) }), NOW),
     ).toBe('implementing');
   });
 
   it('12. explicit termination → stopped', () => {
     expect(
       deriveStatus(
-        facts({ agent: agent({ terminated: true, pane_alive: true, herdr_state: 'idle' }) }),
+        facts({ agent: agent({ terminated: true, pane_alive: true, substrate_state: 'idle' }) }),
         NOW,
       ),
     ).toBe('stopped');
@@ -221,12 +221,12 @@ describe('deriveStatus — the §6 table, row by row', () => {
     expect(deriveStatus(facts(), NOW)).toBe('queued');
   });
 
-  it('13. a restored herdr pane with no bound agent is queued, not idle (PRD-DELTA #11)', () => {
-    // herdr restores panes but not agent processes: the workspace is back, the pane is alive,
+  it('13. a restored the substrate pane with no bound agent is queued, not idle (PRD-DELTA #11)', () => {
+    // the substrate restores panes but not agent processes: the workspace is back, the pane is alive,
     // and `agent`/`agent_status` come back null. That is work to start, and never a death.
     const restored = facts({
-      task: task({ herdr_workspace_id: 'w3' }),
-      agent: agent({ pane_alive: true, herdr_state: null, herdr_pane_id: 'w3:p2' }),
+      task: task({ substrate_workspace_id: 'w3' }),
+      agent: agent({ pane_alive: true, substrate_state: null, substrate_pane_id: 'w3:p2' }),
     });
     expect(deriveStatus(restored, NOW)).toBe('queued');
     expect(restored.agent?.terminated).toBe(false);
@@ -236,8 +236,8 @@ describe('deriveStatus — the §6 table, row by row', () => {
     expect(
       deriveStatus(
         facts({
-          task: task({ herdr_workspace_id: 'w3' }),
-          agent: agent({ pane_alive: true, herdr_state: 'idle' }),
+          task: task({ substrate_workspace_id: 'w3' }),
+          agent: agent({ pane_alive: true, substrate_state: 'idle' }),
         }),
         NOW,
       ),
@@ -246,8 +246,8 @@ describe('deriveStatus — the §6 table, row by row', () => {
 
   it('probe_failures never appear in the table (§5.2)', () => {
     const flaky = facts({
-      task: task({ herdr_workspace_id: 'w3' }),
-      agent: agent({ pane_alive: true, herdr_state: 'working', probe_failures: 99 }),
+      task: task({ substrate_workspace_id: 'w3' }),
+      agent: agent({ pane_alive: true, substrate_state: 'working', probe_failures: 99 }),
     });
     // A flaky liveness check must not kill a live agent. This is the specific AO bug.
     expect(deriveStatus(flaky, NOW)).toBe('implementing');
@@ -271,8 +271,8 @@ describe('deriveStatus — properties (§20.2)', () => {
           for (const ev of events)
             for (const g of gates)
               yield facts({
-                task: task({ archived_at: a, herdr_workspace_id: 'w3' }),
-                agent: agent({ herdr_state: st, last_event: ev, pane_alive: true }),
+                task: task({ archived_at: a, substrate_workspace_id: 'w3' }),
+                agent: agent({ substrate_state: st, last_event: ev, pane_alive: true }),
                 scm: pr == null ? null : scm({ pr_state: pr }),
                 openGates: g,
               });
@@ -310,7 +310,7 @@ describe('deriveStatus — properties (§20.2)', () => {
     const inOrder = applyAll(inputs);
     for (const permutation of permutations(inputs)) {
       const shuffled = applyAll(permutation);
-      expect(shuffled.herdr_state).toBe(inOrder.herdr_state);
+      expect(shuffled.substrate_state).toBe(inOrder.substrate_state);
       expect(shuffled.last_event).toBe(inOrder.last_event);
       expect(shuffled.state_change_seq).toBe(inOrder.state_change_seq);
       expect(deriveStatus(facts({ agent: shuffled }), NOW)).toBe(

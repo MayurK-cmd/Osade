@@ -8,18 +8,18 @@ import { openDb, type Db } from '../../src/db/index.js';
 import { getAgentFact, listTaskFacts } from '../../src/db/task-repo.js';
 import { deriveStatus } from '../../src/domain/derive-status.js';
 import { LaunchTask } from '../../src/domain/launch-task.js';
-import type { HerdrClient } from '../../src/herdr/client.js';
-import type { HerdrEventSubscriber } from '../../src/herdr/event-subscriber.js';
+import type { SubstrateClient } from '../../src/substrate/client.js';
+import type { SubstrateEventSubscriber } from '../../src/substrate/event-subscriber.js';
 
 /**
  * §21 M1 — four tasks in parallel on one repo, no cross-talk.
  *
  * §9 rule 2 makes creation serialized by a repo-level lock with a double-check inside it,
- * because herdr has no cross-call lock and two concurrent `worktree.create` calls on one repo
+ * because the substrate has no cross-call lock and two concurrent `worktree.create` calls on one repo
  * race. That lock was written in M0 and never contended until now.
  *
- * Uses a fake herdr rather than the real one: the property under test is Osade's serialization
- * and fact isolation, and a real herdr would make the race timing-dependent and the failure
+ * Uses a fake the substrate rather than the real one: the property under test is Osade's serialization
+ * and fact isolation, and a real substrate would make the race timing-dependent and the failure
  * unreproducible.
  */
 
@@ -34,13 +34,13 @@ function sh(cwd: string, args: string[]): string {
 }
 
 /**
- * A herdr that records call ordering and answers with distinct ids.
+ * A substrate that records call ordering and answers with distinct ids.
  *
  * `worktree.create` deliberately yields mid-call: if the repo lock is not held, a second
  * launch will interleave here and the overlap counter will see it.
  */
-function fakeHerdr(): {
-  client: HerdrClient;
+function fakeSubstrate(): {
+  client: SubstrateClient;
   calls: string[];
   maxConcurrentCreates: number;
 } {
@@ -84,24 +84,24 @@ function fakeHerdr(): {
           return {};
       }
     },
-  } as unknown as HerdrClient;
+  } as unknown as SubstrateClient;
 
   return { client, ...state, get maxConcurrentCreates() {
     return state.maxConcurrentCreates;
   } };
 }
 
-function fakeSubscriber(): { subscriber: HerdrEventSubscriber; watched: Map<string, string> } {
+function fakeSubscriber(): { subscriber: SubstrateEventSubscriber; watched: Map<string, string> } {
   const watched = new Map<string, string>();
   const subscriber = {
     watchPane(taskId: string, paneId: string) {
       watched.set(paneId, taskId);
-      db.prepare('UPDATE agent_fact SET herdr_pane_id = ? WHERE task_id = ?').run(paneId, taskId);
+      db.prepare('UPDATE agent_fact SET substrate_pane_id = ? WHERE task_id = ?').run(paneId, taskId);
     },
     unwatchPane(paneId: string) {
       watched.delete(paneId);
     },
-  } as unknown as HerdrEventSubscriber;
+  } as unknown as SubstrateEventSubscriber;
   return { subscriber, watched };
 }
 
@@ -129,9 +129,9 @@ afterEach(() => {
 
 describe('§21 M1 — four tasks in parallel on one repo', () => {
   it('serializes worktree creation on one repo — §9 rule 2', async () => {
-    const herdr = fakeHerdr();
+    const substrate = fakeSubstrate();
     const { subscriber } = fakeSubscriber();
-    const launcher = new LaunchTask(db, herdr.client, subscriber, { now: () => NOW });
+    const launcher = new LaunchTask(db, substrate.client, subscriber, { now: () => NOW });
 
     const ids = await Promise.all(
       [1, 2, 3, 4].map((n) =>
@@ -141,15 +141,15 @@ describe('§21 M1 — four tasks in parallel on one repo', () => {
 
     await Promise.all(ids.map((id) => launcher.launch(id)));
 
-    // The whole point of the repo lock: herdr has no cross-call lock, so two concurrent
+    // The whole point of the repo lock: the substrate has no cross-call lock, so two concurrent
     // creates on one repo race on the same git index.
-    expect(herdr.maxConcurrentCreates).toBe(1);
+    expect(substrate.maxConcurrentCreates).toBe(1);
   });
 
   it('gives every task its own branch, worktree and workspace — no cross-talk', async () => {
-    const herdr = fakeHerdr();
+    const substrate = fakeSubstrate();
     const { subscriber } = fakeSubscriber();
-    const launcher = new LaunchTask(db, herdr.client, subscriber, { now: () => NOW });
+    const launcher = new LaunchTask(db, substrate.client, subscriber, { now: () => NOW });
 
     const ids = await Promise.all(
       [1, 2, 3, 4].map((n) =>
@@ -164,14 +164,14 @@ describe('§21 M1 — four tasks in parallel on one repo', () => {
     const unique = (xs: (string | null)[]) => new Set(xs).size;
     expect(unique(facts.map((f) => f.task.branch))).toBe(4);
     expect(unique(facts.map((f) => f.task.worktree_path))).toBe(4);
-    expect(unique(facts.map((f) => f.task.herdr_workspace_id))).toBe(4);
-    expect(unique(facts.map((f) => f.agent?.herdr_pane_id ?? null))).toBe(4);
+    expect(unique(facts.map((f) => f.task.substrate_workspace_id))).toBe(4);
+    expect(unique(facts.map((f) => f.agent?.substrate_pane_id ?? null))).toBe(4);
   });
 
   it('all four share one repo row rather than registering it four times', async () => {
-    const herdr = fakeHerdr();
+    const substrate = fakeSubstrate();
     const { subscriber } = fakeSubscriber();
-    const launcher = new LaunchTask(db, herdr.client, subscriber, { now: () => NOW });
+    const launcher = new LaunchTask(db, substrate.client, subscriber, { now: () => NOW });
 
     await Promise.all(
       [1, 2, 3, 4].map((n) =>
@@ -184,9 +184,9 @@ describe('§21 M1 — four tasks in parallel on one repo', () => {
   });
 
   it('a fact written for one task never leaks into another', async () => {
-    const herdr = fakeHerdr();
+    const substrate = fakeSubstrate();
     const { subscriber } = fakeSubscriber();
-    const launcher = new LaunchTask(db, herdr.client, subscriber, { now: () => NOW });
+    const launcher = new LaunchTask(db, substrate.client, subscriber, { now: () => NOW });
 
     const ids = await Promise.all(
       [1, 2, 3, 4].map((n) =>
@@ -197,12 +197,12 @@ describe('§21 M1 — four tasks in parallel on one repo', () => {
 
     // One task goes blocked; the other three must be unaffected.
     db.prepare(
-      "UPDATE agent_fact SET herdr_state = 'blocked', pane_alive = 1, state_change_seq = 5 WHERE task_id = ?",
+      "UPDATE agent_fact SET substrate_state = 'blocked', pane_alive = 1, state_change_seq = 5 WHERE task_id = ?",
     ).run(ids[1]);
 
     for (const [i, id] of ids.entries()) {
       const fact = getAgentFact(db, id)!;
-      expect(fact.herdr_state, `task ${i}`).toBe(i === 1 ? 'blocked' : null);
+      expect(fact.substrate_state, `task ${i}`).toBe(i === 1 ? 'blocked' : null);
     }
 
     const statuses = listTaskFacts(db).map((f) => ({
@@ -213,9 +213,9 @@ describe('§21 M1 — four tasks in parallel on one repo', () => {
   });
 
   it('one failing launch does not take the others down', async () => {
-    const herdr = fakeHerdr();
+    const substrate = fakeSubstrate();
     const { subscriber } = fakeSubscriber();
-    const launcher = new LaunchTask(db, herdr.client, subscriber, { now: () => NOW });
+    const launcher = new LaunchTask(db, substrate.client, subscriber, { now: () => NOW });
 
     const ids = await Promise.all(
       [1, 2, 3].map((n) =>

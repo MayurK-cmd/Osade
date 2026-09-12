@@ -265,10 +265,9 @@ osade/
 | Document | What it is |
 | --- | --- |
 | [`docs/architechture/OSADE.md`](docs/architechture/OSADE.md) | Product requirements and build spec. Start here. |
-| [`docs/architechture/HERDR-CONTRACT.md`](docs/architechture/HERDR-CONTRACT.md) | The verified substrate integration surface — real method names, event names and payloads, with citations. What the daemon codes against. |
+| [`docs/architechture/SUBSTRATE-CONTRACT.md`](docs/architechture/SUBSTRATE-CONTRACT.md) | The verified substrate integration surface — real method names, event names and payloads, with citations. What the daemon codes against. |
 | [`docs/PRD-DELTA.md`](docs/PRD-DELTA.md) | Where the spec was wrong about the substrate, and the correction. |
 | [`docs/adr/`](docs/architechture/adr) | One record per DECISION taken during the build. |
-| [`docs/architechture/ARCHITECTURE.md`](docs/architechture/ARCHITECTURE.md) | Architecture notes. |
 
 Sections in `OSADE.md` marked **INVARIANT** are load-bearing. Sections marked **DECISION**
 record a choice made deliberately over a plausible alternative.

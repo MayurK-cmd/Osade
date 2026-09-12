@@ -5,7 +5,7 @@
 
 ## The question
 
-herdr's source sits at `backend/`: 29 MB, 1766 files, committed to Osade's history as a plain
+the substrate's source sits at `backend/`: 29 MB, 1766 files, committed to Osade's history as a plain
 copy with no upstream link. Submodule, vendored at a pinned tag, or fetched by script?
 
 ## What I expected to decide
@@ -14,12 +14,12 @@ Fetched by script. Nothing builds against `backend/` — every reference in Osad
 citation inside a comment (`backend/src/api/server.rs:154-300`), the API contract comes from the
 pinned `vendor/herdr/0.8.2-p20/api-schema.json`, and `pnpm check` passes with `backend/` absent.
 Documentation that happens to be source code does not belong in Osade's history, and a copied
-tree spreads: herdr's `.github/` and `.agents/` sat at Osade's root until 2026-09-11, where its
+tree spreads: the substrate's `.github/` and `.agents/` sat at Osade's root until 2026-09-11, where its
 CI and dependabot quietly competed with Osade's.
 
 ## What the evidence said instead
 
-**The tree at `backend/` is not any herdr release, and we cannot say what it is.**
+**The tree at `backend/` is not any the substrate release, and we cannot say what it is.**
 
 Fetching `herdrdev/herdr` at `v0.8.2` — the version `backend/Cargo.toml` declares, and the
 version the pinned schema was captured from — produces a different tree:
@@ -43,9 +43,9 @@ mode being that each citation still *resolves*, to the wrong thing.
 at, and an unreproducible artifact that is not committed is an artifact that is one `rm -rf` from
 being lost.
 
-`scripts/fetch-herdr-source.mjs` is kept, pinned to `v0.8.2`'s commit
+`scripts/fetch-substrate-source.mjs` is kept, pinned to `v0.8.2`'s commit
 (`9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c`), for two jobs it is genuinely good at: restoring
-`backend/` if it is deleted, and establishing **known** provenance the next time the herdr pin
+`backend/` if it is deleted, and establishing **known** provenance the next time the substrate pin
 moves. It is not wired into any build.
 
 ## The provenance, established
@@ -69,7 +69,7 @@ Done properly, by comparing every tracked blob hash against upstream trees:
 Every tracked file is byte-identical. **Nothing in the read-only tree has been edited**, and the
 worry that something had was an artefact of the sampling, not a finding.
 
-Recorded in `backend/OSADE-PIN.json`, and `scripts/fetch-herdr-source.mjs` now pins that commit —
+Recorded in `backend/OSADE-PIN.json`, and `scripts/fetch-substrate-source.mjs` now pins that commit —
 so restoring `backend/` reproduces the tree the `file:line` citations were written against,
 rather than the older v0.8.2 it used to fetch.
 
@@ -93,4 +93,4 @@ that is forgotten, and assert a git-level dependency Osade does not have: Osade 
 ## What stays true
 
 `backend/` is read-only. Osade never edits it — a local edit is a fork nobody agreed to. Changes
-herdr needs are written to `patches/` with their evidence (see `patches/README.md`).
+the substrate needs are written to `patches/` with their evidence (see `patches/README.md`).

@@ -37,7 +37,7 @@ Two things worth being deliberate about:
 OSADE_GITHUB_TOKEN=ghp_… pnpm --filter @osade/daemon exec vite-node src/cli.ts -- start
 ```
 
-The boot drift check runs first (§4.1.1); it will refuse to start against a herdr whose
+The boot drift check runs first (§4.1.1); it will refuse to start against a substrate whose
 protocol differs from `vendor/herdr/0.8.2-p20`.
 
 ## 2. Point Osade at the repository

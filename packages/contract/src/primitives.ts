@@ -19,31 +19,31 @@ export const OrgId = z.string().min(1);
 export type OrgId = z.infer<typeof OrgId>;
 
 /**
- * herdr's public workspace id, e.g. `w3`.
+ * the substrate's public workspace id, e.g. `w3`.
  *
- * OSADE.md §5.2 — a durable key, stable across other workspaces closing and across a herdr
+ * OSADE.md §5.2 — a durable key, stable across other workspaces closing and across a substrate
  * restart. Always the full `wN` form: `parse_workspace_id` has a positional fallback for bare
  * integers, so sending `"3"` can resolve to a different workspace.
  */
-export const HerdrWorkspaceId = z.string().regex(/^w\d+$/, 'expected herdr workspace id like w3');
-export type HerdrWorkspaceId = z.infer<typeof HerdrWorkspaceId>;
+export const SubstrateWorkspaceId = z.string().regex(/^w\d+$/, 'expected the substrate workspace id like w3');
+export type SubstrateWorkspaceId = z.infer<typeof SubstrateWorkspaceId>;
 
-/** herdr's public tab id, e.g. `w3:t2`. */
-export const HerdrTabId = z.string().regex(/^w\d+:t\d+$/, 'expected herdr tab id like w3:t2');
-export type HerdrTabId = z.infer<typeof HerdrTabId>;
+/** substrate's public tab id, e.g. `w3:t2`. */
+export const SubstrateTabId = z.string().regex(/^w\d+:t\d+$/, 'expected the substrate tab id like w3:t2');
+export type SubstrateTabId = z.infer<typeof SubstrateTabId>;
 
-/** herdr's public pane id, e.g. `w3:p2`. The key for a status subscription (§7.2). */
-export const HerdrPaneId = z.string().regex(/^w\d+:p\d+$/, 'expected herdr pane id like w3:p2');
-export type HerdrPaneId = z.infer<typeof HerdrPaneId>;
+/** substrate's public pane id, e.g. `w3:p2`. The key for a status subscription (§7.2). */
+export const SubstratePaneId = z.string().regex(/^w\d+:p\d+$/, 'expected the substrate pane id like w3:p2');
+export type SubstratePaneId = z.infer<typeof SubstratePaneId>;
 
 /**
- * herdr's `AgentStatus`, verbatim from the pinned schema.
+ * the substrate's `AgentStatus`, verbatim from the pinned schema.
  *
- * `done` and `idle` are not interchangeable: herdr reports `done` when a pane is idle **and
+ * `done` and `idle` are not interchangeable: the substrate reports `done` when a pane is idle **and
  * unseen**, `idle` once it has been seen. See OSADE.md §6.1.
  */
-export const HerdrAgentStatus = z.enum(['idle', 'working', 'blocked', 'done', 'unknown']);
-export type HerdrAgentStatus = z.infer<typeof HerdrAgentStatus>;
+export const SubstrateAgentStatus = z.enum(['idle', 'working', 'blocked', 'done', 'unknown']);
+export type SubstrateAgentStatus = z.infer<typeof SubstrateAgentStatus>;
 
 /**
  * OSADE.md §6.1 — INVARIANT: exactly three internal agent events. Adding a fourth requires

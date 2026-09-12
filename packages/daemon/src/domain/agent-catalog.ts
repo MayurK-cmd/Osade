@@ -4,9 +4,9 @@
  * INVARIANT: capabilities, not identity checks. Branch on
  * `entry.capabilities.includes('plan-mode')`, never on `id === 'claude'`.
  *
- * `binary` is **advisory**. herdr resolves the executable itself from `kind`
+ * `binary` is **advisory**. the substrate resolves the executable itself from `kind`
  * (`backend/src/detect/mod.rs:149-181`), so this field exists only to probe whether the agent
- * is installed and to produce a useful error. It is never sent to herdr.
+ * is installed and to produce a useful error. It is never sent to the substrate.
  */
 
 export type AgentCapability =
@@ -18,9 +18,9 @@ export type AgentCapability =
   | 'headless-run';
 
 export interface AgentCatalogEntry {
-  /** The `kind` herdr accepts on `agent.start`, verbatim from the pinned set. */
+  /** The `kind` substrate accepts on `agent.start`, verbatim from the pinned set. */
   readonly id: string;
-  /** Advisory: what to probe on PATH. herdr picks the real executable. */
+  /** Advisory: what to probe on PATH. substrate picks the real executable. */
   readonly binary: string;
   readonly autonomousArgs: readonly string[];
   readonly planArgs: readonly string[];
@@ -31,9 +31,9 @@ export interface AgentCatalogEntry {
 }
 
 /**
- * `hook-reporting` is set only where herdr's bundled asset actually calls `pane.report_agent`
+ * `hook-reporting` is set only where the substrate's bundled asset actually calls `pane.report_agent`
  * (§7.1). For claude and codex the hook posts a session id and nothing else, so their status
- * comes entirely from herdr's screen-detection manifests — which carries the full lifecycle
+ * comes entirely from the substrate's screen-detection manifests — which carries the full lifecycle
  * correctly, verified live. What they lose is `tool_name` and `final_message`, not status.
  */
 export const AGENT_CATALOG: readonly AgentCatalogEntry[] = [

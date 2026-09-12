@@ -5,14 +5,14 @@ as open-source contributors.
 
 > Rewritten 2026-09-04. This guide previously described Osade as an IDE built on VS Code, with
 > a `vscode` upstream-tracking branch. That plan was abandoned: Osade is an Electron shell over
-> the [herdr](https://herdr.dev) runtime, and there is no `vscode` branch. If you are following
+> the [substrate](https://herdr.dev) runtime, and there is no `vscode` branch. If you are following
 > an older copy of this file, none of it applies.
 
 ---
 
 ## Before you start
 
-Osade is **pre-M0**. The specification is complete and the herdr integration surface has been
+Osade is **pre-M0**. The specification is complete and the substrate integration surface has been
 verified against a live server, but product code has not started. Right now the highest-value
 contributions are to the spec, the verified contract, and the M0 scaffolding — not features.
 
@@ -23,9 +23,9 @@ Read, in this order:
    it. **Sections marked INVARIANT are load-bearing** and sections marked **DECISION** were
    settled deliberately. Implement them; do not relitigate them in a PR. If you think one is
    wrong, open an issue that says which one and what evidence changed.
-3. [`docs/HERDR-CONTRACT.md`](docs/HERDR-CONTRACT.md) — the verified herdr surface. **Where
+3. [`docs/SUBSTRATE-CONTRACT.md`](docs/SUBSTRATE-CONTRACT.md) — the verified the substrate surface. **Where
    OSADE.md and this file disagree, this file is right.** Code against it.
-4. [`docs/PRD-DELTA.md`](docs/PRD-DELTA.md) — where the spec was wrong about herdr, and why.
+4. [`docs/PRD-DELTA.md`](docs/PRD-DELTA.md) — where the spec was wrong about the substrate, and why.
    Useful context for why some sections read the way they do.
 
 There is one branch, `main`. Work from it.
@@ -37,15 +37,15 @@ There is one branch, `main`. Work from it.
 These will send a PR back regardless of how good the code is. Most are lint-enforced
 (`docs/OSADE.md` §20.1) rather than review comments.
 
-- **Never edit anything under `backend/`.** That is herdr, kept as read-only reference. If
-  herdr genuinely needs a change it goes in `patches/` with a written rationale and an
-  upstream issue link — or better, upstream first. Osade does not fork herdr.
-- **`backend/` is never a codegen input.** The herdr client is generated only from the pinned
-  schema in `vendor/herdr/<version>-p<protocol>/api-schema.json` (§4.1). herdr's version
+- **Never edit anything under `backend/`.** That is the substrate, kept as read-only reference. If
+  the substrate genuinely needs a change it goes in `patches/` with a written rationale and an
+  upstream issue link — or better, upstream first. Osade does not fork the substrate.
+- **`backend/` is never a codegen input.** substrate client is generated only from the pinned
+  schema in `vendor/herdr/<version>-p<protocol>/api-schema.json` (§4.1). The substrate's version
   string is not a contract: two different builds both call themselves `0.8.2`.
 - **No `status` column, in any table, ever.** Status is a pure function over durable facts,
   recomputed at read time (§6). This is the single most important rule in the project.
-- **Only `packages/daemon/src/herdr/**` may talk to herdr.** Only
+- **Only `packages/daemon/src/substrate/**` may talk to the substrate.** Only
   `packages/daemon/src/scm/**` may import an SCM SDK. One boundary each.
 - **No second event path.** Every UI update originates from a database mutation flowing
   through `change_log`/CDC (§5.4). If the UI did not update, the mutation did not go through
@@ -53,7 +53,7 @@ These will send a PR back regardless of how good the code is. Most are lint-enfo
 - **No agent-authored public write without a gate** (§14), and **no auto-merge, ever**.
 - No `any`. No `console.*` or `process.exit` in `packages/daemon/src/**` outside `cli.ts`.
 
-herdr's own `AGENTS.md` governs `backend/` only. It does not govern Osade code.
+the substrate's own `AGENTS.md` governs `backend/` only. It does not govern Osade code.
 
 ---
 
@@ -67,9 +67,9 @@ git checkout -b feature/<short-description>
 
 Build instructions land with M0; there is nothing to compile yet.
 
-You do **not** need to build herdr. Osade ships a prebuilt binary, deliberately: herdr requires
+You do **not** need to build the substrate. Osade ships a prebuilt binary, deliberately: the substrate requires
 Zig 0.15.2 to build its vendored `libghostty-vt`, which is not an acceptable contributor
-prerequisite. If you want to run against a local herdr, put it on `PATH` and expect the boot
+prerequisite. If you want to run against a local the substrate, put it on `PATH` and expect the boot
 drift check (§4.1.1) to complain when its protocol differs from the pinned one.
 
 Commit with conventional-commit-style messages:
@@ -78,7 +78,7 @@ Commit with conventional-commit-style messages:
 feat: derive status for review_changes_requested
 fix: drop replayed agent facts below the stored state_change_seq
 docs: correct the event mapping table in OSADE.md §7
-refactor: split the herdr event subscriber connection manager
+refactor: split substrate event subscriber connection manager
 ```
 
 Then open a PR against `main`.
@@ -102,9 +102,9 @@ evidence justified it. A spec that drifts from the code is worse than no spec.
 
 ```text
 packages/daemon/test/unit/         pure reducers, derive-status, verify-plan. No I/O.
-packages/daemon/test/integration/  real sqlite, fake herdr, recorded GitHub fixtures
+packages/daemon/test/integration/  real sqlite, fake substrate, recorded GitHub fixtures
 apps/desktop/tests/                vitest + playwright on the renderer
-test/e2e/                          real herdr binary, real git repo fixture, one full task
+test/e2e/                          real substrate binary, real git repo fixture, one full task
 ```
 
 Pre-commit runs unit + integration. E2E runs in CI. If CI hangs after tests appear to finish,
@@ -128,10 +128,10 @@ review, and this repository should hold itself to that standard.
 ## Reporting bugs
 
 Include what you expected, what happened, steps to reproduce, relevant logs, and your OS. For
-anything involving herdr, add the output of `herdr status` and `herdr --version`.
+anything involving the substrate, add the output of `the substrate status` and `the substrate --version`.
 
-Osade's logs live in `~/.osade/logs/<date>.log`. herdr's are in its session data directory —
-`herdr status` prints the path.
+Osade's logs live in `~/.osade/logs/<date>.log`. the substrate's are in its session data directory —
+`the substrate status` prints the path.
 
 **Security issues do not go in public issues.** See [`docs/SECURITY.md`](docs/SECURITY.md).
 

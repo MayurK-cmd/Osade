@@ -2,15 +2,15 @@
  * GENERATED — DO NOT EDIT.
  *
  * Source: vendor/herdr/0.8.2-p20/api-schema.json
- * Regenerate: pnpm herdr:codegen
+ * Regenerate: pnpm substrate:codegen
  *
- * OSADE.md §4.1 — the pinned schema is the only codegen source. Never hand-write a herdr
+ * OSADE.md §4.1 — the pinned schema is the only codegen source. Never hand-write a substrate
  * method name, and never derive one from backend/.
  */
 import type * as T from './types/request.js';
 
 /** Every method name in the pinned schema. Derived, never typed by hand. */
-export type HerdrMethod =
+export type SubstrateMethod =
   | 'agent.explain'
   | 'agent.focus'
   | 'agent.get'
@@ -104,7 +104,7 @@ export type HerdrMethod =
   | 'worktree.remove';
 
 /** Method name → params type, from the request schema's oneOf. */
-export interface HerdrMethodParams {
+export interface SubstrateMethodParams {
   'agent.explain': T.AgentTarget;
   'agent.focus': T.AgentTarget;
   'agent.get': T.AgentTarget;
@@ -199,7 +199,7 @@ export interface HerdrMethodParams {
 }
 
 /** Runtime list, for the drift check and for tests. */
-export const HERDR_METHODS: readonly HerdrMethod[] = Object.freeze([
+export const SUBSTRATE_METHODS: readonly SubstrateMethod[] = Object.freeze([
   'agent.explain',
   'agent.focus',
   'agent.get',
@@ -291,4 +291,4 @@ export const HERDR_METHODS: readonly HerdrMethod[] = Object.freeze([
   'worktree.list',
   'worktree.open',
   'worktree.remove',
-]) as readonly HerdrMethod[];
+]) as readonly SubstrateMethod[];

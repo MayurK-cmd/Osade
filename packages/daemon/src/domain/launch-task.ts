@@ -7,11 +7,11 @@ import { basename, join } from 'node:path';
 import type { Db } from '../db/index.js';
 import { getTask } from '../db/task-repo.js';
 import {
-  HerdrApiError,
-  type HerdrClient,
-  type HerdrMethodParams,
-} from '../herdr/client.js';
-import type { HerdrEventSubscriber } from '../herdr/event-subscriber.js';
+  SubstrateApiError,
+  type SubstrateClient,
+  type SubstrateMethodParams,
+} from '../substrate/client.js';
+import type { SubstrateEventSubscriber } from '../substrate/event-subscriber.js';
 import { Conventions } from '../knowledge/conventions.js';
 import { renderContextFile } from '../knowledge/context-file.js';
 import { worktreePathFor } from '../paths.js';
@@ -40,7 +40,7 @@ import {
  *   - a pane hosts at most one agent.
  */
 
-/** A repo-level lock, per §9 rule 2: herdr has no cross-call lock and concurrent creates race. */
+/** A repo-level lock, per §9 rule 2: substrate has no cross-call lock and concurrent creates race. */
 const repoLocks = new Map<string, Promise<unknown>>();
 
 async function withRepoLock<T>(repoPath: string, fn: () => Promise<T>): Promise<T> {
@@ -73,7 +73,7 @@ export interface LaunchResult {
   worktreePath: string;
   /** `<worktree>/.osade/CONTEXT.md` — §8.2 step 5. */
   contextPath: string;
-  /** False on platforms where herdr cannot pass args to agent.start. See #agentStartArgs. */
+  /** False on platforms where substrate cannot pass args to agent.start. See #agentStartArgs. */
   argsSupported: boolean;
   /** True when the first-run trust prompt fired and was resolved (§8.3). */
   resolvedTrustPrompt: boolean;
@@ -113,8 +113,8 @@ const MAX_TRUST_PROMPT_ANSWERS = 3;
 
 export class LaunchTask {
   readonly #db: Db;
-  readonly #herdr: HerdrClient;
-  readonly #subscriber: HerdrEventSubscriber;
+  readonly #substrate: SubstrateClient;
+  readonly #subscriber: SubstrateEventSubscriber;
   readonly #now: () => number;
   readonly #defaultAgent: string;
   readonly #onWarning: (message: string) => void;
@@ -122,12 +122,12 @@ export class LaunchTask {
 
   constructor(
     db: Db,
-    herdr: HerdrClient,
-    subscriber: HerdrEventSubscriber,
+    substrate: SubstrateClient,
+    subscriber: SubstrateEventSubscriber,
     options: LaunchTaskOptions = {},
   ) {
     this.#db = db;
-    this.#herdr = herdr;
+    this.#substrate = substrate;
     this.#subscriber = subscriber;
     this.#now = options.now ?? Date.now;
     this.#defaultAgent = options.defaultAgent ?? 'claude';
@@ -135,7 +135,7 @@ export class LaunchTask {
     this.#checkpoints = options.checkpoints ?? null;
   }
 
-  /** Registers a repo and a task row. No herdr calls, no worktree — that is `launch`. */
+  /** Registers a repo and a task row. No substrate calls, no worktree — that is `launch`. */
   async createTask(input: CreateTaskInput): Promise<string> {
     const repoId = await this.ensureRepo(input.repoPath);
     const repo = this.#db.prepare('SELECT * FROM repo WHERE id = ?').get(repoId) as {
@@ -173,7 +173,7 @@ export class LaunchTask {
     return taskId;
   }
 
-  /** The §8.2 sequence. Serialized per repo, because herdr has no cross-call lock. */
+  /** The §8.2 sequence. Serialized per repo, because substrate has no cross-call lock. */
   async launch(taskId: string): Promise<LaunchResult> {
     const task = getTask(this.#db, taskId);
     if (!task) throw new Error(`unknown task ${taskId}`);
@@ -195,7 +195,7 @@ export class LaunchTask {
       await pruneWorktrees(repo.path);
 
       // 3. One call gives the git worktree AND its workspace. The root pane is the shell lane.
-      const created = await this.#herdr.request<
+      const created = await this.#substrate.request<
         'worktree.create',
         { workspace: { workspace_id: string }; root_pane: { pane_id: string } }
       >(
@@ -213,7 +213,7 @@ export class LaunchTask {
 
       const workspaceId = created.workspace.workspace_id;
       this.#db
-        .prepare('UPDATE task SET herdr_workspace_id = ? WHERE id = ?')
+        .prepare('UPDATE task SET substrate_workspace_id = ? WHERE id = ?')
         .run(workspaceId, taskId);
 
       // §9 rule 5 — after the worktree exists, before the agent starts. Without this, half of
@@ -224,7 +224,7 @@ export class LaunchTask {
       }
 
       // 4. The agent lane. This is the ONLY opportunity to set environment (§8.2).
-      const tab = await this.#herdr.request<
+      const tab = await this.#substrate.request<
         'tab.create',
         { tab: { tab_id: string }; root_pane: { pane_id: string } }
       >('tab.create', {
@@ -250,20 +250,20 @@ export class LaunchTask {
       //    delivery mechanism whenever system-prompt args are unavailable.
       const contextPath = await this.#writeContext(task, repo);
 
-      // 7. Build args from the catalog. herdr picks the executable itself (§8.1).
+      // 7. Build args from the catalog. the substrate picks the executable itself (§8.1).
       const args = this.#agentStartArgs(entry);
 
       // `agent.start` is not a reliable readiness signal in either direction, verified against
-      // herdr 0.8.2-p20:
+      // the substrate 0.8.2-p20:
       //   - it can return **success** immediately with `launch_pending: true` and
       //     `agent_status: unknown`, before the agent has rendered anything;
       //   - it can return **`agent_not_ready`** when its own detector saw `blocked` during
       //     startup, which for a fresh worktree is almost always the trust prompt (§8.3).
       // So the call is made, its outcome is recorded rather than trusted, and readiness is
       // established afterwards by `#awaitAgentReady`.
-      let startError: HerdrApiError | null = null;
+      let startError: SubstrateApiError | null = null;
       try {
-        await this.#herdr.request(
+        await this.#substrate.request(
           'agent.start',
           {
             name: `osade-${taskId}`,
@@ -275,7 +275,7 @@ export class LaunchTask {
           AGENT_START_TIMEOUT_MS + 10_000,
         );
       } catch (err) {
-        if (err instanceof HerdrApiError && err.code === 'agent_not_ready') {
+        if (err instanceof SubstrateApiError && err.code === 'agent_not_ready') {
           startError = err;
         } else {
           throw err;
@@ -313,9 +313,9 @@ export class LaunchTask {
   }
 
   /**
-   * Args for `agent.start`, or none on a platform where herdr cannot pass them.
+   * Args for `agent.start`, or none on a platform where the substrate cannot pass them.
    *
-   * **Windows limitation, verified against herdr 0.8.2-p20.** With no args, herdr submits
+   * **Windows limitation, verified against the substrate 0.8.2-p20.** With no args, the substrate submits
    * `& claude` and the agent starts. With args it submits
    * `Start-Process -FilePath claude -ArgumentList '...' -NoNewWindow -Wait -PassThru`, and
    * PowerShell's `Start-Process` cannot execute an extensionless npm shim — the pane shows
@@ -354,7 +354,7 @@ export class LaunchTask {
   }
 
   /**
-   * Waits until herdr reports the pane's agent as interactive, answering the first-run trust
+   * Waits until the substrate reports the pane's agent as interactive, answering the first-run trust
    * prompt if it appears while we wait.
    *
    * This exists because `agent.start` is not a readiness signal (see the call site). The two
@@ -376,7 +376,7 @@ export class LaunchTask {
 
     while (this.#now() < deadline) {
       try {
-        const info = await this.#herdr.request<
+        const info = await this.#substrate.request<
           'agent.get',
           { agent: { interactive_ready?: boolean; launch_pending?: boolean } }
         >('agent.get', { target: paneId }, 5_000);
@@ -384,7 +384,7 @@ export class LaunchTask {
           return { interactive: true, resolvedTrustPrompt, lastOutput };
         }
       } catch {
-        // Not yet a named agent — herdr is still detecting. Keep waiting.
+        // Not yet a named agent — the substrate is still detecting. Keep waiting.
       }
 
       lastOutput = await this.#readPane(paneId);
@@ -429,11 +429,11 @@ export class LaunchTask {
       if (selection == null) return false;
 
       if (selection === 'trust') {
-        await this.#herdr.request('pane.send_keys', { pane_id: paneId, keys: ['Enter'] });
+        await this.#substrate.request('pane.send_keys', { pane_id: paneId, keys: ['Enter'] });
         return true;
       }
 
-      await this.#herdr.request('pane.send_keys', { pane_id: paneId, keys: ['Down'] });
+      await this.#substrate.request('pane.send_keys', { pane_id: paneId, keys: ['Down'] });
       await new Promise((resolve) => setTimeout(resolve, 400));
     }
 
@@ -446,7 +446,7 @@ export class LaunchTask {
 
   async #readPane(paneId: string): Promise<string> {
     try {
-      const result = await this.#herdr.request<'pane.read', { read: { text: string } }>(
+      const result = await this.#substrate.request<'pane.read', { read: { text: string } }>(
         'pane.read',
         { pane_id: paneId, source: 'visible', lines: 60, format: 'text', strip_ansi: true },
         5_000,
@@ -458,12 +458,12 @@ export class LaunchTask {
   }
 
   /**
-   * Tears a task's herdr workspace down — §9 rule 6.
+   * Tears a task's the substrate workspace down — §9 rule 6.
    *
    * Order matters and is not obvious: **every pane must be closed before the worktree is
    * removed.** A live shell holds its cwd open, and on Windows that makes the directory
    * undeletable — `worktree.remove` fails with `Permission denied` even with `force: true`.
-   * herdr's own rule ("no live pane in the task's workspace") is therefore a hard prerequisite
+   * the substrate's own rule ("no live pane in the task's workspace") is therefore a hard prerequisite
    * rather than a courtesy.
    *
    * `force` still means what §9 rule 6 says: it overrides *uncommitted changes*, not live
@@ -471,24 +471,24 @@ export class LaunchTask {
    */
   async teardown(taskId: string, options: { force?: boolean } = {}): Promise<void> {
     const task = getTask(this.#db, taskId);
-    if (!task?.herdr_workspace_id) return;
+    if (!task?.substrate_workspace_id) return;
 
     const paneId = this.#paneFor(taskId);
     if (paneId) this.#subscriber.unwatchPane(paneId);
 
-    const panes = await this.#herdr
+    const panes = await this.#substrate
       .request<'pane.list', { panes: { pane_id: string }[] }>('pane.list', {
-        workspace_id: task.herdr_workspace_id,
+        workspace_id: task.substrate_workspace_id,
       })
       .catch(() => ({ panes: [] as { pane_id: string }[] }));
 
-    // Close every pane but one. `worktree.remove` is addressed by workspace id, and herdr
+    // Close every pane but one. `worktree.remove` is addressed by workspace id, and the substrate
     // closes a workspace when its last pane goes — so closing them all leaves nothing to
     // address and the call fails with `workspace_not_found`. One pane has to survive the
     // removal.
     const [survivor, ...doomed] = panes.panes;
     for (const pane of doomed) {
-      await this.#herdr.request('pane.close', { pane_id: pane.pane_id }).catch(() => {});
+      await this.#substrate.request('pane.close', { pane_id: pane.pane_id }).catch(() => {});
     }
 
     // …and that survivor must not be sitting in the directory about to be deleted. A shell
@@ -496,7 +496,7 @@ export class LaunchTask {
     // surfaces as `Permission denied` from `worktree.remove` even with force. `cd ~` is valid
     // in both POSIX shells and PowerShell.
     if (survivor) {
-      await this.#herdr
+      await this.#substrate
         .request('pane.send_input', { pane_id: survivor.pane_id, text: 'cd ~\r' })
         .catch(() => {});
       // Wait on the observed cwd rather than on a fixed delay: the shell processes the `cd`
@@ -505,11 +505,11 @@ export class LaunchTask {
       await this.#waitForCwdOutside(survivor.pane_id, task.worktree_path, 10_000);
     }
 
-    await this.#removeWorktree(task.herdr_workspace_id, task.worktree_path, options.force ?? false);
+    await this.#removeWorktree(task.substrate_workspace_id, task.worktree_path, options.force ?? false);
 
-    this.#db.prepare('UPDATE task SET herdr_workspace_id = NULL WHERE id = ?').run(taskId);
+    this.#db.prepare('UPDATE task SET substrate_workspace_id = NULL WHERE id = ?').run(taskId);
     this.#db
-      .prepare('UPDATE agent_fact SET pane_alive = 0, herdr_pane_id = NULL WHERE task_id = ?')
+      .prepare('UPDATE agent_fact SET pane_alive = 0, substrate_pane_id = NULL WHERE task_id = ?')
       .run(taskId);
   }
 
@@ -519,7 +519,7 @@ export class LaunchTask {
     const deadline = this.#now() + timeoutMs;
 
     while (this.#now() < deadline) {
-      const info = await this.#herdr
+      const info = await this.#substrate
         .request<'pane.get', { pane: { cwd?: string | null } }>(
           'pane.get',
           { pane_id: paneId },
@@ -542,7 +542,7 @@ export class LaunchTask {
    * times with backoff; a genuine refusal — a dirty checkout without `force` — is a different
    * error and is rethrown at once.
    *
-   * **`worktree.remove` is not atomic.** herdr closes the workspace first and deletes the
+   * **`worktree.remove` is not atomic.** the substrate closes the workspace first and deletes the
    * directory second, so a transient `Permission denied` leaves the workspace already gone. A
    * naive retry then fails with `workspace_not_found` and reports *that* instead of the real
    * problem. So after the first attempt the absence of the workspace is evidence, not an
@@ -558,13 +558,13 @@ export class LaunchTask {
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
       try {
-        await this.#herdr.request('worktree.remove', { workspace_id: workspaceId, force });
+        await this.#substrate.request('worktree.remove', { workspace_id: workspaceId, force });
         return;
       } catch (err) {
-        const message = err instanceof HerdrApiError ? err.message : String(err);
+        const message = err instanceof SubstrateApiError ? err.message : String(err);
 
         if (attempt > 1 && /workspace_not_found/i.test(message)) {
-          // herdr's registration is gone; only the directory is left. Its own removal already
+          // the substrate's registration is gone; only the directory is left. Its own removal already
           // ran, so finishing the job is no longer worktree *lifecycle* — it is deleting a
           // leftover directory, which §1's carve-out covers.
           await this.#reapLeftoverCheckout(worktreePath);
@@ -579,7 +579,7 @@ export class LaunchTask {
   }
 
   /**
-   * Deletes a checkout herdr has already deregistered.
+   * Deletes a checkout the substrate has already deregistered.
    *
    * A just-exited PTY can hold its working directory for a moment on Windows, so the directory
    * outlives the workspace. Waited on rather than slept through, then removed, then pruned so
@@ -599,7 +599,7 @@ export class LaunchTask {
     }
 
     this.#onWarning(
-      `herdr removed the workspace for ${worktreePath} but the directory is still on disk; ` +
+      `the substrate removed the workspace for ${worktreePath} but the directory is still on disk; ` +
         `something outside Osade is holding it open. Run \`git worktree prune\` after it frees.`,
     );
   }
@@ -607,7 +607,7 @@ export class LaunchTask {
   /**
    * Sends a prompt into the task's agent lane.
    *
-   * `wait` is retried once on `agent_prompt_stalled`: herdr requires an observed state change
+   * `wait` is retried once on `agent_prompt_stalled`: the substrate requires an observed state change
    * within 5s of a submission from a non-working state, and an agent that has just gone idle
    * can miss that window without anything being wrong. A second submission is safe because the
    * first one was rejected before any input was sent.
@@ -616,8 +616,8 @@ export class LaunchTask {
     const paneId = this.#paneFor(taskId);
     if (!paneId) throw new Error(`task ${taskId} has no live agent pane`);
 
-    // §4.2 — prefer one blocking call over prompt-then-poll: each connection is a herdr thread.
-    const params: HerdrMethodParams['agent.prompt'] = wait
+    // §4.2 — prefer one blocking call over prompt-then-poll: each connection is a substrate thread.
+    const params: SubstrateMethodParams['agent.prompt'] = wait
       ? {
           target: paneId,
           text,
@@ -629,10 +629,10 @@ export class LaunchTask {
 
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        await this.#herdr.request('agent.prompt', params, timeout);
+        await this.#substrate.request('agent.prompt', params, timeout);
         return;
       } catch (err) {
-        const stalled = err instanceof HerdrApiError && err.code === 'agent_prompt_stalled';
+        const stalled = err instanceof SubstrateApiError && err.code === 'agent_prompt_stalled';
         if (!stalled || attempt === 2) throw err;
         this.#onWarning(`prompt to ${taskId} stalled on submission; retrying once`);
         await new Promise((resolve) => setTimeout(resolve, 1_000));
@@ -648,7 +648,7 @@ export class LaunchTask {
     const paneId = this.#paneFor(taskId);
     if (!paneId) return null;
     // `pane_read` wraps its payload: { type: 'pane_read', read: PaneReadResult }.
-    const result = await this.#herdr.request<
+    const result = await this.#substrate.request<
       'pane.read',
       { read: { text: string; revision: number; truncated: boolean } }
     >('pane.read', {
@@ -666,18 +666,18 @@ export class LaunchTask {
   }
 
   /**
-   * §8.2.1 — relaunch after a herdr restart.
+   * §8.2.1 — relaunch after a substrate restart.
    *
-   * herdr restores panes but not agent processes, so a restored pane is back at a shell prompt
+   * the substrate restores panes but not agent processes, so a restored pane is back at a shell prompt
    * and `agent_pane_busy` will not fire. Never sets `terminated`: the task is queued.
    */
   async relaunchAfterRestart(taskId: string): Promise<void> {
     const task = getTask(this.#db, taskId);
     if (!task) return;
     const fact = this.#db
-      .prepare('SELECT herdr_pane_id, agent_session_id FROM agent_fact WHERE task_id = ?')
-      .get(taskId) as { herdr_pane_id: string | null; agent_session_id: string | null } | undefined;
-    if (!fact?.herdr_pane_id) return;
+      .prepare('SELECT substrate_pane_id, agent_session_id FROM agent_fact WHERE task_id = ?')
+      .get(taskId) as { substrate_pane_id: string | null; agent_session_id: string | null } | undefined;
+    if (!fact?.substrate_pane_id) return;
 
     const repo = this.#db.prepare('SELECT default_agent FROM repo WHERE id = ?').get(task.repo_id) as
       | { default_agent: string | null }
@@ -688,13 +688,13 @@ export class LaunchTask {
     const args = [...entry.autonomousArgs];
     if (fact.agent_session_id && hasCapability(entry, 'resume')) args.push(...entry.resumeArgs);
 
-    this.#subscriber.watchPane(taskId, fact.herdr_pane_id);
-    await this.#herdr.request(
+    this.#subscriber.watchPane(taskId, fact.substrate_pane_id);
+    await this.#substrate.request(
       'agent.start',
       {
         name: `osade-${taskId}`,
         kind: entry.id,
-        pane_id: fact.herdr_pane_id,
+        pane_id: fact.substrate_pane_id,
         args,
         timeout_ms: AGENT_START_TIMEOUT_MS,
       },
@@ -704,9 +704,9 @@ export class LaunchTask {
 
   #paneFor(taskId: string): string | null {
     const row = this.#db
-      .prepare('SELECT herdr_pane_id FROM agent_fact WHERE task_id = ?')
-      .get(taskId) as { herdr_pane_id: string | null } | undefined;
-    return row?.herdr_pane_id ?? null;
+      .prepare('SELECT substrate_pane_id FROM agent_fact WHERE task_id = ?')
+      .get(taskId) as { substrate_pane_id: string | null } | undefined;
+    return row?.substrate_pane_id ?? null;
   }
 
   /**
@@ -839,7 +839,7 @@ function slugify(title: string): string {
  * Whether `agent.start` can carry args on this platform.
  *
  * See `LaunchTask.#agentStartArgs` for the Windows failure this guards, verified against
- * herdr 0.8.2-p20.
+ * the substrate 0.8.2-p20.
  */
 export function agentStartArgsSupported(): boolean {
   return platform() !== 'win32';

@@ -11,11 +11,11 @@ import { toConnectTarget } from './socket-path.js';
  * exceptions that holds the socket open. So a subscription *is* a connection: there is no way
  * to add or drop a subscription without opening or closing one.
  *
- * §5.4.1 — this stream replays herdr's ring buffer on connect and can drop silently. Nothing
+ * §5.4.1 — this stream replays the substrate's ring buffer on connect and can drop silently. Nothing
  * here tries to deduplicate; that is the fact writer's job, via the monotonic gate.
  */
 
-export interface HerdrEventEnvelope {
+export interface SubstrateEventEnvelope {
   event: string;
   data: Record<string, unknown>;
 }
@@ -26,8 +26,8 @@ export type PaneSubscription = { type: string; pane_id: string };
 export type Subscription = GlobalSubscription | PaneSubscription;
 
 export interface EventStreamEvents {
-  event: [HerdrEventEnvelope];
-  /** The subscription was accepted; herdr will now push. */
+  event: [SubstrateEventEnvelope];
+  /** The subscription was accepted; substrate will now push. */
   started: [];
   /** Connection closed. `willRetry` says whether this stream will reconnect itself. */
   closed: [{ willRetry: boolean; error?: Error }];
@@ -37,7 +37,7 @@ export interface EventStreamEvents {
 const RECONNECT_BASE_MS = 250;
 const RECONNECT_MAX_MS = 10_000;
 
-export class HerdrEventStream extends EventEmitter<EventStreamEvents> {
+export class SubstrateEventStream extends EventEmitter<EventStreamEvents> {
   readonly #socketPath: string;
   readonly #subscriptions: readonly Subscription[];
   #socket: net.Socket | null = null;
@@ -116,7 +116,7 @@ export class HerdrEventStream extends EventEmitter<EventStreamEvents> {
     try {
       parsed = JSON.parse(line);
     } catch {
-      this.emit('error', new Error(`herdr sent a non-JSON event line: ${line.slice(0, 200)}`));
+      this.emit('error', new Error(`the substrate sent a non-JSON event line: ${line.slice(0, 200)}`));
       return;
     }
 
@@ -129,7 +129,7 @@ export class HerdrEventStream extends EventEmitter<EventStreamEvents> {
     };
 
     if (message.error) {
-      // A malformed subscription — e.g. a pane-scoped type without `pane_id`, which herdr
+      // A malformed subscription — e.g. a pane-scoped type without `pane_id`, which the substrate
       // rejects outright (§7.2) — arrives here and then the socket closes.
       this.emit(
         'error',

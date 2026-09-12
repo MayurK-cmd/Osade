@@ -5,9 +5,9 @@ import type { ServerMessage } from '@osade/contract';
 
 import { openDb, type Db } from '../../src/db/index.js';
 import { getAgentFact } from '../../src/db/task-repo.js';
-import { HerdrEventSubscriber } from '../../src/herdr/event-subscriber.js';
-import type { HerdrEventStream, Subscription } from '../../src/herdr/event-stream.js';
-import type { HerdrClient } from '../../src/herdr/client.js';
+import { SubstrateEventSubscriber } from '../../src/substrate/event-subscriber.js';
+import type { SubstrateEventStream, Subscription } from '../../src/substrate/event-stream.js';
+import type { SubstrateClient } from '../../src/substrate/client.js';
 import { CdcBroadcaster } from '../../src/server/cdc-broadcaster.js';
 
 const NOW = 1_756_000_000_000;
@@ -34,20 +34,20 @@ class FakeStream extends EventEmitter {
 let db: Db;
 let streams: FakeStream[];
 
-function fakeClient(snapshot: unknown = { agents: [] }): HerdrClient {
+function fakeClient(snapshot: unknown = { agents: [] }): SubstrateClient {
   return {
     socketPath: '/fake/herdr.sock',
     request: async () => snapshot,
-  } as unknown as HerdrClient;
+  } as unknown as SubstrateClient;
 }
 
-function subscriber(client = fakeClient()): HerdrEventSubscriber {
-  return new HerdrEventSubscriber(db, client, {
+function subscriber(client = fakeClient()): SubstrateEventSubscriber {
+  return new SubstrateEventSubscriber(db, client, {
     now: () => NOW,
     createStream: (_path, subs) => {
       const s = new FakeStream(subs);
       streams.push(s);
-      return s as unknown as HerdrEventStream;
+      return s as unknown as SubstrateEventStream;
     },
   });
 }
@@ -59,7 +59,7 @@ function seed(taskId = 't1'): void {
   ).run('r1', 'o1', '/repo', 'main', NOW);
   db.prepare(
     `INSERT INTO task (id, repo_id, title, intent, origin_kind, base_ref, base_sha, branch,
-                       worktree_path, herdr_workspace_id, created_at)
+                       worktree_path, substrate_workspace_id, created_at)
      VALUES (?, 'r1', 'fix', 'fix it', 'manual', 'main', 'headsha', 'b', '/wt', 'w3', ?)`,
   ).run(taskId, NOW);
   db.prepare('INSERT INTO agent_fact (task_id) VALUES (?)').run(taskId);
@@ -121,7 +121,7 @@ describe('event subscriber — the N+1 connection manager (§7.2)', () => {
     expect(s.paneCount).toBe(0);
     const fact = getAgentFact(db, 't1')!;
     expect(fact.pane_alive).toBe(false);
-    // §5.2 — a pane vanishing is not a death certificate. A herdr restart looks exactly like
+    // §5.2 — a pane vanishing is not a death certificate. A substrate restart looks exactly like
     // this, and §8.2.1 relaunches into the restored pane rather than declaring the task dead.
     expect(fact.terminated).toBe(false);
     s.stop();
@@ -155,7 +155,7 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
       agent: 'claude',
     });
 
-    expect(getAgentFact(db, 't1')!.herdr_state).toBe('working');
+    expect(getAgentFact(db, 't1')!.substrate_state).toBe('working');
     expect(getAgentFact(db, 't1')!.last_event).toBe('to_in_progress');
 
     // §5.4 — no direct emit anywhere; the fact reaches the client only via change_log.
@@ -173,13 +173,13 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
     s.watchPane('t1', 'w3:p2');
     const pane = streams[1]!;
 
-    // Exactly the sequence observed against a live herdr (HERDR-CONTRACT.md §3.3).
+    // Exactly the sequence observed against a live the substrate (SUBSTRATE-CONTRACT.md §3.3).
     pane.push('pane.agent_status_changed', { agent_status: 'blocked' });
-    expect(getAgentFact(db, 't1')!.herdr_state).toBe('blocked');
+    expect(getAgentFact(db, 't1')!.substrate_state).toBe('blocked');
 
     pane.push('pane.agent_status_changed', { agent_status: 'idle' });
     let fact = getAgentFact(db, 't1')!;
-    expect(fact.herdr_state).toBe('idle');
+    expect(fact.substrate_state).toBe('idle');
     // §6.1 — `idle` is inert. It must not have produced a transition.
     expect(fact.last_event).toBe(null);
 
@@ -188,7 +188,7 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
 
     pane.push('pane.agent_status_changed', { agent_status: 'done' });
     fact = getAgentFact(db, 't1')!;
-    expect(fact.herdr_state).toBe('done');
+    expect(fact.substrate_state).toBe('done');
     expect(fact.last_event).toBe('to_review');
     s.stop();
   });
@@ -203,18 +203,18 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
     pane.push('pane.agent_status_changed', { agent_status: 'done' });
     expect(getAgentFact(db, 't1')!.last_event).toBe('to_review');
 
-    // Opening the task in herdr marks the pane seen, and herdr then reports `idle` for the
+    // Opening the task in the substrate marks the pane seen, and the substrate then reports `idle` for the
     // same agent in the same state. The task must stay in the needs-you set.
     pane.push('pane.agent_status_changed', { agent_status: 'idle' });
     const fact = getAgentFact(db, 't1')!;
-    expect(fact.herdr_state).toBe('idle');
+    expect(fact.substrate_state).toBe('idle');
     expect(fact.last_event).toBe('to_review');
     s.stop();
   });
 
   it('reconcile writes authoritative state from session.snapshot', async () => {
     seed();
-    db.prepare("UPDATE agent_fact SET herdr_pane_id = 'w3:p2' WHERE task_id = 't1'").run();
+    db.prepare("UPDATE agent_fact SET substrate_pane_id = 'w3:p2' WHERE task_id = 't1'").run();
 
     const s = subscriber(
       fakeClient({
@@ -232,7 +232,7 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
     await s.start();
 
     const fact = getAgentFact(db, 't1')!;
-    expect(fact.herdr_state).toBe('done');
+    expect(fact.substrate_state).toBe('done');
     expect(fact.last_event).toBe('to_review');
     expect(fact.activity_text).toBe('Pong response');
     expect(fact.agent_session_id).toBe('sess-abc');
@@ -243,10 +243,10 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
   it('a replayed stale status does not clobber a newer fact', async () => {
     seed();
     db.prepare(
-      "UPDATE agent_fact SET herdr_pane_id = 'w3:p2', herdr_state = 'done', last_event = 'to_review', state_change_seq = 100 WHERE task_id = 't1'",
+      "UPDATE agent_fact SET substrate_pane_id = 'w3:p2', substrate_state = 'done', last_event = 'to_review', state_change_seq = 100 WHERE task_id = 't1'",
     ).run();
 
-    // herdr replays its ring buffer on every connect, so an old `working` arrives after a
+    // the substrate replays its ring buffer on every connect, so an old `working` arrives after a
     // live `done`. The monotonic gate is what stops it landing.
     const s = subscriber(
       fakeClient({
@@ -256,7 +256,7 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
     await s.start();
 
     const fact = getAgentFact(db, 't1')!;
-    expect(fact.herdr_state).toBe('done');
+    expect(fact.substrate_state).toBe('done');
     expect(fact.last_event).toBe('to_review');
     expect(fact.state_change_seq).toBe(100);
     s.stop();
@@ -264,28 +264,28 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
 
   it('a failed session.snapshot changes nothing (§5.2)', async () => {
     seed();
-    db.prepare("UPDATE agent_fact SET herdr_state = 'working', state_change_seq = 3 WHERE task_id = 't1'").run();
+    db.prepare("UPDATE agent_fact SET substrate_state = 'working', state_change_seq = 3 WHERE task_id = 't1'").run();
 
     const failing = {
       socketPath: '/fake/herdr.sock',
       request: async () => {
-        throw new Error('herdr is not running');
+        throw new Error('the substrate is not running');
       },
-    } as unknown as HerdrClient;
+    } as unknown as SubstrateClient;
 
-    const s = new HerdrEventSubscriber(db, failing, {
+    const s = new SubstrateEventSubscriber(db, failing, {
       now: () => NOW,
       createStream: (_p, subs) => {
         const st = new FakeStream(subs);
         streams.push(st);
-        return st as unknown as HerdrEventStream;
+        return st as unknown as SubstrateEventStream;
       },
     });
     await s.start();
 
     // A failed probe is a fact, not a state change: nothing is overwritten and nothing dies.
     const fact = getAgentFact(db, 't1')!;
-    expect(fact.herdr_state).toBe('working');
+    expect(fact.substrate_state).toBe('working');
     expect(fact.terminated).toBe(false);
     s.stop();
   });

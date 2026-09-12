@@ -4,9 +4,9 @@ import {
   AgentEvent,
   ChecksState,
   GateDecision,
-  HerdrAgentStatus,
-  HerdrPaneId,
-  HerdrWorkspaceId,
+  SubstrateAgentStatus,
+  SubstratePaneId,
+  SubstrateWorkspaceId,
   PrState,
   RepoId,
   ReviewState,
@@ -33,8 +33,8 @@ export const Task = z.object({
   base_sha: z.string(),
   branch: z.string(),
   worktree_path: z.string(),
-  /** Null until herdr has adopted the worktree. */
-  herdr_workspace_id: HerdrWorkspaceId.nullable(),
+  /** Null until substrate has adopted the worktree. */
+  substrate_workspace_id: SubstrateWorkspaceId.nullable(),
   archived_at: Timestamp.nullable(),
   created_at: Timestamp,
 });
@@ -43,8 +43,8 @@ export type Task = z.infer<typeof Task>;
 export const AgentFact = z.object({
   task_id: TaskId,
   /** The subscription key for this task's agent lane (§7.2). */
-  herdr_pane_id: HerdrPaneId.nullable(),
-  herdr_state: HerdrAgentStatus.nullable(),
+  substrate_pane_id: SubstratePaneId.nullable(),
+  substrate_state: SubstrateAgentStatus.nullable(),
   last_event: AgentEvent.nullable(),
   last_event_at: Timestamp.nullable(),
   /** From `AgentInfo.terminal_title_stripped`. Display only. */
@@ -53,7 +53,7 @@ export const AgentFact = z.object({
   tool_name: z.string().nullable(),
   /** No source for claude or codex — see §7.1. */
   final_message: z.string().nullable(),
-  /** From `AgentInfo.agent_session`, for resume after a herdr restart (§8.2.1). */
+  /** From `AgentInfo.agent_session`, for resume after a substrate restart (§8.2.1). */
   agent_session_id: z.string().nullable(),
   pane_alive: z.boolean(),
   last_probe_at: Timestamp.nullable(),
@@ -65,7 +65,7 @@ export const AgentFact = z.object({
   /** Set only by an explicit process exit or an explicit user action. Never inferred. */
   terminated: z.boolean(),
   /**
-   * §5.4.1 — INVARIANT: the monotonic write gate. herdr's event stream replays on connect and
+   * §5.4.1 — INVARIANT: the monotonic write gate. the substrate's event stream replays on connect and
    * can drop silently, and its envelopes carry no sequence number, so every write is gated on
    * this being strictly greater than what is stored.
    */

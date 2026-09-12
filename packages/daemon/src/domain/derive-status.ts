@@ -30,8 +30,8 @@ export function deriveStatus(f: TaskFacts, now: number): TaskStatus {
   // 3. An undecided gate is the loudest thing in the product.
   if (f.openGates.some((g) => g.decided_at == null)) return 'awaiting_approval';
 
-  // 4. herdr says the agent is waiting on a human.
-  if (agent?.herdr_state === 'blocked') return 'needs_input';
+  // 4. the substrate says the agent is waiting on a human.
+  if (agent?.substrate_state === 'blocked') return 'needs_input';
 
   // 5. A human reviewer wants something.
   if (scm?.review_state === 'changes_requested') return 'review_changes_requested';
@@ -50,22 +50,22 @@ export function deriveStatus(f: TaskFacts, now: number): TaskStatus {
   // 9. There is an open PR and nothing above needs attention.
   if (scm?.pr_state === 'open') return 'pr_open';
 
-  // 10. The agent finished a turn and nothing has restarted it. herdr's `done`, and only
+  // 10. The agent finished a turn and nothing has restarted it. the substrate's `done`, and only
   //     `done`, produces `to_review` — see §6.1 on why `idle` is inert.
   if (agent?.last_event === 'to_review') return 'awaiting_review';
 
   // 11. Working.
-  if (agent?.herdr_state === 'working') return 'implementing';
+  if (agent?.substrate_state === 'working') return 'implementing';
 
   // 12. Explicitly stopped. §5.2 — only an explicit process exit or user action sets this;
   //     never a failed probe and never a dropped event.
   if (agent?.terminated === true) return 'stopped';
 
-  // 13. Not started yet. Also covers the herdr-restart case (§6, PRD-DELTA #11): herdr restores
+  // 13. Not started yet. Also covers the substrate-restart case (§6, PRD-DELTA #11): the substrate restores
   //     panes but not agent processes, so a restored task has a live workspace and a pane with
   //     no agent bound. That is work to start, not an idle task — and not a death.
   if (!agent || agent.pane_alive === false) return 'queued';
-  if (task.herdr_workspace_id != null && agent.herdr_state == null) return 'queued';
+  if (task.substrate_workspace_id != null && agent.substrate_state == null) return 'queued';
 
   // 14. Alive, bound, and quiet.
   return 'idle';

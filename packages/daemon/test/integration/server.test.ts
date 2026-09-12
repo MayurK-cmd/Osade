@@ -98,7 +98,7 @@ describe('daemon server', () => {
        VALUES ('t_loud', 'r1', 'blocked one', 'x', 'manual', 'main', 'h', 'b2', '/wt2', ?)`,
     ).run(NOW - 10_000); // older, so creation-time sorting would put it last
     db.prepare(
-      "INSERT INTO agent_fact (task_id, herdr_state, pane_alive) VALUES ('t_loud', 'blocked', 1)",
+      "INSERT INTO agent_fact (task_id, substrate_state, pane_alive) VALUES ('t_loud', 'blocked', 1)",
     ).run();
 
     const tasks = (await trpcQuery('taskList')) as { task: { id: string }; status: string }[];
@@ -145,7 +145,7 @@ describe('websocket — §5.4, one event path', () => {
 
     // Nothing in the daemon knows about this write. §5.4 says it must still reach the UI.
     db.prepare(
-      "INSERT INTO agent_fact (task_id, herdr_state, pane_alive, state_change_seq) VALUES ('t1','working',1,1)",
+      "INSERT INTO agent_fact (task_id, substrate_state, pane_alive, state_change_seq) VALUES ('t1','working',1,1)",
     ).run();
 
     // The poller runs on its own interval; give it a beat rather than reaching into it.

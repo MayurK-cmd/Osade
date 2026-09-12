@@ -11,9 +11,9 @@ import { ScmPoller } from './scm/poller.js';
 import { ScmWrites } from './scm/writes.js';
 import { AnthropicModel, hasApiKey } from './knowledge/anthropic-model.js';
 import { Knowledge } from './knowledge/service.js';
-import { HerdrClient } from './herdr/client.js';
-import { assertNoDrift, HerdrDriftError } from './herdr/drift-check.js';
-import { HerdrEventSubscriber } from './herdr/event-subscriber.js';
+import { SubstrateClient } from './substrate/client.js';
+import { assertNoDrift, SubstrateDriftError } from './substrate/drift-check.js';
+import { SubstrateEventSubscriber } from './substrate/event-subscriber.js';
 import { osadePaths } from './paths.js';
 import { startDaemonServer, type RunningDaemon } from './server/index.js';
 
@@ -26,8 +26,8 @@ import { startDaemonServer, type RunningDaemon } from './server/index.js';
  */
 
 export interface StartDaemonOptions {
-  /** Path to the herdr binary the drift check runs against (§4.1.1). */
-  herdrBinary?: string;
+  /** Path to substrate binary the drift check runs against (§4.1.1). */
+  substrateBinary?: string;
   /** Skip the boot drift check. Tests only — never in a shipped path. */
   skipDriftCheck?: boolean;
   port?: number;
@@ -51,23 +51,23 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
   }
 
   // §4.1.1 — the boot drift check runs before the first API call. Fatal on protocol or a
-  // missing pinned method; a superset only warns, or every herdr upgrade is an outage.
+  // missing pinned method; a superset only warns, or every the substrate upgrade is an outage.
   if (!options.skipDriftCheck) {
     try {
-      const result = await assertNoDrift(options.herdrBinary ?? 'herdr');
+      const result = await assertNoDrift(options.substrateBinary ?? 'herdr');
       if (result.ok) onInfo(result.message);
       else onWarning(result.message);
     } catch (err) {
-      if (err instanceof HerdrDriftError) throw err;
+      if (err instanceof SubstrateDriftError) throw err;
       throw err;
     }
   }
 
   const db = openDb(paths.db);
-  const herdr = new HerdrClient();
-  const subscriber = new HerdrEventSubscriber(db, herdr, { now: options.now, onWarning });
+  const substrate = new SubstrateClient();
+  const subscriber = new SubstrateEventSubscriber(db, substrate, { now: options.now, onWarning });
   const checkpoints = new Checkpoints(db, { now: options.now, onWarning });
-  const launcher = new LaunchTask(db, herdr, subscriber, {
+  const launcher = new LaunchTask(db, substrate, subscriber, {
     now: options.now,
     onWarning,
     checkpoints,
@@ -75,16 +75,16 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
   const gates = new Gates(db, { now: options.now });
   // §10.2 — the failure loop. Wired here rather than inside the runner so the dependency
   // points one way: the runner knows nothing about launching.
-  const verifier = new VerifyRunner(db, herdr, {
+  const verifier = new VerifyRunner(db, substrate, {
     now: options.now,
     onWarning,
     sendToAgent: (taskId, text) => launcher.prompt(taskId, text, false),
   });
 
-  // A herdr that is not running is not an error at boot: agents survive the app, but the app
+  // A substrate that is not running is not an error at boot: agents survive the app, but the app
   // also has to start when nothing is running yet. The subscriber reconciles when it can.
   await subscriber.start().catch((err: Error) => {
-    onWarning(`herdr event subscriber did not start: ${err.message}`);
+    onWarning(`the substrate event subscriber did not start: ${err.message}`);
   });
 
   // §11 — GitHub. The token reaches us over the spawn handshake and is held in memory only

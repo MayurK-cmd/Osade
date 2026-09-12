@@ -101,7 +101,7 @@ describe('CDC — a raw SQL write reaches a subscriber', () => {
     // Deliberately raw SQL, bypassing every service: §5.4 says the database is the event
     // source, so a write nothing in the daemon knows about must still reach the UI.
     db.prepare(
-      `INSERT INTO agent_fact (task_id, herdr_pane_id, herdr_state, pane_alive, state_change_seq)
+      `INSERT INTO agent_fact (task_id, substrate_pane_id, substrate_state, pane_alive, state_change_seq)
        VALUES ('t1', 'w3:p2', 'working', 1, 5)`,
     ).run();
     expect(broadcaster.tick()).toBe(1);
@@ -112,7 +112,7 @@ describe('CDC — a raw SQL write reaches a subscriber', () => {
     expect(push.task.needsYou).toBe(false);
 
     // …and a status change flows through the same path.
-    db.prepare("UPDATE agent_fact SET herdr_state = 'blocked', state_change_seq = 6 WHERE task_id = 't1'").run();
+    db.prepare("UPDATE agent_fact SET substrate_state = 'blocked', state_change_seq = 6 WHERE task_id = 't1'").run();
     expect(broadcaster.tick()).toBe(1);
 
     push = seen.at(-1);
@@ -130,7 +130,7 @@ describe('CDC — a raw SQL write reaches a subscriber', () => {
 
     db.transaction(() => {
       db.prepare(
-        `INSERT INTO agent_fact (task_id, herdr_state, pane_alive, state_change_seq)
+        `INSERT INTO agent_fact (task_id, substrate_state, pane_alive, state_change_seq)
          VALUES ('t1', 'done', 1, 2)`,
       ).run();
       db.prepare("UPDATE agent_fact SET last_event = 'to_review' WHERE task_id = 't1'").run();

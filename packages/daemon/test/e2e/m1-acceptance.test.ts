@@ -12,10 +12,10 @@ import { Gates } from '../../src/domain/gates.js';
 import { LaunchTask } from '../../src/domain/launch-task.js';
 import { confirmPlan, deriveVerifyPlan } from '../../src/domain/verify-plan.js';
 import { VerifyRunner } from '../../src/domain/verify-run.js';
-import { HerdrClient } from '../../src/herdr/client.js';
-import { assertNoDrift } from '../../src/herdr/drift-check.js';
-import { HerdrEventSubscriber } from '../../src/herdr/event-subscriber.js';
-import { herdrSessionDir } from '../../src/herdr/socket-path.js';
+import { SubstrateClient } from '../../src/substrate/client.js';
+import { assertNoDrift } from '../../src/substrate/drift-check.js';
+import { SubstrateEventSubscriber } from '../../src/substrate/event-subscriber.js';
+import { substrateSessionDir } from '../../src/substrate/socket-path.js';
 
 /**
  * The M1 acceptance test — OSADE.md §21.
@@ -23,7 +23,7 @@ import { herdrSessionDir } from '../../src/herdr/socket-path.js';
  * > A task runs `implementing → verifying → verify_failed → implementing → awaiting_review`
  * > without a human touching it, and the commit is blocked until approved.
  *
- * Real herdr, real git, a real failing test, and a real agent fixing it. This is the demo the
+ * Real the substrate, real git, a real failing test, and a real agent fixing it. This is the demo the
  * product is organised around (§10.2): *agent acts, environment answers, agent adapts*.
  *
  * Skipped unless `OSADE_E2E=1`.
@@ -31,14 +31,14 @@ import { herdrSessionDir } from '../../src/herdr/socket-path.js';
 
 const E2E = process.env.OSADE_E2E === '1';
 const SESSION = 'osade-m1';
-const HERDR_BIN = process.env.OSADE_HERDR_BIN ?? 'herdr';
+const SUBSTRATE_BIN = process.env.OSADE_SUBSTRATE_BIN ?? 'herdr';
 
 let workdir: string;
 let repoPath: string;
 let db: Db;
-let herdr: HerdrClient;
+let substrate: SubstrateClient;
 let server: ChildProcess | null = null;
-let subscriber: HerdrEventSubscriber;
+let subscriber: SubstrateEventSubscriber;
 let launcher: LaunchTask;
 let verifier: VerifyRunner;
 let gates: Gates;
@@ -101,26 +101,26 @@ beforeAll(async () => {
   sh(repoPath, ['add', '-A']);
   sh(repoPath, ['-c', 'user.email=e2e@osade', '-c', 'user.name=e2e', 'commit', '-qm', 'init']);
 
-  await assertNoDrift(HERDR_BIN);
+  await assertNoDrift(SUBSTRATE_BIN);
 
   const env: NodeJS.ProcessEnv = { ...process.env, HERDR_SESSION: SESSION };
   delete env.HERDR_STARTUP_CWD;
-  server = spawn(HERDR_BIN, ['server'], { env, stdio: 'ignore' });
+  server = spawn(SUBSTRATE_BIN, ['server'], { env, stdio: 'ignore' });
 
-  herdr = new HerdrClient({ session: SESSION });
-  await waitFor(() => herdr.isRunning(1_000), 20_000, 'herdr to accept connections');
+  substrate = new SubstrateClient({ session: SESSION });
+  await waitFor(() => substrate.isRunning(1_000), 20_000, 'the substrate to accept connections');
 
   db = openDb(join(workdir, 'osade.db'));
   const onWarning = (m: string) => warnings.push(m);
-  subscriber = new HerdrEventSubscriber(db, herdr, { onWarning });
+  subscriber = new SubstrateEventSubscriber(db, substrate, { onWarning });
   gates = new Gates(db);
   checkpoints = new Checkpoints(db, { onWarning });
-  launcher = new LaunchTask(db, herdr, subscriber, {
+  launcher = new LaunchTask(db, substrate, subscriber, {
     defaultAgent: 'claude',
     onWarning,
     checkpoints,
   });
-  verifier = new VerifyRunner(db, herdr, {
+  verifier = new VerifyRunner(db, substrate, {
     onWarning,
     // §10.2 — the closed loop.
     sendToAgent: (taskId, text) => launcher.prompt(taskId, text, false),
@@ -132,13 +132,13 @@ afterAll(async () => {
   if (!E2E) return;
   subscriber?.stop();
   try {
-    await new HerdrClient({ session: SESSION }).request('server.stop', {}, 5_000);
+    await new SubstrateClient({ session: SESSION }).request('server.stop', {}, 5_000);
   } catch {
     // already gone
   }
   server?.kill();
   db?.close();
-  for (const dir of [herdrSessionDir(SESSION), workdir]) {
+  for (const dir of [substrateSessionDir(SESSION), workdir]) {
     try {
       rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     } catch {
@@ -233,7 +233,7 @@ describe.skipIf(!E2E)('M1 acceptance — the failure loop turns once, for real',
 
     // …and the agent went back to work when it was told, which is §6 row 11.
     const fact = getAgentFact(db, taskId)!;
-    expect(fact.herdr_state).not.toBe(null);
+    expect(fact.substrate_state).not.toBe(null);
   }, 300_000);
 
   it('re-verification passes and the row reaches awaiting_review', async () => {
@@ -244,7 +244,7 @@ describe.skipIf(!E2E)('M1 acceptance — the failure loop turns once, for real',
     expect(report.passed).toBe(true);
     expect(report.outcomes.find((o) => o.stepName === 'test')!.exitCode).toBe(0);
 
-    // The agent finishes its turn; herdr reports `done`, which is the only thing that
+    // The agent finishes its turn; the substrate reports `done`, which is the only thing that
     // produces `to_review` (§6.1).
     await waitFor(
       () => getAgentFact(db, taskId)?.last_event === 'to_review',
@@ -288,7 +288,7 @@ describe.skipIf(!E2E)('M1 acceptance — the failure loop turns once, for real',
   it('tears down cleanly', async () => {
     await launcher.teardown(taskId, { force: true });
     const facts = getTaskFacts(db, taskId)!;
-    expect(facts.task.herdr_workspace_id).toBe(null);
+    expect(facts.task.substrate_workspace_id).toBe(null);
     // §5.2 — teardown is not a death certificate.
     expect(facts.agent?.terminated).toBe(false);
   }, 120_000);

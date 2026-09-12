@@ -47,7 +47,7 @@ function rowToTask(r: Record<string, unknown>): Task {
     base_sha: r.base_sha as string,
     branch: r.branch as string,
     worktree_path: r.worktree_path as string,
-    herdr_workspace_id: (r.herdr_workspace_id as string | null) ?? null,
+    substrate_workspace_id: (r.substrate_workspace_id as string | null) ?? null,
     archived_at: (r.archived_at as number | null) ?? null,
     created_at: r.created_at as number,
   };
@@ -60,8 +60,8 @@ export function getAgentFact(db: Db, taskId: string): AgentFact | null {
   if (!r) return null;
   return {
     task_id: r.task_id as string,
-    herdr_pane_id: (r.herdr_pane_id as string | null) ?? null,
-    herdr_state: (r.herdr_state as AgentFact['herdr_state']) ?? null,
+    substrate_pane_id: (r.substrate_pane_id as string | null) ?? null,
+    substrate_state: (r.substrate_state as AgentFact['substrate_state']) ?? null,
     last_event: (r.last_event as AgentFact['last_event']) ?? null,
     last_event_at: (r.last_event_at as number | null) ?? null,
     activity_text: (r.activity_text as string | null) ?? null,

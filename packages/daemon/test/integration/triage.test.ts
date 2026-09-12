@@ -9,8 +9,8 @@ import { getTask, getTaskFacts } from '../../src/db/task-repo.js';
 import { deriveStatus } from '../../src/domain/derive-status.js';
 import { LaunchTask } from '../../src/domain/launch-task.js';
 import { Triage, triageBrief } from '../../src/domain/triage.js';
-import type { HerdrClient } from '../../src/herdr/client.js';
-import type { HerdrEventSubscriber } from '../../src/herdr/event-subscriber.js';
+import type { SubstrateClient } from '../../src/substrate/client.js';
+import type { SubstrateEventSubscriber } from '../../src/substrate/event-subscriber.js';
 import type { ImportableIssue } from '../../src/scm/poller.js';
 
 /**
@@ -40,11 +40,11 @@ function sh(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true }).trim();
 }
 
-const fakeHerdr = { socketPath: '/fake', request: async () => ({}) } as unknown as HerdrClient;
+const fakeSubstrate = { socketPath: '/fake', request: async () => ({}) } as unknown as SubstrateClient;
 const fakeSubscriber = {
   watchPane() {},
   unwatchPane() {},
-} as unknown as HerdrEventSubscriber;
+} as unknown as SubstrateEventSubscriber;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'osade-triage-'));
@@ -56,7 +56,7 @@ beforeEach(() => {
   sh(repo, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'init']);
 
   db = openDb(':memory:');
-  launcher = new LaunchTask(db, fakeHerdr, fakeSubscriber, { now: () => NOW });
+  launcher = new LaunchTask(db, fakeSubstrate, fakeSubscriber, { now: () => NOW });
   triage = new Triage(db, launcher, { now: () => NOW });
 });
 

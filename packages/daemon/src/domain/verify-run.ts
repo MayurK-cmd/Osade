@@ -4,14 +4,14 @@ import { join } from 'node:path';
 
 import type { Db } from '../db/index.js';
 import { getTask } from '../db/task-repo.js';
-import type { HerdrClient } from '../herdr/client.js';
+import type { SubstrateClient } from '../substrate/client.js';
 import { runDirFor } from '../paths.js';
 import type { VerifyPlan, VerifyStep } from './verify-plan.js';
 
 /**
  * Running verification — OSADE.md §10.2.
  *
- * Runs execute **in the task worktree, in the `verify` lane** (a herdr tab), so the user can
+ * Runs execute **in the task worktree, in the `verify` lane** (a substrate tab), so the user can
  * watch and interrupt. One `verify_run` row per step. Output goes to `~/.osade/runs/<run_id>/`,
  * capped with head+tail retention.
  *
@@ -55,14 +55,14 @@ export interface VerifyRunnerOptions {
 
 export class VerifyRunner {
   readonly #db: Db;
-  readonly #herdr: HerdrClient;
+  readonly #substrate: SubstrateClient;
   readonly #now: () => number;
   readonly #onWarning: (message: string) => void;
   readonly #sendToAgent: ((taskId: string, text: string) => Promise<void>) | null;
 
-  constructor(db: Db, herdr: HerdrClient, options: VerifyRunnerOptions = {}) {
+  constructor(db: Db, substrate: SubstrateClient, options: VerifyRunnerOptions = {}) {
     this.#db = db;
-    this.#herdr = herdr;
+    this.#substrate = substrate;
     this.#now = options.now ?? Date.now;
     this.#onWarning = options.onWarning ?? (() => {});
     this.#sendToAgent = options.sendToAgent ?? null;
@@ -85,7 +85,7 @@ export class VerifyRunner {
       );
     }
 
-    const paneId = await this.#ensureVerifyLane(taskId, task.herdr_workspace_id);
+    const paneId = await this.#ensureVerifyLane(taskId, task.substrate_workspace_id);
     const outcomes: VerifyOutcome[] = [];
 
     for (const step of plan.steps) {
@@ -153,7 +153,7 @@ export class VerifyRunner {
     if (existing) return existing.value;
 
     try {
-      const tab = await this.#herdr.request<
+      const tab = await this.#substrate.request<
         'tab.create',
         { tab: { tab_id: string }; root_pane: { pane_id: string } }
       >('tab.create', {
@@ -209,11 +209,11 @@ export class VerifyRunner {
   /**
    * Executes one step in the verify lane.
    *
-   * herdr owns process execution (§1), so this drives the lane rather than spawning: the user
+   * the substrate owns process execution (§1), so this drives the lane rather than spawning: the user
    * can watch it and interrupt it, which is the whole reason §10.2 puts runs in a lane.
    *
-   * An exit code is recovered by echoing it — herdr's API has no "run and give me the status"
-   * method, and inventing one in Osade would be reimplementing what herdr already owns.
+   * An exit code is recovered by echoing it — the substrate's API has no "run and give me the status"
+   * method, and inventing one in Osade would be reimplementing what the substrate already owns.
    */
   async #execute(
     step: VerifyStep,
@@ -232,7 +232,7 @@ export class VerifyRunner {
         ? `${step.cmd}; Write-Output "${sentinel}:$LASTEXITCODE"`
         : `${step.cmd}; echo "${sentinel}:$?"`;
 
-    await this.#herdr.request('pane.send_input', { pane_id: paneId, text: `${command}\r` });
+    await this.#substrate.request('pane.send_input', { pane_id: paneId, text: `${command}\r` });
 
     const deadline = this.#now() + step.timeoutSec * 1000;
     let output = '';
@@ -250,7 +250,7 @@ export class VerifyRunner {
 
   async #readLane(paneId: string): Promise<string> {
     try {
-      const result = await this.#herdr.request<'pane.read', { read: { text: string } }>(
+      const result = await this.#substrate.request<'pane.read', { read: { text: string } }>(
         'pane.read',
         { pane_id: paneId, source: 'recent', lines: 1000, format: 'text', strip_ansi: true },
         10_000,

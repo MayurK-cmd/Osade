@@ -10,8 +10,8 @@ import { deriveStatus } from '../../src/domain/derive-status.js';
 import { Gates } from '../../src/domain/gates.js';
 import { LaunchTask } from '../../src/domain/launch-task.js';
 import { Triage } from '../../src/domain/triage.js';
-import type { HerdrClient } from '../../src/herdr/client.js';
-import type { HerdrEventSubscriber } from '../../src/herdr/event-subscriber.js';
+import type { SubstrateClient } from '../../src/substrate/client.js';
+import type { SubstrateEventSubscriber } from '../../src/substrate/event-subscriber.js';
 import { ScmClient, type ScmRequest } from '../../src/scm/client.js';
 import { ScmPoller } from '../../src/scm/poller.js';
 import { ScmWrites } from '../../src/scm/writes.js';
@@ -73,8 +73,8 @@ const request: ScmRequest = async (route) => {
   };
 };
 
-const fakeHerdr = { socketPath: '/fake', request: async () => ({}) } as unknown as HerdrClient;
-const fakeSubscriber = { watchPane() {}, unwatchPane() {} } as unknown as HerdrEventSubscriber;
+const fakeSubstrate = { socketPath: '/fake', request: async () => ({}) } as unknown as SubstrateClient;
+const fakeSubscriber = { watchPane() {}, unwatchPane() {} } as unknown as SubstrateEventSubscriber;
 
 beforeEach(() => {
   agentPrompts.length = 0;
@@ -108,7 +108,7 @@ beforeEach(() => {
   const scm = new ScmClient({ request, now: () => NOW });
   gates = new Gates(db, { now: () => NOW });
   writer = new ScmWrites(db, scm, gates, { now: () => NOW });
-  launcher = new LaunchTask(db, fakeHerdr, fakeSubscriber, { now: () => NOW });
+  launcher = new LaunchTask(db, fakeSubstrate, fakeSubscriber, { now: () => NOW });
   triage = new Triage(db, launcher, { now: () => NOW });
   poller = new ScmPoller(db, scm, {
     now: () => NOW,

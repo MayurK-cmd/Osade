@@ -4,16 +4,16 @@ import { join } from 'node:path';
 import * as net from 'node:net';
 
 /**
- * Locate, adopt or spawn the herdr server — OSADE.md §18.1.
+ * Locate, adopt or spawn the substrate server — OSADE.md §18.1.
  *
- * Osade runs herdr on its own named session (`osade`) so it never collides with the user's own
+ * Osade runs the substrate on its own named session (`osade`) so it never collides with the user's own
  * (§2.2). Verified live: two sessions run concurrently with separate sockets, separate
  * `session.json`, and no interference.
  */
 
 export const OSADE_SESSION = 'osade';
 
-function herdrConfigDir(): string {
+function substrateConfigDir(): string {
   if (platform() === 'win32') {
     return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'herdr');
   }
@@ -21,8 +21,8 @@ function herdrConfigDir(): string {
   return xdg ? join(xdg, 'herdr') : join(homedir(), '.config', 'herdr');
 }
 
-export function herdrSocketPath(session = OSADE_SESSION): string {
-  return join(herdrConfigDir(), 'sessions', session, 'herdr.sock');
+export function substrateSocketPath(session = OSADE_SESSION): string {
+  return join(substrateConfigDir(), 'sessions', session, 'herdr.sock');
 }
 
 function connectTarget(socketPath: string): string {
@@ -56,7 +56,7 @@ export function ping(socketPath: string, timeoutMs = 2_000): Promise<boolean> {
   });
 }
 
-export interface HerdrSupervisorOptions {
+export interface SubstrateSupervisorOptions {
   binary?: string;
   session?: string;
   onInfo?: (message: string) => void;
@@ -65,24 +65,24 @@ export interface HerdrSupervisorOptions {
 /**
  * Adopts a running herdr server, or spawns one detached.
  *
- * The spawn copies herdr's own recipe (`backend/src/server/autodetect.rs:188-233`): null
+ * The spawn copies the substrate's own recipe (`backend/src/server/autodetect.rs:188-233`): null
  * stdio, and detached from this process. Without that the server dies with the app, and
  * "agents survive the window closing" quietly stops being true.
  *
  * `HERDR_STARTUP_CWD` is removed deliberately: when it is set and the session has no
- * workspaces, herdr creates one at that cwd on boot and Osade inherits a stray workspace it
+ * workspaces, the substrate creates one at that cwd on boot and Osade inherits a stray workspace it
  * never asked for.
  */
-export async function adoptOrSpawnHerdr(options: HerdrSupervisorOptions = {}): Promise<{
+export async function adoptOrSpawnSubstrate(options: SubstrateSupervisorOptions = {}): Promise<{
   socketPath: string;
   spawned: boolean;
 }> {
   const session = options.session ?? OSADE_SESSION;
-  const socketPath = herdrSocketPath(session);
+  const socketPath = substrateSocketPath(session);
   const onInfo = options.onInfo ?? (() => {});
 
   if (await ping(socketPath)) {
-    onInfo(`adopted the running herdr server on session "${session}"`);
+    onInfo(`adopted the running substrate server on session "${session}"`);
     return { socketPath, spawned: false };
   }
 
@@ -101,14 +101,14 @@ export async function adoptOrSpawnHerdr(options: HerdrSupervisorOptions = {}): P
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     if (await ping(socketPath, 1_000)) {
-      onInfo(`spawned a detached herdr server on session "${session}"`);
+      onInfo(`spawned a detached substrate server on session "${session}"`);
       return { socketPath, spawned: true };
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
   throw new Error(
-    `herdr did not start within 20s on session "${session}" (socket ${socketPath}).\n` +
-      `Check that the herdr binary is on PATH.`,
+    `the substrate did not start within 20s on session "${session}" (socket ${socketPath}).\n` +
+      `Check that the substrate binary is on PATH.`,
   );
 }

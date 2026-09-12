@@ -1,6 +1,6 @@
-Looking at your tree: `docs/CLAUDE.md` won't be auto-loaded — Claude Code reads `CLAUDE.md` from the working directory and its parents, not from `docs/`. You need one at the repo root. And `backend/` almost certainly has herdr's own `AGENTS.md` with herdr's invariants, which will quietly fight yours if Claude Code picks both up.
+Looking at your tree: `docs/CLAUDE.md` won't be auto-loaded — Claude Code reads `CLAUDE.md` from the working directory and its parents, not from `docs/`. You need one at the repo root. And `backend/` almost certainly has the substrate's own `AGENTS.md` with the substrate's invariants, which will quietly fight yours if Claude Code picks both up.
 
-The bigger trap: hand Claude Code a 1400-line PRD and it will scaffold 40 files against an herdr API it guessed. Split this into two prompts.
+The bigger trap: hand Claude Code a 1400-line PRD and it will scaffold 40 files against a substrate API it guessed. Split this into two prompts.
 
 ## Root `CLAUDE.md`
 
@@ -10,18 +10,18 @@ The bigger trap: hand Claude Code a 1400-line PRD and it will scaffold 40 files 
 Osade runs coding agents as open-source contributors. Full spec: @docs/OSADE.md
 
 ## Layout
-- `backend/` — herdr (Rust). **READ-ONLY. Never edit.** Reference implementation + API source of truth.
+- `backend/` — substrate (Rust). **READ-ONLY. Never edit.** Reference implementation + API source of truth.
 - `apps/desktop/` — Electron shell
 - `packages/` — daemon, contract, cli, skill-assets
-- `docs/` — OSADE.md is the spec. AOagents.txt / cline.txt / herdr.txt are research inputs, not requirements.
+- `docs/` — OSADE.md is the spec. AOagents.txt / cline.txt are research inputs, not requirements.
 
 ## Standing rules
-- Never edit anything under `backend/`. If herdr needs a change, write it to `patches/` with a rationale.
-- herdr's own AGENTS.md rules apply to `backend/` only. They do not govern Osade code.
+- Never edit anything under `backend/`. If substrate needs a change, write it to `patches/` with a rationale.
+- substrate's own AGENTS.md rules apply to `backend/` only. They do not govern Osade code.
 - No `status` column in any table. Status is derived at read time (OSADE.md §6). This is not negotiable.
-- Only `packages/daemon/src/herdr/**` may talk to herdr.
+- Only `packages/daemon/src/substrate/**` may talk to substrate.
 - Only `packages/daemon/src/scm/**` may import Octokit.
-- Never hand-write an herdr API method name. Generate the client from the schema.
+- Never hand-write an substrate API method name. Generate the client from the schema.
 - No `any`. No `console.*` in daemon src outside `cli.ts`.
 
 ## Before implementing
@@ -31,7 +31,7 @@ Read the relevant OSADE.md section in full. Sections marked INVARIANT or DECISIO
 ## Prompt 1 — recon, no product code
 
 ```
-Read docs/OSADE.md in full. Then verify its assumptions against the real herdr
+Read docs/OSADE.md in full. Then verify its assumptions against the real substrate
 source in backend/. Write NO product code in this task.
 
 backend/ is read-only. You are reading it to find out what is actually true.
@@ -47,11 +47,11 @@ Answer these against the source, citing file paths and line numbers:
 3. List the exact EventHub event names and payloads for agent status changes and
    hook reports. OSADE.md §7 guesses at PaneAgentStatusChanged, HookStateReported,
    HookMetadataReported, AgentSessionReported. Confirm or correct each.
-4. Can the herdr server spawn and keep panes alive with ZERO clients attached?
-   Trace the code path. Osade's daemon spawns agents with no herdr TUI running —
+4. Can the substrate server spawn and keep panes alive with ZERO clients attached?
+   Trace the code path. Osade's daemon spawns agents with no the substrate TUI running —
    if this doesn't work the whole architecture is wrong.
 5. Can we run an isolated named session (`osade`) that won't collide with a user's
-   own herdr session? How is it selected?
+   own substrate session? How is it selected?
 6. Which agents have hook integrations in src/integration/assets/, and what
    metadata does each report back?
 7. Is the endpoint protocol (src/protocol/endpoint.rs, generation 1) usable by an
@@ -60,7 +60,7 @@ Answer these against the source, citing file paths and line numbers:
 
 Produce two files:
 
-- docs/HERDR-CONTRACT.md — the verified surface. Real method names, real event
+- docs/SUBSTRATE-CONTRACT.md — the verified surface. Real method names, real event
   names, real payload shapes, with file:line citations. This becomes the contract
   the daemon codes against.
 - docs/PRD-DELTA.md — every assumption in OSADE.md that turned out wrong or
@@ -73,37 +73,37 @@ Stop after those two files. Do not scaffold anything.
 ## Prompt 2 — M0, only after you've read the delta
 
 ```
-Read docs/OSADE.md §21 (M0), docs/HERDR-CONTRACT.md, and docs/PRD-DELTA.md.
+Read docs/OSADE.md §21 (M0), docs/SUBSTRATE-CONTRACT.md, and docs/PRD-DELTA.md.
 
 Build M0 only. Scope is the six checkboxes under M0 — nothing from M1+.
 No GitHub, no conventions miner, no memory, no gates.
 
 Order:
-1. Generate the typed herdr client from the schema into
-   packages/daemon/src/herdr/generated/. Commit schema + generated output + the
-   pinned herdr version. Add the boot version guard.
+1. Generate the typed substrate client from the schema into
+   packages/daemon/src/substrate/generated/. Commit schema + generated output + the
+   pinned substrate version. Add the boot version guard.
 2. packages/contract/ — Zod schemas for task, agent_fact, and the WS message union.
 3. packages/daemon/src/db/ — sqlite, migrations, change_log triggers, CDC poller.
    Verify with a test that a raw SQL update produces a WS push.
 4. deriveStatus for rows 4, 10, 11, 13, 14 only. Pure function, property test:
    any ordering of fact writes ends at the same status.
-5. packages/daemon/src/herdr/event-subscriber.ts writing agent_fact.
+5. packages/daemon/src/substrate/event-subscriber.ts writing agent_fact.
 6. apps/desktop — userData redirect first, supervisor, utilityProcess surface
    transport, canvas cell renderer.
 
 Acceptance, and I will test exactly this: I type a prompt, Claude Code spawns in
 an isolated worktree, its terminal renders inside the Electron window, and the row
 moves queued → implementing → needs_input → awaiting_review driven entirely by
-herdr's detection. Nothing polled. No status column in the database.
+substrate's detection. Nothing polled. No status column in the database.
 
 Work in thin vertical slices. Get one task end-to-end before making anything
-general. Stop and ask if HERDR-CONTRACT.md contradicts what you need.
+general. Stop and ask if SUBSTRATE-CONTRACT.md contradicts what you need.
 ```
 
 Three things worth knowing:
 
 **Your `backend/` layout is better than what I specced.** I wrote §4.1 assuming you'd vendor a binary and read a published schema. With the source in-tree you can read `src/api/schema/` directly, which makes prompt 1 much more reliable. Keep the source, but still ship a prebuilt binary at distribution time — Zig 0.15.2 as a user install prerequisite will kill adoption.
 
-**Question 4 in the recon prompt is the one that can invalidate the architecture.** herdr's docs say the server survives client detach and panes keep running, so it should be fine, but "survives detach" and "spawns correctly with no client ever attached" are different code paths. If it's the latter, you find out in an hour instead of week three.
+**Question 4 in the recon prompt is the one that can invalidate the architecture.** the substrate's docs say the server survives client detach and panes keep running, so it should be fine, but "survives detach" and "spawns correctly with no client ever attached" are different code paths. If it's the latter, you find out in an hour instead of week three.
 
 **Don't skip prompt 1.** It looks like overhead. It's the difference between Claude Code building against reality and building against my inference from an architecture doc.

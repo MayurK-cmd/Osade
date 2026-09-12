@@ -1,16 +1,16 @@
-# PRD Delta — where OSADE.md is wrong about herdr
+# PRD Delta — where OSADE.md is wrong about the substrate
 
 > Every assumption in OSADE.md that recon proved wrong, unverifiable, or more
 > expensive than written, with a proposed correction. Evidence is in
-> HERDR-CONTRACT.md; this file is the argument, not the transcript.
+> SUBSTRATE-CONTRACT.md; this file is the argument, not the transcript.
 >
-> **The architecture survives.** The load-bearing question — can herdr spawn and
+> **The architecture survives.** The load-bearing question — can the substrate spawn and
 > keep agents alive with zero clients attached — is **yes**, verified
-> end-to-end: a real Claude Code session ran an entire turn in a headless herdr
+> end-to-end: a real Claude Code session ran an entire turn in a headless the substrate
 > pane with no TUI and no client. §2, §5 and §7 below are the ones that cost real
 > work.
 >
-> Verified 2026-09-04 against herdr 0.8.2 (installed binary, JSON API protocol 20)
+> Verified 2026-09-04 against the substrate 0.8.2 (installed binary, JSON API protocol 20)
 > and `backend/` at protocol 22.
 
 Severity key: **BLOCKER** — invalidates a design decision · **COSTLY** — the plan
@@ -19,7 +19,7 @@ apply · **HYGIENE** — repo/process.
 
 ---
 
-## 1. BLOCKER — `backend/` is not the herdr you will ship
+## 1. BLOCKER — `backend/` is not the substrate you will ship
 
 `backend/Cargo.toml:3` says `0.8.2`. The installed binary says `0.8.2`. They are
 **different code**:
@@ -66,7 +66,7 @@ doc is just noise — delete it.
 OSADE.md §4.1 and recon question 1 both assume it is there. `backend/docs/` is
 absent entirely. The file is `include_str!`'d at `backend/src/cli/api.rs:1`, so
 **`backend/` as vendored cannot compile.** `backend/.github/`, `AGENTS.md`,
-`SECURITY.md` and `ThirdPartyNotices.txt` were also hoisted out of the herdr tree
+`SECURITY.md` and `ThirdPartyNotices.txt` were also hoisted out of the substrate tree
 (into the Osade repo root and `docs/`), so this is a copy artifact, not an
 upstream fact.
 
@@ -75,7 +75,7 @@ byte-compares it against a live `schemars` render and regenerates under
 `HERDR_UPDATE_API_SCHEMA=1`. When present it is authoritative.
 
 **Correction.** Do not try to restore `backend/docs/`. Take the schema from the
-binary (§1). Either finish the vendoring (`git clone` herdr at the pinned tag
+binary (§1). Either finish the vendoring (`git clone` the substrate at the pinned tag
 into `backend/`, or drop `backend/` to a submodule/pin) or accept that it does
 not build and mark it read-only reference — which is what CLAUDE.md already says.
 
@@ -90,7 +90,7 @@ anywhere. Three corrections, in ascending cost.
 ### 3a. The framing is bincode, not JSON
 
 Generation 1 is a real, build-independent contract — `do_handshake` compares
-`generation` and codec names and **never** compares herdr versions
+`generation` and codec names and **never** compares the substrate versions
 (`backend/src/client/handshake.rs:219-232`). That promise holds.
 
 But it rides on `herdr-client.sock`, framed
@@ -105,14 +105,14 @@ messages carry JSON, as a string inside
 **Cost:** `apps/desktop/src/surface/` must implement a bincode decoder for
 `ServerMessage` in TypeScript — varint-ish `bincode::config::standard()`,
 enum tag ordering, `CellData`/`FrameData`/`SurfaceGraphicsScene` nesting. The
-enum tag order is **positional**, so a herdr upgrade that inserts a variant
+enum tag order is **positional**, so a substrate upgrade that inserts a variant
 breaks the decoder silently. `EndpointControl` is explicitly append-only for this
 reason (`wire.rs:1444-1448`), but nothing else is.
 
 **Correction.** Add to §4.3:
 
 > The endpoint transport decodes `[u32LE len][bincode]` frames. Pin the decoder
-> to the vendored herdr version and add a boot assertion: decode a known
+> to the vendored substrate version and add a boot assertion: decode a known
 > `endpoint.welcome.v1` frame and fail loudly on mismatch. Ship a fixture-based
 > decoder test using
 > `backend/tests/fixtures/endpoint-{hello,welcome,snapshot}-v1.json` plus a
@@ -135,7 +135,7 @@ one §4.4 is promising.
 ### 3c. One connection renders one tab, not one pane
 
 `PaneSurfaceFrame` (`wire.rs:1213-1225`) is **one cell grid for the whole active
-tab**, with `panes: PaneSurfacePane[]` giving each pane's rect inside it. herdr
+tab**, with `panes: PaneSurfacePane[]` giving each pane's rect inside it. the substrate
 composites; the client blits. There is no "subscribe to pane X".
 
 The saving grace: `ClientConnection.shell_location` is documented as
@@ -147,13 +147,13 @@ pinned to a different workspace/tab.
 **Correction to §4.4 and §18.2.** State the topology explicitly:
 
 > One endpoint connection per **visible task surface**, each pinned to that
-> task's workspace and tab. The renderer draws herdr's composited grid for that
+> task's workspace and tab. The renderer draws the substrate's composited grid for that
 > tab and uses `PaneSurfacePane` rects to crop or label. Osade does not
-> re-layout panes; herdr's layout is what appears.
+> re-layout panes; the substrate's layout is what appears.
 
 And revise the §4.4 target. "15 concurrently visible panes at 60fps" now means
-15 socket connections, 15 server-side render targets, and herdr rendering 15
-tabs per frame — a cost herdr's own AGENTS.md flags as a multiplicative hot path.
+15 socket connections, 15 server-side render targets, and the substrate rendering 15
+tabs per frame — a cost the substrate's own AGENTS.md flags as a multiplicative hot path.
 **Benchmark this in M0, not M1.** A realistic v1 target is 1 focused surface at
 60fps plus N throttled previews (say 4fps); if that is the answer, record it as a
 DECISION now rather than discovering it in week three.
@@ -162,7 +162,7 @@ DECISION now rather than discovering it in week three.
 
 ## 4. COSTLY — hooks do not report state for Claude Code or Codex
 
-OSADE.md §7 says herdr "installs per-agent hook scripts … for Claude Code, Codex,
+OSADE.md §7 says the substrate "installs per-agent hook scripts … for Claude Code, Codex,
 pi, opencode, Kimi and others, which report authoritative state back". Half true.
 Reading every asset in `backend/src/integration/assets/`:
 
@@ -178,7 +178,7 @@ only and posts one `pane.report_agent_session` with `session_id` and
 `agent_fact.activity_text`, `tool_name` and `final_message` (OSADE.md §5.2) have
 **no source** for Claude Code.
 
-The good news, verified live: herdr's screen detection carried the whole
+The good news, verified live: the substrate's screen detection carried the whole
 lifecycle for Claude Code — `blocked` (trust prompt) → `idle` → `working` →
 `done` — with correct timing and no flapping.
 
@@ -194,7 +194,7 @@ lifecycle for Claude Code — `blocked` (trust prompt) → `idle` → `working` 
 3. If Osade later wants tool-level activity for Claude Code, the supported path
    is to install an **additional** Claude Code hook that calls
    `pane.report_metadata` with `HERDR_PANE_ID`/`HERDR_SOCKET_PATH` from the
-   environment. That is not "a parallel hook system" — it is herdr's own
+   environment. That is not "a parallel hook system" — it is the substrate's own
    documented inbound API. Note the token limits: ≤16 keys per patch, ≤32
    stored, `^[A-Za-z0-9_-]{1,32}$`
    (`backend/src/api/schema/common.rs:3-23`). **M2 or later.**
@@ -204,7 +204,7 @@ lifecycle for Claude Code — `blocked` (trust prompt) → `idle` → `working` 
 ## 5. COSTLY — the event stream replays on connect and can drop silently
 
 OSADE.md §5.4 ("there is no second event path") and §7 both assume a clean,
-ordered feed from herdr. It is not one.
+ordered feed from the substrate. It is not one.
 
 `EventHub` is a **512-entry in-memory ring buffer** polled per subscription
 (`backend/src/api/event_hub.rs:13`, `:22`). Two behaviors, both verified:
@@ -221,7 +221,7 @@ ordered feed from herdr. It is not one.
 
 **Correction — add to §7 as an INVARIANT:**
 
-> herdr's event stream is **at-least-once with replay and possible loss**. Every
+> the substrate's event stream is **at-least-once with replay and possible loss**. Every
 > `agent_fact` write is gated on a monotonic counter from the payload —
 > `AgentInfo.state_change_seq`, or `PaneInfo.revision` — and a write whose
 > counter is not greater than the stored one is dropped. On every subscriber
@@ -229,7 +229,7 @@ ordered feed from herdr. It is not one.
 > before trusting the stream.
 
 This does not weaken §5.4: reconciliation writes still go through the database
-and reach the UI through `change_log`/CDC. It does mean the daemon polls herdr
+and reach the UI through `change_log`/CDC. It does mean the daemon polls the substrate
 **once per connection**, which is not the polling §5.4 forbids.
 
 `agent_fact` already has `controller_generation`; repurpose it, or add
@@ -279,7 +279,7 @@ connection manager, not a single socket — plan it that way from day one.
 **Correction.** Osade runs `git -C <worktree> status --porcelain` / `diff --stat`
 itself, on a debounce, triggered by verification runs and by
 `pane.agent_status_changed → done`. This is not a §1 violation: §1 forbids
-reimplementing *worktree lifecycle*, which herdr owns and Osade calls. Reading
+reimplementing *worktree lifecycle*, which the substrate owns and Osade calls. Reading
 git status in a directory is ordinary work. Say so explicitly in §9 so nobody
 relitigates it.
 
@@ -299,7 +299,7 @@ Long-lived exceptions: `events.subscribe`, `pane.graphics.stream` (streaming);
 
 **Correction to §4.2.** Add: *the generated client opens one connection per
 call.* Do not build a correlation-id multiplexer or a connection pool. Each
-connection is a thread on herdr's side
+connection is a thread on the substrate's side
 (`backend/src/api/server.rs:90-100`), so prefer `agent.prompt --wait` over
 prompt-then-poll.
 
@@ -308,7 +308,7 @@ prompt-then-poll.
 ## 8. WRONG — §8.2 step 7 cannot build argv the way it says
 
 §8.2: *"Build argv from the catalog entry … Spawn in the `agent` lane via the
-herdr JSON API."*
+the substrate JSON API."*
 
 **No pane-creating method accepts a command.** `pane.split`, `tab.create`,
 `workspace.create` all spawn the configured shell and take no `argv`
@@ -325,9 +325,9 @@ herdr JSON API."*
 
 **Corrections to §8:**
 
-- `AgentCatalogEntry.binary` is **advisory**. herdr picks the executable name;
+- `AgentCatalogEntry.binary` is **advisory**. the substrate picks the executable name;
   Osade's job is to ensure it resolves on `PATH`. Keep the field for probing and
-  for the "agent not installed" error, but never pass it to herdr. §8.1's PATH
+  for the "agent not installed" error, but never pass it to the substrate. §8.1's PATH
   warning ("never shell out to `zsh -i`") stays exactly right and now applies to
   probing only.
 - All args — `autonomousArgs`, `planArgs`, `resumeArgs`, `--append-system-prompt` —
@@ -346,7 +346,7 @@ herdr JSON API."*
 Supported `kind` values (installed binary):
 `pi codex claude gemini cursor devin agy cline omp mastracode opencode copilot
 kimi kiro droid amp grok hermes kilo qodercli qwen maki`. §8.1's table lists
-`kiro` as `kiro-cli chat` — the kind is `kiro`, the executable herdr runs is
+`kiro` as `kiro-cli chat` — the kind is `kiro`, the executable the substrate runs is
 `kiro-cli`, and `chat` would be an arg.
 
 ---
@@ -365,19 +365,19 @@ straight into the needs-you set (§6 row 10).
 
 **Correction to §7's mapping table:**
 
-| herdr status | Osade event | Note |
+| the substrate status | Osade event | Note |
 | --- | --- | --- |
 | `working` | `to_in_progress` | |
-| `blocked` | *(no transition)* | sets `herdr_state='blocked'` → §6 row 4 |
+| `blocked` | *(no transition)* | sets `substrate_state='blocked'` → §6 row 4 |
 | `done` | `to_review` | turn finished — this is the needs-you signal |
 | `idle` | `to_in_progress` on first sight, else none | never `to_review` |
 | `unknown` | none | record, do not transition |
 
 ---
 
-## 10. WRONG — §9's worktree rules, three of six are not herdr's job
+## 10. WRONG — §9's worktree rules, three of six are not the substrate's job
 
-herdr runs (`backend/src/worktree.rs:238-320`):
+the substrate runs (`backend/src/worktree.rs:238-320`):
 
 - new branch: `git worktree add -b <branch> <path> <base>`
 - existing branch: `git worktree add <path> <branch>`
@@ -387,49 +387,49 @@ Verified: `--base 089a586` produced a worktree on `osade/demo-1` at exactly
 the `--detach`-then-branch mechanism §9 describes. Rewrite rule 4 to state the
 outcome, not the mechanism — Osade cannot control the mechanism.
 
-Not done by herdr, and therefore Osade's:
+Not done by the substrate, and therefore Osade's:
 
-- **Rule 3, `git worktree prune` before `add`.** herdr never prunes. The
+- **Rule 3, `git worktree prune` before `add`.** the substrate never prunes. The
   "missing but already registered" failure §9 warns about will happen. Osade must
   run `git -C <repo> worktree prune` before calling `worktree.create`. Add an
   explicit carve-out to §1/§9: *Osade may run `git worktree prune`, `status`, and
-  `diff`; creation, opening and removal go through herdr.*
-- **Rule 5, mirroring gitignored paths** (`.env`, local tool configs). No herdr
+  `diff`; creation, opening and removal go through the substrate.*
+- **Rule 5, mirroring gitignored paths** (`.env`, local tool configs). No the substrate
   concept. Entirely Osade's, and it must happen **after** `worktree.create`
   returns and **before** `agent.start`.
-- **Rule 2, repo-level creation lock.** herdr has no cross-call lock. Two
+- **Rule 2, repo-level creation lock.** the substrate has no cross-call lock. Two
   concurrent `worktree.create` calls on one repo race. Osade's lock is required.
 
-Confirmed as herdr's: rule 6 (removal refuses a dirty checkout without `force` —
+Confirmed as the substrate's: rule 6 (removal refuses a dirty checkout without `force` —
 `backend/src/worktree.rs:214`, and has leftover-checkout recovery at `:343`) and
 rule 1 (`worktree.open` on an existing path returns `already_open`, never
 recreates).
 
 ---
 
-## 11. WRONG — herdr restart is not task death
+## 11. WRONG — the substrate restart is not task death
 
 Verified: stop and restart the server and workspaces/tabs/panes come back with
 **the same ids** (`w3`, `w3:p2`) and the same cwd — but the agent process is
-gone, `agent=undefined`, `agent_status=unknown`. herdr restores shells, not
+gone, `agent=undefined`, `agent_status=unknown`. the substrate restores shells, not
 agents.
 
-This lands in §6 row 13 (`pane_alive === 0` and no herdr workspace → `queued`),
+This lands in §6 row 13 (`pane_alive === 0` and no the substrate workspace → `queued`),
 except the workspace *does* exist, so it falls through to row 14 `idle`. Either
 is survivable; neither is honest.
 
 **Corrections:**
 
-- §5.2 — `herdr_workspace_id` is a durable key. It is a stored field
+- §5.2 — `substrate_workspace_id` is a durable key. It is a stored field
   (`backend/src/app/ids.rs:15-17`), stable across other workspaces closing and
   across restart. Two cautions: `WorkspaceInfo.number` **does** renumber
   (verified: closing `w1` left `w2` with `number: 1`) — never key on `number`;
   and `parse_workspace_id` has a positional fallback for bare integers
   (`backend/src/app/ids.rs:60-67`), so always send the full `wN` form.
 - §6 — add a row, or fold it into row 13: an agent whose pane exists but whose
-  `agent` field is null after a herdr restart is `queued`, not `stopped`. The
+  `agent` field is null after a substrate restart is `queued`, not `stopped`. The
   §5.2 invariant holds — `terminated` is still set only by an explicit exit.
-- §8.2 — add a relaunch path. After a herdr restart the daemon re-runs
+- §8.2 — add a relaunch path. After a substrate restart the daemon re-runs
   `agent.start` in the restored pane (it is back at a shell prompt, so
   `agent_pane_busy` will not fire), using `resumeArgs` plus the
   `AgentInfo.agent_session` id captured before the restart.
@@ -446,18 +446,18 @@ separate sockets, separate `session.json`, no interference
 
 Two additions from the source:
 
-- **Copy herdr's own detached-spawn recipe** (`backend/src/server/autodetect.rs:188-233`):
+- **Copy the substrate's own detached-spawn recipe** (`backend/src/server/autodetect.rs:188-233`):
   `herdr server` with stdin/stdout/stderr null and
   `detach_server_daemon_command` — `DETACHED_PROCESS` on Windows, `setsid` on
   Unix. Without it the server dies with its parent. (`ping`'s
   `capabilities.detached_server_daemon` reports whether *this* server was started
   that way; it read `false` in my test precisely because I did not detach.)
 - **Clear `HERDR_STARTUP_CWD`.** If it is set and the session has no workspaces,
-  herdr creates a workspace at that cwd on boot
+  the substrate creates a workspace at that cwd on boot
   (`backend/src/server/headless/bootstrap.rs:89-117`). Osade would inherit a
   stray workspace it did not create. `env_remove` it explicitly.
 
-Also worth pinning in §2.1: on Windows the herdr sockets are **named pipes**, not
+Also worth pinning in §2.1: on Windows the substrate sockets are **named pipes**, not
 files — `interprocess` maps the path string through `GenericNamespaced`
 (`backend/src/ipc.rs:44-51`), so a Node client connects to
 `\\.\pipe\C:\…\herdr.sock`. Verified working from Node 22. The `.sock` file on
@@ -473,29 +473,29 @@ descriptor (`backend/src/ipc.rs:156`).
   panics without Zig 0.15.2. Not installed here; neither are `just` or `python3`.
   Shipping prebuilt binaries is not a preference, it is the only option.
 - **§8.3 trust prompts.** Fired on the very first launch into a fresh worktree.
-  herdr's detector classified it `blocked` correctly, and
+  the substrate's detector classified it `blocked` correctly, and
   `pane.wait_for_output` + `pane.send_keys` resolved it. Full recipe in
-  HERDR-CONTRACT.md §8.
+  SUBSTRATE-CONTRACT.md §8.
 - **§7 env injection.** `HERDR_ENV`, `HERDR_SOCKET_PATH`, `HERDR_BIN_PATH`,
   `HERDR_WORKSPACE_ID`, `HERDR_TAB_ID`, `HERDR_PANE_ID` are all injected
   (`backend/src/pane.rs:115-137`).
-- **§7 "extend herdr properly".** Detection is 21 versioned TOML manifests with
+- **§7 "extend the substrate properly".** Detection is 21 versioned TOML manifests with
   an `index.toml` for remote updates (`backend/distribution/agent-detection/`).
-- **§3 naming.** Task ↔ herdr Workspace is genuinely 1:1 — `worktree.create`
+- **§3 naming.** Task ↔ the substrate Workspace is genuinely 1:1 — `worktree.create`
   returns exactly one workspace per worktree. Lane ↔ Tab holds.
-- **§4.2's socket split** is enforced by herdr, not just by Osade's lint: the
+- **§4.2's socket split** is enforced by the substrate, not just by Osade's lint: the
   endpoint connection can invoke only 37 whitelisted methods
   (`backend/src/server/client_commands.rs:15-53`), and `agent.start`,
   `agent.prompt`, `pane.send_*`, `pane.read` and `events.subscribe` are **not**
   among them.
-- **§17 orchestrator.** Feasible as written. herdr injects its own env; Osade
+- **§17 orchestrator.** Feasible as written. the substrate injects its own env; Osade
   adds `OSADE_TASK_ID` through the `env` map at lane creation.
 
 ---
 
 ## 13a. COSTLY — `agent.start` is not a readiness signal, and on Windows it cannot carry args
 
-*Found during M0 implementation, against herdr `0.8.2-p20`. Both were invisible from the
+*Found during M0 implementation, against the substrate `0.8.2-p20`. Both were invisible from the
 schema and only appeared when a real agent was launched.*
 
 ### 13a.1 `agent.start` returning does not mean the agent is usable
@@ -505,7 +505,7 @@ It resolves either way and neither outcome is trustworthy:
 - **Success, immediately**, with `launch_pending: true` and `agent_status: unknown`, before
   the agent has rendered anything. A `agent.prompt` issued straight after fails with
   `agent_not_ready: agent w2:p2 is not an active named agent`.
-- **`agent_not_ready`**, when herdr's own detector saw `blocked` during startup — which for a
+- **`agent_not_ready`**, when the substrate's own detector saw `blocked` during startup — which for a
   fresh worktree is almost always the trust prompt, i.e. not a failure at all.
 
 **Correction to §8.2.** Treat `agent.start` as *submission*, not as a barrier. Readiness is
@@ -520,7 +520,7 @@ silently, which showed up as an intermittent 90-second launch timeout.
 
 ### 13a.2 On Windows, `agent.start` args break npm-shim agents
 
-With no args herdr submits `& claude` and the agent starts. With args it submits:
+With no args the substrate submits `& claude` and the agent starts. With args it submits:
 
 ```powershell
 $p=Start-Process -FilePath claude -ArgumentList '--permission-mode acceptEdits' -NoNewWindow -Wait -PassThru
@@ -534,7 +534,7 @@ reports success — a silent launch failure.
 **Correction to §8.1/§8.2.** On Windows, start the agent bare and deliver the launch context
 through `<worktree>/.osade/CONTEXT.md`, which §13.5 already prescribes for agents without
 system-prompt injection. Mode args (`--permission-mode`) are lost there; that is a real
-capability reduction and is reported, not hidden. **Upstream issue candidate** — herdr's
+capability reduction and is reported, not hidden. **Upstream issue candidate** — the substrate's
 `platform::interactive_shell_command` should use the call operator with arguments rather than
 `Start-Process`.
 
@@ -565,7 +565,7 @@ Never assume the default: the default is the dangerous one.
 
 ### 13a.3 Teardown ordering is the reverse of the obvious one
 
-`worktree.remove` is addressed by workspace id, and herdr closes a workspace when its last
+`worktree.remove` is addressed by workspace id, and the substrate closes a workspace when its last
 pane closes. So closing every pane first leaves nothing to address
 (`workspace_not_found`), while leaving a live shell in the worktree makes the directory
 undeletable on Windows (`Permission denied`, even with `force: true`).
@@ -589,13 +589,13 @@ dirty checkout without `force` is a different error and must be rethrown at once
   working directory and its parents. There is no `CLAUDE.md` at the repo root.
   The root file drafted inside `docs/CLAUDE.md` needs to actually exist at
   `Osade/CLAUDE.md`.
-- **`docs/AGENTS.md` is herdr's `AGENTS.md`**, not Osade's — 305 lines of herdr
+- **`docs/AGENTS.md` is the substrate's `AGENTS.md`**, not Osade's — 305 lines of the substrate
   maintainer policy (`.github/MAINTAINERS`, `HERDR_ENV=1`, release workflow,
   ratatui render rules). Sitting in `docs/` it reads as project guidance for
-  Osade. CLAUDE.md's line *"herdr's own AGENTS.md rules apply to `backend/` only"*
+  Osade. CLAUDE.md's line *"the substrate's own AGENTS.md rules apply to `backend/` only"*
   is therefore already violated by file placement. Move it to
   `backend/AGENTS.md`.
-- herdr's `.github/` and `.agents/skills/herdr-*` are at the Osade repo root and
+- the substrate's `.github/` and `.agents/skills/herdr-*` are at the Osade repo root and
   will be read as Osade's CI and skills. Move them under `backend/`.
 - `backend/` is untracked (`git ls-files backend | wc -l` → 0). Decide now:
   submodule, vendored-and-committed at a pinned tag, or `.gitignore`d with a
@@ -610,10 +610,10 @@ Against OSADE.md §21's six checkboxes:
 
 | M0 item | Change |
 | --- | --- |
-| Vendor herdr binary + api schema; generate client; version guard | Schema comes from `herdr api schema --json` on the vendored binary, not from `backend/`. Guard on `protocol` **and** `version`. |
+| Vendor the substrate binary + api schema; generate client; version guard | Schema comes from `herdr api schema --json` on the vendored binary, not from `backend/`. Guard on `protocol` **and** `version`. |
 | Daemon: sqlite + migrations + change_log + CDC + ws | Unchanged. |
 | Electron: userData redirect, supervisor, utilityProcess, canvas renderer | Add the bincode decoder (§3a) and detached spawn + `HERDR_STARTUP_CWD` removal (§12). Benchmark surfaces here, not in M1 (§3c). |
-| One task end-to-end | Unchanged — **proven to work** (HERDR-CONTRACT.md §3.3). |
+| One task end-to-end | Unchanged — **proven to work** (SUBSTRATE-CONTRACT.md §3.3). |
 | — | **New:** event-subscriber as an N+1 connection manager (§6a). |
 | — | **New:** `state_change_seq` monotonic gate + `session.snapshot` reconcile (§5). |
 
@@ -643,7 +643,7 @@ carve-out is a rule someone widens later. Renaming costs nothing.
 ## 17. GAP — §13.4 needs a model, and OSADE.md never says where one comes from
 
 §13.4 specifies three model calls per mining run and says nothing about who
-makes them. Every other model in Osade is an *agent* — a process herdr owns,
+makes them. Every other model in Osade is an *agent* — a process the substrate owns,
 authenticated however the user already authenticated it. The miner is the first
 place the daemon itself needs inference.
 

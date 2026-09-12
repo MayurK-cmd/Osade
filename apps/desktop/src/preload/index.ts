@@ -4,13 +4,13 @@ import { contextBridge, ipcRenderer } from 'electron';
  * The contextBridge surface — OSADE.md §18.1.
  *
  * Deliberately tiny. The renderer talks to the daemon over tRPC + websocket on loopback; the
- * only things it needs from main are where the daemon is listening and the "open in herdr"
- * hint. Nothing here exposes Node, the filesystem, or herdr's sockets.
+ * only things it needs from main are where the daemon is listening and the "open in the substrate"
+ * hint. Nothing here exposes Node, the filesystem, or the substrate's sockets.
  */
 contextBridge.exposeInMainWorld('osade', {
   daemonPort: (): Promise<number | null> => ipcRenderer.invoke('osade:daemon-port'),
-  openInHerdr: (): Promise<{ command: string; hint: string }> =>
-    ipcRenderer.invoke('osade:open-in-herdr'),
+  openInSubstrate: (): Promise<{ command: string; hint: string }> =>
+    ipcRenderer.invoke('osade:open-in-the substrate'),
 
   /** The repository `osade .` opened on, or null when the window was opened on its own. */
   openedRepo: (): Promise<string | null> => ipcRenderer.invoke('osade:opened-repo'),

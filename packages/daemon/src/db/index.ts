@@ -73,9 +73,12 @@ export function migrate(db: Db): void {
 
   for (const migration of MIGRATIONS) {
     if (applied.has(migration.id)) continue;
+    // A migration that does not apply to this database is still recorded, so a fresh database
+    // and a repaired one end at the same version.
+    const runs = migration.when ? migration.when(db) : true;
     // Forward-only and atomic: a half-applied migration is worse than a failed boot.
     const run = db.transaction(() => {
-      db.exec(migration.sql);
+      if (runs) db.exec(migration.sql);
       db.prepare('INSERT INTO schema_migration (id, applied_at) VALUES (?, ?)').run(
         migration.id,
         Date.now(),

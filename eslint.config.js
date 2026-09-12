@@ -134,14 +134,14 @@ export default tseslint.config(
 
   // ── one boundary to the substrate (§4.2) ──────────────────────────────────
   //
-  // The rule is about the *protocol*, not the facade. §4.2 says only `daemon/src/herdr/**` may
+  // The rule is about the *protocol*, not the facade. §4.2 says only `daemon/src/substrate/**` may
   // import the **generated** client or open `herdr.sock` — so domain code calling the typed
-  // `HerdrClient` is the boundary working as intended, and forbidding that would only push the
+  // `SubstrateClient` is the boundary working as intended, and forbidding that would only push the
   // same coupling through a wrapper. What must not leak is (a) generated method names and
   // (b) raw socket access, so those are what is restricted.
   {
     files: ['packages/**/*.ts', 'apps/**/*.ts', 'apps/**/*.tsx'],
-    ignores: ['packages/daemon/src/herdr/**'],
+    ignores: ['packages/daemon/src/substrate/**'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -150,14 +150,14 @@ export default tseslint.config(
             {
               name: 'node:net',
               message:
-                'OSADE.md §4.2: raw socket access to herdr belongs in packages/daemon/src/herdr/**.',
+                'OSADE.md §4.2: raw socket access to the substrate belongs in packages/daemon/src/substrate/**.',
             },
           ],
           patterns: [
             {
-              group: ['**/herdr/generated/**'],
+              group: ['**/substrate/generated/**'],
               message:
-                'OSADE.md §4.2: only packages/daemon/src/herdr/** may import the generated herdr client. Use the HerdrClient facade.',
+                'OSADE.md §4.2: only packages/daemon/src/substrate/** may import the generated substrate client. Use the SubstrateClient facade.',
             },
             {
               group: ['octokit', '@octokit/*'],
@@ -170,7 +170,7 @@ export default tseslint.config(
   },
 
   // The daemon's own http/ws listener and Electron's supervisor open server sockets, not
-  // herdr sockets. §11's Octokit boundary is enforced separately below.
+  // the substrate sockets. §11's Octokit boundary is enforced separately below.
   {
     files: ['packages/daemon/src/server/**/*.ts', 'apps/desktop/src/main/**/*.ts'],
     rules: { 'no-restricted-imports': 'off' },

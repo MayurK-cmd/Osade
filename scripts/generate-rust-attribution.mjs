@@ -4,9 +4,12 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * Rust crate attribution for the herdr binary Osade ships.
+ * This file writes attribution for the vendored binary and the crates inside it, so the names
+ * in its output are the upstream ones on purpose. Do not rename them to Osade's vocabulary.
  *
- * Osade distributes a compiled herdr, so herdr's dependency tree is redistributed with it and
+ * Rust crate attribution for the substrate binary Osade ships.
+ *
+ * Osade distributes a compiled the substrate, so the substrate's dependency tree is redistributed with it and
  * every crate's licence has to be reproduced. `cargo-about` is the usual tool; this exists
  * because it is not installed and installing a global Rust tool to satisfy a build step is a
  * worse dependency than reading the two files that already pin the answer.

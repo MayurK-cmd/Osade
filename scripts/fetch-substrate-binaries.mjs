@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, renameSync } from 'node:fs
 import { join } from 'node:path';
 
 /**
- * Download the pinned herdr binaries and verify them — OSADE.md §18.1.
+ * Download the pinned the substrate binaries and verify them — OSADE.md §18.1.
  *
  * The binaries are **not committed**: ~91 MB across five platforms, which git stores badly and
  * every clone would pay for. What is committed is the thing that matters — a sha256 per asset in
@@ -14,13 +14,13 @@ import { join } from 'node:path';
  * A checksum mismatch is fatal and the file is deleted rather than left on disk, because a
  * half-verified binary that stays around is one a later step will happily use.
  *
- *   node scripts/fetch-herdr-binaries.mjs [--all]
+ *   node scripts/fetch-substrate-binaries.mjs [--all]
  *
  * Without `--all` it fetches only this machine's platform, which is what a developer needs.
  * Packaging wants `--all`.
  *
  * **This is not the only gate.** §4.1.1's boot drift check runs regardless, because a matching
- * checksum says the file is the one we pinned and says nothing about the herdr a user has on
+ * checksum says the file is the one we pinned and says nothing about the substrate a user has on
  * their PATH.
  */
 
@@ -107,14 +107,14 @@ function main() {
   const names = all ? Object.keys(pin.binary.assets) : [assetForThisMachine()];
 
   if (!names[0]) {
-    throw new Error(`no herdr release for ${process.platform}-${process.arch}`);
+    throw new Error(`no the substrate release for ${process.platform}-${process.arch}`);
   }
 
   for (const name of names) fetchOne(name);
 
   process.stdout.write(
     `\nverified against vendor/herdr/0.8.2-p20/pin.json.\n` +
-      `The boot drift check (OSADE.md §4.1.1) still runs — this says nothing about the herdr on PATH.\n`,
+      `The boot drift check (OSADE.md §4.1.1) still runs — this says nothing about the substrate on PATH.\n`,
   );
   if (!all && !existsSync(join(PIN_DIR, 'third-party'))) {
     process.stdout.write('note: third-party notices are missing from the pin directory.\n');

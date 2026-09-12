@@ -1,23 +1,23 @@
-# herdr Contract — the verified integration surface
+# the substrate Contract — the verified integration surface
 
-> This document records what herdr **actually does**, verified against
-> `backend/` source and against a live `herdr 0.8.2` server on this machine.
+> This document records what the substrate **actually does**, verified against
+> `backend/` source and against a live `the substrate 0.8.2` server on this machine.
 > Where the two disagree, both are recorded.
 >
 > Osade's daemon codes against **this** document, not against OSADE.md §4/§7.
 > Every claim below carries a `file:line` citation or a transcript of a live call.
 >
-> Verified: 2026-09-04, herdr `0.8.2`, Windows 11, JSON API protocol `20`.
+> Verified: 2026-09-04, the substrate `0.8.2`, Windows 11, JSON API protocol `20`.
 
 ---
 
-## 0. Two herdrs — read this first
+## 0. Two substrates — read this first
 
-There are two different herdrs in play and they are **not the same code**:
+There are two different substrates in play and they are **not the same code**:
 
 | | version | JSON API protocol | wire `PROTOCOL_VERSION` | methods in schema |
 | --- | --- | --- | --- | --- |
-| Installed binary (`C:\Users\asus\AppData\Local\Programs\Herdr\bin\herdr`) | 0.8.2 | 20 | 20 | 91 |
+| Installed binary (`C:\Users\asus\AppData\Local\Programs\The substrate\bin\the substrate`) | 0.8.2 | 20 | 20 | 91 |
 | `backend/` source tree | 0.8.2 (`backend/Cargo.toml:3`) | 22 | 22 (`backend/src/protocol/wire.rs:20`) | 101 |
 
 `backend/` is an **unreleased tree ahead of the released 0.8.2 binary**, with the
@@ -39,7 +39,7 @@ herdr api schema --json > vendor/herdr/<version>/herdr-api.schema.json
 ### 1.1 The file OSADE.md §4.1 names does not exist in `backend/`
 
 `backend/docs/` is absent from this checkout. The schema lives at
-`docs/next/api/herdr-api.schema.json` in upstream herdr and is `include_str!`'d
+`docs/next/api/herdr-api.schema.json` in the upstream substrate and is `include_str!`'d
 into the binary (`backend/src/cli/api.rs:1`), so **`backend/` as vendored here
 cannot compile.**
 
@@ -64,7 +64,7 @@ herdr api schema --output <path>
 Document shape (`backend/src/api/schema/tests.rs:32-46`):
 
 ```json
-{ "$schema": "...", "title": "Herdr API", "schema_version": 1, "protocol": 20,
+{ "$schema": "...", "title": "The substrate API", "schema_version": 1, "protocol": 20,
   "schemas": { "request": …, "success_response": …, "error_response": …,
                "event": …, "subscription_event": … } }
 ```
@@ -74,7 +74,7 @@ Generate TypeScript from `schemas.request` / `schemas.success_response` /
 
 ### 1.4 Version guard
 
-`ping` returns version, protocol and capabilities. Live response, `herdr 0.8.2`:
+`ping` returns version, protocol and capabilities. Live response, `the substrate 0.8.2`:
 
 ```json
 {"id":"p1","result":{"type":"pong","version":"0.8.2","protocol":20,
@@ -133,10 +133,10 @@ Exceptions that hold the connection open:
 | `pane.graphics.stream` | streams graphics frames |
 | `events.wait`, `agent.wait`, `agent.prompt` (with `wait`), `pane.wait_for_output` | blocks, then writes one response |
 
-**Consequence for the daemon:** `packages/daemon/src/herdr/` opens a fresh
+**Consequence for the daemon:** `packages/daemon/src/substrate/` opens a fresh
 connection per call. Do not build a connection pool or a correlation-id
 multiplexer — there is nothing to multiplex. Each connection is one OS thread on
-the herdr side (`backend/src/api/server.rs:90-100`), so batch where you can.
+the substrate side (`backend/src/api/server.rs:90-100`), so batch where you can.
 
 ---
 
@@ -167,33 +167,33 @@ attached** and no TUI running:
 
 ```
 $ HERDR_SESSION=osade herdr server &                   # headless, no tty
-$ herdr workspace create --cwd <repo> --label osade-task-1
+$ substrate workspace create --cwd <repo> --label osade-task-1
   → {"type":"workspace_created","workspace":{"workspace_id":"w1",…},
      "root_pane":{"pane_id":"w1:p1","scroll":{"viewport_rows":40},…}}
 
-$ herdr pane send-text w1:p1 'echo OSADE_LIVE_CHECK_$$' ; herdr pane send-keys w1:p1 Enter
-$ herdr pane read w1:p1 --source recent --lines 12
+$ substrate pane send-text w1:p1 'echo OSADE_LIVE_CHECK_$$' ; substrate pane send-keys w1:p1 Enter
+$ substrate pane read w1:p1 --source recent --lines 12
   → PS …\reporepo> echo OSADE_LIVE_CHECK_$$
     OSADE_LIVE_CHECK_}                       # real PTY, real shell, real output
 
-$ herdr worktree create --cwd <repo> --branch osade/demo-1 --base 089a586 \
+$ substrate worktree create --cwd <repo> --branch osade/demo-1 --base 089a586 \
       --path <wt> --label 'task demo-1' --no-focus
   → {"type":"worktree_created","workspace":{"workspace_id":"w3","worktree":{…}}}
   $ git -C <wt> status -sb  →  ## osade/demo-1     (HEAD = 089a586, pinned)
 
-$ herdr tab create --workspace w3 --label agent --no-focus   → w3:t2 / pane w3:p2
-$ herdr agent start osade-demo --kind claude --pane w3:p2 --timeout 60000
+$ substrate tab create --workspace w3 --label agent --no-focus   → w3:t2 / pane w3:p2
+$ substrate agent start osade-demo --kind claude --pane w3:p2 --timeout 60000
   → {"error":{"code":"agent_not_ready",
       "message":"agent osade-demo is blocked during startup…"}}
-  $ herdr pane read w3:p2 --source visible
+  $ substrate pane read w3:p2 --source visible
     → "Quick safety check: Is this a project you created or one you trust?"
        ❯ No, exit  /  Yes, I trust this folder
-  $ herdr agent list  →  agent_status: "blocked"      # detection got it right
+  $ substrate agent list  →  agent_status: "blocked"      # detection got it right
 
-$ herdr pane send-keys w3:p2 Down ; herdr pane send-keys w3:p2 Enter
+$ substrate pane send-keys w3:p2 Down ; substrate pane send-keys w3:p2 Enter
   → Claude Code TUI live in the pane
 
-$ herdr agent prompt osade-demo "Reply with exactly PONG…" --wait --timeout 120000
+$ substrate agent prompt osade-demo "Reply with exactly PONG…" --wait --timeout 120000
   → {"type":"agent_prompted","agent":{"agent_status":"done",
       "terminal_title":"✳ Pong response","interactive_ready":true,…}}
 ```
@@ -213,10 +213,10 @@ Observed status stream on the pane subscription:
 
 Stopping and restarting the server restores workspaces, tabs, panes **with the
 same ids** (`w2`, `w3`, `w3:p2`) and the same cwd — but the **agent process is
-gone**: `agent=undefined`, `agent_status=unknown`. herdr restores shells, not
+gone**: `agent=undefined`, `agent_status=unknown`. the substrate restores shells, not
 agent processes.
 
-**Consequence:** after a herdr restart the daemon must re-run `agent.start`
+**Consequence:** after a substrate restart the daemon must re-run `agent.start`
 (optionally with the catalog's resume args and the `agent_session` id captured
 earlier). A restart is not a task death — do not set `terminated`.
 
@@ -230,7 +230,7 @@ earlier). A restart is not a task death — do not set `terminated`.
 (`backend/src/api/mod.rs:20`, `backend/src/session.rs:173-181`).
 
 Verified: `HERDR_SESSION=osade herdr server` created
-`%APPDATA%\herdr\sessions\osade\{herdr.sock,herdr-client.sock,herdr-server.log,session.json}`
+`%APPDATA%\the substrate\sessions\osade\{herdr.sock,herdr-client.sock,herdr-server.log,session.json}`
 and ran **concurrently with the user's own `default` session** with no
 interference (`herdr session list` showed both `running`).
 
@@ -289,7 +289,7 @@ worktree.list   → { workspace_id?, cwd?, trust_repository }
 **One call creates the git worktree *and* the workspace.** There is no
 "worktree without a workspace".
 
-What herdr actually runs (`backend/src/worktree.rs:238-320`):
+What the substrate actually runs (`backend/src/worktree.rs:238-320`):
 
 - branch does not exist → `git worktree add -b <branch> <path> <base>`
 - branch exists → `git worktree add <path> <branch>`
@@ -299,7 +299,7 @@ What herdr actually runs (`backend/src/worktree.rs:238-320`):
   (`checkout_has_dirty_files`, `:214`)
 
 **It does not run `git worktree prune` before `add`.** OSADE §9 rule 3 is not
-satisfied by herdr; see PRD-DELTA §6.
+satisfied by the substrate; see PRD-DELTA §6.
 
 ### 5.3 Tabs (Osade "lanes")
 
@@ -321,7 +321,7 @@ pane.split → PaneSplitParams (backend/src/api/schema/panes.rs:27-43)
 ```
 
 **There is no `command` / `argv` field on any pane-creating method.** A new pane
-always runs the user's configured shell. Osade cannot ask herdr to spawn
+always runs the user's configured shell. Osade cannot ask the substrate to spawn
 `claude --permission-mode auto` directly. See §6.
 
 Input:
@@ -374,7 +374,7 @@ out-of-order fact writes.**
 
 `AgentStatus` (`backend/src/api/schema/common.rs:135-142`):
 `idle | working | blocked | done | unknown`. Maps 1:1 onto OSADE §5.2
-`agent_fact.herdr_state`; **`done` is a fifth value OSADE.md omits** and it is the
+`agent_fact.substrate_state`; **`done` is a fifth value OSADE.md omits** and it is the
 one that means "turn finished" (§6 row 10).
 
 Supported `kind` values (verified from `--help` on the installed binary):
@@ -448,7 +448,7 @@ Preconditions, all enforced with distinct error codes
 
 **Consequences for `launch-task.ts`:**
 
-- The binary name is herdr's, not Osade's. `AgentCatalogEntry.binary` is
+- The binary name is the substrate's, not Osade's. `AgentCatalogEntry.binary` is
   advisory only — if the user's `claude` is at an odd path, put it on `PATH`.
 - Everything else in the catalog entry (`autonomousArgs`, `planArgs`,
   `resumeArgs`, system-prompt flags) goes through `params.args` and works.
@@ -519,7 +519,7 @@ N connections  → one per live agent pane, pane.agent_status_changed
 ```
 
 Open a status connection when `pane.created`/`agent.start` gives you a pane id;
-close it on `pane.closed`/`pane.exited`. Each is a herdr-side thread; ~15
+close it on `pane.closed`/`pane.exited`. Each is a substrate-side thread; ~15
 concurrent tasks is ~16 connections, which is fine.
 
 `pane.agent_status_changed` payload (`backend/src/api/schema/events.rs:398-411`),
@@ -586,10 +586,10 @@ requires both `pane_id` and `agent_status`.
 OSADE §8.3 predicted this; it fired on the very first launch into a fresh
 worktree. `agent.start` returned `agent_not_ready` and the pane showed Claude
 Code's *"Quick safety check: Is this a project you created or one you trust?"*
-selector. **herdr's detector classified it `blocked`** — no Osade screen-scraping
+selector. **the substrate's detector classified it `blocked`** — no Osade screen-scraping
 needed to know something is wrong.
 
-The supported resolution, entirely within herdr's API:
+The supported resolution, entirely within the substrate's API:
 
 ```
 pane.wait_for_output { pane_id, source: "visible",
@@ -619,12 +619,12 @@ path if a prompt cannot be matched.
 | kilo, kimi, mastracode, omp, opencode, pi | **claude**, **codex**, antigravity_cli, copilot, cursor, devin, droid, grok | hermes (plugin.yaml), qodercli, qwen |
 
 **Nothing bundled calls `pane.report_metadata`.** `activity_text`, `tool_name`
-and `final_message` in OSADE §5.2 have no herdr-native source for Claude Code.
+and `final_message` in OSADE §5.2 have no substrate-native source for Claude Code.
 
 For `claude`, the hook (`backend/src/integration/assets/claude/herdr-agent-state.sh`)
 fires on `SessionStart` only, skips subagents, and posts exactly one
 `pane.report_agent_session` carrying `session_id` and `transcript_path`. Claude
-Code's status therefore comes **entirely from herdr's screen-detection
+Code's status therefore comes **entirely from the substrate's screen-detection
 manifests** — which the live test showed working correctly through
 blocked/idle/working/done.
 
@@ -641,7 +641,7 @@ Env injected into every managed pane (`backend/src/pane.rs:115-137`,
 ```
 HERDR_ENV=1
 HERDR_SOCKET_PATH=<active api socket>
-HERDR_BIN_PATH=<herdr executable>
+HERDR_BIN_PATH=<substrate executable>
 HERDR_WORKSPACE_ID / HERDR_TAB_ID / HERDR_PANE_ID
 ```
 
@@ -691,7 +691,7 @@ shell.snapshot.v1   shell.surface.v1   shell.input.semantic.v1   shell.blob.v1
 **Endpoint clients are exempt from `PROTOCOL_VERSION`.** `do_handshake` compares
 `generation` and codec names only, never build versions
 (`backend/src/client/handshake.rs:219-232`). This is the real guarantee: an
-Osade shell built against generation 1 keeps working across herdr upgrades.
+Osade shell built against generation 1 keeps working across the substrate upgrades.
 
 **But the payloads are bincode.** `ClientShellSnapshot`, `PaneSurface`,
 `PaneSurfacePatch`, `Terminal`, `Graphics` are native enum variants
@@ -712,7 +712,7 @@ splits: PaneSurfaceSplit[], popup?, graphics
 `PaneSurfacePatch` (`wire.rs:1244-1254`): `base_surface_revision`,
 `surface_revision`, `rows: [{x, y, cells}]`, `panes`, `cursor?`.
 
-So the server sends **herdr's own layout of one tab**, damage-tracked. It does
+So the server sends **the substrate's own layout of one tab**, damage-tracked. It does
 not stream "pane X's cells" on request. Osade cannot compose 15 arbitrary panes
 from different tasks into its own React grid over one connection.
 
@@ -729,7 +729,7 @@ That is the M0 design. See PRD-DELTA §3 for the cost.
 
 ### 10.3 Methods an endpoint client may invoke
 
-Over the shell connection, via `ClientShellEndpointRequest`, herdr accepts a
+Over the shell connection, via `ClientShellEndpointRequest`, the substrate accepts a
 fixed subset (`backend/src/server/client_commands.rs:15-53`):
 
 ```
@@ -747,7 +747,7 @@ worktree.create  worktree.list  worktree.open  worktree.remove
 **Not** in the list: `agent.start`, `agent.prompt`, `agent.list`,
 `events.subscribe`, `pane.send_*`, `pane.read`. Those are daemon-only over
 `herdr.sock` — which matches OSADE §4.2's split, and the boundary is enforced by
-herdr, not just by Osade lint. A method missing from `welcome.methods` must
+the substrate, not just by Osade lint. A method missing from `welcome.methods` must
 disable one action, never the connection (`endpoint.rs:6-9`).
 
 ---
@@ -773,7 +773,7 @@ This confirms OSADE §18's vendoring decision: **ship prebuilt binaries, never
 build at install time.** Checksums: `backend/distribution/latest.json`,
 `backend/src/checksum.rs`.
 
-For M0 you do not need to build herdr at all — the installed 0.8.2 binary serves
+For M0 you do not need to build the substrate at all — the installed 0.8.2 binary serves
 every call in this document.
 
 ---

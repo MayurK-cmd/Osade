@@ -1,6 +1,6 @@
 {
-  "$comment": "The pinned herdr target. api-schema.json in this directory is the ONLY permitted source for herdr client codegen (OSADE.md \u00a74.1). backend/ is reference reading for behaviour, never for API derivation.",
-  "herdr": {
+  "$comment": "The pinned substrate target. api-schema.json in this directory is the ONLY permitted source for substrate client codegen (OSADE.md \u00a74.1). backend/ is reference reading for behaviour, never for API derivation.",
+  "substrate": {
     "version": "0.8.2",
     "protocol": 20,
     "schema_version": 1,
@@ -8,7 +8,7 @@
     "endpoint_protocol_generation": null
   },
   "identity": {
-    "$comment": "herdr's version string is NOT a contract. Two builds both report 0.8.2 with different protocols and a 10-method gap (PRD-DELTA #1). The identity of a herdr target is the tuple (protocol, method set), and the version string is a label. Directory names are <version>-p<protocol> for that reason.",
+    "$comment": "The substrate's version string is NOT a contract. Two builds both report 0.8.2 with different protocols and a 10-method gap (PRD-DELTA #1). The identity of a substrate target is the tuple (protocol, method set), and the version string is a label. Directory names are <version>-p<protocol> for that reason.",
     "key": "0.8.2-p20",
     "compare_on": [
       "protocol",

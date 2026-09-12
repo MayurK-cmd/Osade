@@ -17,13 +17,13 @@ import { join } from 'node:path';
  * no tarball checksum here because a tarball hash would be a hash of GitHub's compression
  * settings, which they explicitly decline to keep stable.
  *
- *   node scripts/fetch-herdr-source.mjs [--force]
+ *   node scripts/fetch-substrate-source.mjs [--force]
  */
 
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const BACKEND = join(ROOT, 'backend');
 
-/** The herdr Osade reads. Bump alongside `vendor/herdr/<version>-p<protocol>/`. */
+/** The substrate Osade reads. Bump alongside `vendor/herdr/<version>-p<protocol>/`. */
 const PIN = {
   repository: 'herdrdev/herdr',
   // The commit `backend/` actually is — established by comparing every tracked blob hash
@@ -55,7 +55,7 @@ function main() {
   rmSync(staging, { recursive: true, force: true });
   mkdirSync(staging, { recursive: true });
 
-  const archive = join(staging, 'herdr.tar.gz');
+  const archive = join(staging, 'the substrate.tar.gz');
   log(`fetching ${PIN.repository}@${PIN.commit.slice(0, 12)} …`);
   execFileSync('curl', ['-sSL', '--fail', '-o', archive, url], { stdio: 'inherit' });
 
@@ -64,7 +64,7 @@ function main() {
 
   // codeload names the top directory <repo>-<sha>.
   const extracted = readdirSync(staging).find((entry) => entry.startsWith('herdr-'));
-  if (!extracted) throw new Error('the archive did not contain a herdr- directory');
+  if (!extracted) throw new Error('the archive did not contain a substrate- directory');
 
   renameSync(join(staging, extracted), BACKEND);
   rmSync(staging, { recursive: true, force: true });
@@ -76,7 +76,7 @@ function main() {
   );
 
   log(`backend/ is ${PIN.repository}@${PIN.commit.slice(0, 12)} (${PIN.committedAt}).`);
-  log('It is read-only reference. Changes herdr needs go in patches/ (see patches/README.md).');
+  log('It is read-only reference. Changes the substrate needs go in patches/ (see patches/README.md).');
 }
 
 main();

@@ -8,13 +8,13 @@ const execFileAsync = promisify(execFile);
 /**
  * The narrow set of git commands Osade runs itself — OSADE.md §1 carve-out and §9.
  *
- * herdr owns worktree *lifecycle*: create, open, remove. Osade owns the read-only and
- * maintenance commands herdr does not run, because there is no herdr API for them and no git
+ * the substrate owns worktree *lifecycle*: create, open, remove. Osade owns the read-only and
+ * maintenance commands the substrate does not run, because there is no the substrate API for them and no git
  * event to subscribe to (§7.4):
  *
- *   - `worktree prune` before a create, which herdr never does (§9 rule 3)
+ *   - `worktree prune` before a create, which the substrate never does (§9 rule 3)
  *   - `status --porcelain` / `diff --stat`, because `GitStatusRefreshed` does not exist
- *   - `rev-parse` to pin a base commit before handing it to herdr
+ *   - `rev-parse` to pin a base commit before handing it to the substrate
  *
  * Nothing here creates, opens or removes a worktree. That would be a §1 violation.
  */

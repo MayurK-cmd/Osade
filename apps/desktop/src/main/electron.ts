@@ -22,7 +22,7 @@ app.setPath('sessionData', join(OSADE_ROOT, 'electron', 'session'));
 
 import { repoFromArgv } from './argv.js';
 import { adoptOrSpawnDaemon } from './supervisor/daemon.js';
-import { adoptOrSpawnHerdr } from './supervisor/herdr.js';
+import { adoptOrSpawnSubstrate } from './supervisor/substrate.js';
 
 const isDev = !app.isPackaged;
 
@@ -61,7 +61,7 @@ let openedRepo: string | null = null;
  */
 if (!app.requestSingleInstanceLock()) {
   // `app.exit`, not `app.quit`. Quit is asynchronous, so `whenReady` still fires and the losing
-  // instance boots far enough to adopt herdr and open a daemon connection before it dies —
+  // instance boots far enough to adopt the substrate and open a daemon connection before it dies —
   // observed doing exactly that. Exit stops here.
   app.exit(0);
 } else {
@@ -93,7 +93,7 @@ if (!app.requestSingleInstanceLock()) {
  * Startup order, and it matters (§18.1):
  *   1. userData redirect (above, before this runs)
  *   2. boot drift check — owned by the daemon, which refuses to start on a mismatch
- *   3. adopt-or-spawn herdr on the `osade` session; wait for ping
+ *   3. adopt-or-spawn the substrate on the `osade` session; wait for ping
  *   4. spawn the daemon; wait for its ready handshake, never a fixed sleep
  *   5. create the window
  *
@@ -103,8 +103,8 @@ async function boot(): Promise<void> {
   openedRepo = repoFromArgv(process.argv);
   if (openedRepo) say(`boot: opening on ${openedRepo}`);
 
-  say('boot: adopting or spawning herdr');
-  await adoptOrSpawnHerdr({ onInfo: (m) => say(`[herdr] ${m}`) });
+  say('boot: adopting or spawning the substrate');
+  await adoptOrSpawnSubstrate({ onInfo: (m) => say(`[substrate] ${m}`) });
 
   const entry = process.env.OSADE_DAEMON_ENTRY ?? daemonEntry();
   say(`boot: daemon entry ${entry}`);
@@ -346,14 +346,14 @@ ipcMain.handle('osade:daemon-port', () => daemonPort);
 ipcMain.handle('osade:opened-repo', () => openedRepo);
 
 /**
- * §4.4 — "Open in herdr" replaces the embedded terminal in M0. A real herdr client, full
+ * §4.4 — "Open in the substrate" replaces the embedded terminal in M0. A real substrate client, full
  * fidelity, real input, and no bincode decoder to maintain.
  *
- * Note the consequence recorded in §4.4: attaching a client marks panes seen, so herdr flips
+ * Note the consequence recorded in §4.4: attaching a client marks panes seen, so the substrate flips
  * `done` to `idle` for that tab. That is safe only because `idle` is inert in the event
  * mapping (§6.1) — the task keeps its `awaiting_review`.
  */
-ipcMain.handle('osade:open-in-herdr', async () => {
+ipcMain.handle('osade:open-in-the substrate', async () => {
   const command =
     process.platform === 'win32'
       ? 'start'
@@ -381,7 +381,7 @@ app.whenReady().then(
 );
 
 /**
- * §18.1 — **shutdown detaches. It does not stop herdr and does not stop the daemon.**
+ * §18.1 — **shutdown detaches. It does not stop the substrate and does not stop the daemon.**
  * Agents keep running. "Stop everything" is an explicit menu item, not a side effect of
  * closing a window.
  */

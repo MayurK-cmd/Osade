@@ -1,8 +1,8 @@
 /**
  * The boot drift check — OSADE.md §4.1.1.
  *
- * herdr's version string is not a contract: two builds both report `0.8.2` with different
- * protocols and a ten-method gap (PRD-DELTA #1). So a herdr target is identified by
+ * the substrate's version string is not a contract: two builds both report `0.8.2` with different
+ * protocols and a ten-method gap (PRD-DELTA #1). So a substrate target is identified by
  * (protocol, method set), and this compares exactly that.
  *
  * Three assertions, in order:
@@ -10,20 +10,20 @@
  *   2. methodSet(live) ⊇ methodSet(pinned)          → fatal
  *   3. methodSet(live) \ methodSet(pinned) is empty → warn only
  *
- * Assertion 3 must never block a boot, or every herdr upgrade becomes an outage.
+ * Assertion 3 must never block a boot, or every the substrate upgrade becomes an outage.
  * The version string is deliberately never compared.
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import { HERDR_METHODS, HERDR_PIN } from './generated/index.js';
+import { SUBSTRATE_METHODS, SUBSTRATE_PIN } from './generated/index.js';
 
 const execFileAsync = promisify(execFile);
 
 /** How long we give `herdr api schema --json` before giving up. */
 const SCHEMA_CAPTURE_TIMEOUT_MS = 10_000;
 
-/** herdr's schema bundle prints ~265 KB; allow generous headroom. */
+/** substrate's schema bundle prints ~265 KB; allow generous headroom. */
 const SCHEMA_MAX_BUFFER = 8 * 1024 * 1024;
 
 export interface DriftResult {
@@ -39,11 +39,11 @@ export interface DriftResult {
   message: string;
 }
 
-export class HerdrDriftError extends Error {
+export class SubstrateDriftError extends Error {
   readonly result: DriftResult;
   constructor(result: DriftResult) {
     super(result.message);
-    this.name = 'HerdrDriftError';
+    this.name = 'SubstrateDriftError';
     this.result = result;
   }
 }
@@ -51,7 +51,7 @@ export class HerdrDriftError extends Error {
 /**
  * Reads the schema from the binary that is actually about to be used.
  *
- * Deliberately not from a cached copy: the point is to catch a user running a different herdr
+ * Deliberately not from a cached copy: the point is to catch a user running a different the substrate
  * than the one Osade pinned.
  */
 export async function readLiveSchema(binaryPath: string): Promise<unknown> {
@@ -92,12 +92,12 @@ export function compareToPin(liveSchema: unknown, binaryPath: string): DriftResu
   const liveProtocol = extractProtocol(liveSchema);
   const liveMethods = extractMethods(liveSchema);
   const live = new Set(liveMethods);
-  const pinned = new Set<string>(HERDR_METHODS);
+  const pinned = new Set<string>(SUBSTRATE_METHODS);
 
   const missing = [...pinned].filter((m) => !live.has(m)).sort();
   const unexpected = [...live].filter((m) => !pinned.has(m)).sort();
 
-  const protocolMismatch = liveProtocol !== HERDR_PIN.protocol;
+  const protocolMismatch = liveProtocol !== SUBSTRATE_PIN.protocol;
   const fatal = protocolMismatch || missing.length > 0;
 
   const summary = (list: string[]) =>
@@ -110,25 +110,25 @@ export function compareToPin(liveSchema: unknown, binaryPath: string): DriftResu
   let message: string;
   if (protocolMismatch) {
     message =
-      `herdr protocol mismatch: pinned ${HERDR_PIN.key} expects protocol ` +
-      `${HERDR_PIN.protocol}, binary at ${binaryPath} reports ` +
+      `the substrate protocol mismatch: pinned ${SUBSTRATE_PIN.key} expects protocol ` +
+      `${SUBSTRATE_PIN.protocol}, binary at ${binaryPath} reports ` +
       `${Number.isNaN(liveProtocol) ? 'no protocol field' : liveProtocol}.\n` +
       `missing methods: ${summary(missing)}   unexpected methods: ${summary(unexpected)}\n` +
       `re-pin with: herdr api schema --json > ` +
       `vendor/herdr/<version>-p<protocol>/api-schema.json`;
   } else if (missing.length > 0) {
     message =
-      `herdr is missing ${missing.length} pinned method(s): ${summary(missing)}.\n` +
+      `the substrate is missing ${missing.length} pinned method(s): ${summary(missing)}.\n` +
       `binary at ${binaryPath} reports protocol ${liveProtocol}, which matches the pin, ` +
       `so this is a build difference rather than a protocol bump.\n` +
       `re-pin with: herdr api schema --json > ` +
       `vendor/herdr/<version>-p<protocol>/api-schema.json`;
   } else if (unexpected.length > 0) {
     message =
-      `herdr at ${binaryPath} has ${unexpected.length} method(s) beyond the pin ` +
+      `the substrate at ${binaryPath} has ${unexpected.length} method(s) beyond the pin ` +
       `(${summary(unexpected)}). This is a newer build; Osade will work, but schedule a re-pin.`;
   } else {
-    message = `herdr ${HERDR_PIN.key} matches the pin (protocol ${liveProtocol}, ${liveMethods.length} methods).`;
+    message = `the substrate ${SUBSTRATE_PIN.key} matches the pin (protocol ${liveProtocol}, ${liveMethods.length} methods).`;
   }
 
   return {
@@ -143,7 +143,7 @@ export function compareToPin(liveSchema: unknown, binaryPath: string): DriftResu
 }
 
 /**
- * Boot guard. Throws `HerdrDriftError` on a fatal mismatch; returns the result otherwise so
+ * Boot guard. Throws `SubstrateDriftError` on a fatal mismatch; returns the result otherwise so
  * the caller can log a warning for an unexpected-method superset.
  */
 export async function assertNoDrift(binaryPath: string): Promise<DriftResult> {
@@ -152,7 +152,7 @@ export async function assertNoDrift(binaryPath: string): Promise<DriftResult> {
     liveSchema = await readLiveSchema(binaryPath);
   } catch (cause) {
     const reason = cause instanceof Error ? cause.message : String(cause);
-    throw new HerdrDriftError({
+    throw new SubstrateDriftError({
       ok: false,
       fatal: true,
       liveProtocol: Number.NaN,
@@ -160,12 +160,12 @@ export async function assertNoDrift(binaryPath: string): Promise<DriftResult> {
       missing: [],
       unexpected: [],
       message:
-        `could not read the herdr schema from ${binaryPath}: ${reason}\n` +
-        `Osade cannot verify which herdr it is talking to, so it will not start.`,
+        `could not read the substrate schema from ${binaryPath}: ${reason}\n` +
+        `Osade cannot verify which the substrate it is talking to, so it will not start.`,
     });
   }
 
   const result = compareToPin(liveSchema, binaryPath);
-  if (result.fatal) throw new HerdrDriftError(result);
+  if (result.fatal) throw new SubstrateDriftError(result);
   return result;
 }

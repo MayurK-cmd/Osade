@@ -1,7 +1,7 @@
 # todo
 
-Only what is left. M0–M3 are built and green: `pnpm check` (322 passing), `pnpm test:e2e` against
-real herdr, and `pnpm --filter @osade/desktop smoke` boots the app against a live daemon and
+Only what is left. M0–M3 are built and green: `pnpm check` (334 passing), `pnpm test:e2e` against
+real substrate, and `pnpm --filter @osade/desktop smoke` boots the app against a live daemon and
 photographs the window.
 
 ## Needs you

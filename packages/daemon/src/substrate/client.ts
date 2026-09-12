@@ -1,60 +1,60 @@
 import net from 'node:net';
 import { randomUUID } from 'node:crypto';
 
-import type { HerdrMethod, HerdrMethodParams } from './generated/index.js';
+import type { SubstrateMethod, SubstrateMethodParams } from './generated/index.js';
 
 /**
  * Re-exported so callers can name a params shape without importing the generated client
  * directly — §4.2 restricts the *generated* module, not the facade.
  */
-export type { HerdrMethod, HerdrMethodParams } from './generated/index.js';
-import { herdrApiSocketPath, OSADE_SESSION, toConnectTarget } from './socket-path.js';
+export type { SubstrateMethod, SubstrateMethodParams } from './generated/index.js';
+import { substrateApiSocketPath, OSADE_SESSION, toConnectTarget } from './socket-path.js';
 
 /**
- * The herdr JSON API client — OSADE.md §4.2.
+ * The substrate JSON API client — OSADE.md §4.2.
  *
- * INVARIANT: `packages/daemon/src/herdr/**` is the only place that opens `herdr.sock` or
+ * INVARIANT: `packages/daemon/src/substrate/**` is the only place that opens `herdr.sock` or
  * imports the generated client.
  *
  * INVARIANT: **one request per connection.** `handle_connection_with_stop` reads exactly one
  * line, dispatches, writes one response and returns (`backend/src/api/server.rs:154-300`).
  * There is no multiplexing and no keep-alive, so there is deliberately no connection pool and
  * no correlation-id router here — there would be nothing to multiplex. Each connection is an
- * OS thread on herdr's side, so prefer one blocking call (`agent.prompt` with `wait`) over
+ * OS thread on the substrate's side, so prefer one blocking call (`agent.prompt` with `wait`) over
  * prompt-then-poll.
  */
 
-export interface HerdrErrorBody {
+export interface SubstrateErrorBody {
   code: string;
   message: string;
 }
 
-/** A structured error from herdr, carrying the code so callers can branch on it (§8.2). */
-export class HerdrApiError extends Error {
+/** A structured error from substrate, carrying the code so callers can branch on it (§8.2). */
+export class SubstrateApiError extends Error {
   readonly code: string;
   readonly method: string;
-  constructor(method: string, body: HerdrErrorBody) {
+  constructor(method: string, body: SubstrateErrorBody) {
     super(`${method} failed: ${body.code}: ${body.message}`);
-    this.name = 'HerdrApiError';
+    this.name = 'SubstrateApiError';
     this.code = body.code;
     this.method = method;
   }
 }
 
-export class HerdrTransportError extends Error {
+export class SubstrateTransportError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
-    this.name = 'HerdrTransportError';
+    this.name = 'SubstrateTransportError';
   }
 }
 
-/** Anything herdr returns in `result`. Callers narrow on `result.type`. */
-export interface HerdrResult {
+/** Anything substrate returns in `result`. Callers narrow on `result.type`. */
+export interface SubstrateResult {
   type: string;
   [key: string]: unknown;
 }
 
-export interface HerdrClientOptions {
+export interface SubstrateClientOptions {
   /** Defaults to the `osade` named session (§2.2). */
   session?: string;
   socketPath?: string;
@@ -64,12 +64,12 @@ export interface HerdrClientOptions {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
-export class HerdrClient {
+export class SubstrateClient {
   readonly socketPath: string;
   readonly #timeoutMs: number;
 
-  constructor(options: HerdrClientOptions = {}) {
-    this.socketPath = options.socketPath ?? herdrApiSocketPath(options.session ?? OSADE_SESSION);
+  constructor(options: SubstrateClientOptions = {}) {
+    this.socketPath = options.socketPath ?? substrateApiSocketPath(options.session ?? OSADE_SESSION);
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
@@ -80,9 +80,9 @@ export class HerdrClient {
    * `agent.prompt` with `wait`, `agent.wait` and `pane.wait_for_output`, which block on the
    * server until they settle.
    */
-  async request<M extends HerdrMethod, R = HerdrResult>(
+  async request<M extends SubstrateMethod, R = SubstrateResult>(
     method: M,
-    params: HerdrMethodParams[M],
+    params: SubstrateMethodParams[M],
     timeoutMs?: number,
   ): Promise<R> {
     const id = `osade:${randomUUID()}`;
@@ -92,13 +92,13 @@ export class HerdrClient {
     const response = await this.#roundTrip(line, budget, method);
     const parsed = JSON.parse(response) as {
       id?: string;
-      result?: HerdrResult;
-      error?: HerdrErrorBody;
+      result?: SubstrateResult;
+      error?: SubstrateErrorBody;
     };
 
-    if (parsed.error) throw new HerdrApiError(method, parsed.error);
+    if (parsed.error) throw new SubstrateApiError(method, parsed.error);
     if (!parsed.result) {
-      throw new HerdrTransportError(`${method}: response had neither result nor error`);
+      throw new SubstrateTransportError(`${method}: response had neither result nor error`);
     }
     // The schema does not correlate a method with its `ResponseResult` variant — that mapping
     // lives in Rust, not in the bundle — so callers name the shape they expect and narrow on
@@ -113,7 +113,7 @@ export class HerdrClient {
     capabilities?: {
       live_handoff?: boolean;
       detached_server_daemon?: boolean;
-      /** Absent on herdr 0.8.2-p20 — every capability field is optional (§4.1). */
+      /** Absent on substrate 0.8.2-p20 — every capability field is optional (§4.1). */
       endpoint_protocol_generation?: number | null;
     } | null;
   }> {
@@ -148,7 +148,7 @@ export class HerdrClient {
 
       const timer = setTimeout(() => {
         finish(
-          new HerdrTransportError(
+          new SubstrateTransportError(
             `${method}: timed out after ${timeoutMs}ms on ${this.socketPath}`,
           ),
         );
@@ -159,18 +159,18 @@ export class HerdrClient {
       socket.on('data', (chunk) => {
         buffer += chunk.toString('utf8');
         const newline = buffer.indexOf('\n');
-        // herdr answers with exactly one line, then closes. Take the first and stop.
+        // the substrate answers with exactly one line, then closes. Take the first and stop.
         if (newline >= 0) finish(null, buffer.slice(0, newline));
       });
 
       socket.on('end', () => {
         if (buffer.trim().length > 0) finish(null, buffer.trim());
-        else finish(new HerdrTransportError(`${method}: connection closed with no response`));
+        else finish(new SubstrateTransportError(`${method}: connection closed with no response`));
       });
 
       socket.on('error', (cause) => {
         finish(
-          new HerdrTransportError(`${method}: cannot reach herdr at ${this.socketPath}`, { cause }),
+          new SubstrateTransportError(`${method}: cannot reach the substrate at ${this.socketPath}`, { cause }),
         );
       });
     });

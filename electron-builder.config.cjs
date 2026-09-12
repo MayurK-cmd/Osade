@@ -12,7 +12,7 @@ const { join } = require('node:path');
  *   - a **Node runtime**, because the daemon cannot run on Electron's. `better-sqlite3` is built
  *     for one ABI (NODE_MODULE_VERSION 127 for Node 22, 130 for Electron 33) and the daemon also
  *     runs under the CLI and the tests. One runtime, one build.
- *   - the **herdr** binary Osade supervises, with the notices its licence requires
+ *   - the **substrate** binary Osade supervises, with the notices its licence requires
  *
  * JavaScript rather than YAML for one reason: electron-builder resolves the Electron version
  * from the *root* package.json, and Osade's electron is a devDependency of `apps/desktop`, where
