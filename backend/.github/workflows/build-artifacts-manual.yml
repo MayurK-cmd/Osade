@@ -100,7 +100,7 @@ jobs:
 
       - name: Package artifact
         run: |
-          cp target/${{ matrix.target }}/release/herdr ${{ matrix.name }}
+          cp target/${{ matrix.target }}/release/osade ${{ matrix.name }}
           file ${{ matrix.name }} > BUILD_INFO.txt
           ldd ${{ matrix.name }} 2>&1 | tee -a BUILD_INFO.txt
           grep -q "statically linked" BUILD_INFO.txt
@@ -169,7 +169,7 @@ jobs:
 
       - name: Package artifact
         run: |
-          cp target/${{ matrix.target }}/release/herdr ${{ matrix.name }}
+          cp target/${{ matrix.target }}/release/osade ${{ matrix.name }}
           file ${{ matrix.name }} > BUILD_INFO.txt
           {
             echo "commit=$GITHUB_SHA"
@@ -228,7 +228,7 @@ jobs:
           $package = Join-Path $env:RUNNER_TEMP "Microsoft.Windows.Console.ConPTY.nupkg"
           $stage = Join-Path $env:RUNNER_TEMP "herdr-windows-x86_64"
           .\scripts\package_windows_conpty.ps1 `
-            -HerdrExe target\x86_64-pc-windows-msvc\release\herdr.exe `
+            -OsadeExe target\x86_64-pc-windows-msvc\release\osade.exe `
             -PackagePath $package `
             -StageDir $stage `
             -OutputPath herdr-windows-x86_64.zip
@@ -242,7 +242,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: herdr-windows-x86_64-${{ inputs.libghostty_optimize }}-simd-${{ inputs.libghostty_simd }}
+          name: osade-windows-x86_64-${{ inputs.libghostty_optimize }}-simd-${{ inputs.libghostty_simd }}
           path: |
             herdr-windows-x86_64.zip
             BUILD_INFO.txt

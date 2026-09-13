@@ -10,13 +10,13 @@ The bigger trap: hand Claude Code a 1400-line PRD and it will scaffold 40 files 
 Osade runs coding agents as open-source contributors. Full spec: @docs/OSADE.md
 
 ## Layout
-- `backend/` — substrate (Rust). **READ-ONLY. Never edit.** Reference implementation + API source of truth.
+- `backend/` — substrate (Rust). **Never hand-edit.** Its only change is the rename applied by `scripts/rebrand-source.mjs`. Reference implementation + API source of truth.
 - `apps/desktop/` — Electron shell
 - `packages/` — daemon, contract, cli, skill-assets
 - `docs/` — OSADE.md is the spec. AOagents.txt / cline.txt are research inputs, not requirements.
 
 ## Standing rules
-- Never edit anything under `backend/`. If substrate needs a change, write it to `patches/` with a rationale.
+- Never hand-edit anything under `backend/`. Re-run `scripts/rebrand-source.mjs` instead of editing a file.
 - substrate's own AGENTS.md rules apply to `backend/` only. They do not govern Osade code.
 - No `status` column in any table. Status is derived at read time (OSADE.md §6). This is not negotiable.
 - Only `packages/daemon/src/substrate/**` may talk to substrate.

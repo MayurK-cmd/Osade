@@ -301,7 +301,7 @@ class ChangelogScriptTests(unittest.TestCase):
             path.unlink(missing_ok=True)
 
     def test_load_product_announcement_rejects_missing_file(self) -> None:
-        path = Path(tempfile.gettempdir()) / "herdr-missing-product-announcement.json"
+        path = Path(tempfile.gettempdir()) / "osade-missing-product-announcement.json"
         path.unlink(missing_ok=True)
         with self.assertRaisesRegex(ChangelogError, "file not found"):
             load_product_announcement(path)

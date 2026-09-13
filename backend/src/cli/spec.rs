@@ -3,13 +3,13 @@ use std::io::Write;
 use clap::{Arg, ArgAction, ArgGroup, Command, ValueHint};
 
 pub(super) fn command() -> Command {
-    let command = Command::new("herdr")
+    let command = Command::new("osade")
         .about("terminal workspace manager for AI coding agents")
         .disable_help_flag(true)
         .disable_version_flag(true)
         .arg(help_flag())
         .arg(option("session", "NAME").help("Use or create a named persistent session"))
-        .arg(option("remote", "TARGET").help("Attach through SSH to a remote Herdr server"))
+        .arg(option("remote", "TARGET").help("Attach through SSH to a remote Osade server"))
         .arg(
             option("remote-keybindings", "MODE")
                 .value_parser(["local", "server"])
@@ -87,7 +87,7 @@ fn write_requested_help(
     let mut root = command();
     root.build();
     let mut selected = &mut root;
-    let mut path = vec!["herdr".to_string()];
+    let mut path = vec!["osade".to_string()];
     for segment in &args[1..help_index] {
         if selected.find_subcommand(segment).is_none() {
             break;
@@ -306,7 +306,7 @@ fn tab_command() -> Command {
 
 fn notification_command() -> Command {
     Command::new("notification")
-        .about("Show Herdr notifications")
+        .about("Show Osade notifications")
         .subcommand(
             Command::new("show")
                 .about("Show a notification")
@@ -330,7 +330,7 @@ fn agent_command() -> Command {
         .subcommand(
             Command::new("read")
                 .about("Read agent terminal output")
-                .override_usage("herdr agent read <TARGET> [OPTIONS]")
+                .override_usage("osade agent read <TARGET> [OPTIONS]")
                 .arg(required("target", "TARGET"))
                 .arg(read_source_option(true))
                 .arg(option("lines", "N"))
@@ -347,7 +347,7 @@ fn agent_command() -> Command {
         .subcommand(
             Command::new("prompt")
                 .about("Submit a prompt to an agent")
-                .override_usage("herdr agent prompt <TARGET> <TEXT> [OPTIONS]")
+                .override_usage("osade agent prompt <TARGET> <TEXT> [OPTIONS]")
                 .arg(required("target", "TARGET"))
                 .arg(required("text", "TEXT"))
                 .arg(
@@ -373,7 +373,7 @@ fn agent_command() -> Command {
         .subcommand(
             Command::new("rename")
                 .about("Rename an agent")
-                .override_usage("herdr agent rename <TARGET> <NAME>|--clear")
+                .override_usage("osade agent rename <TARGET> <NAME>|--clear")
                 .arg(required("target", "TARGET"))
                 .arg(Arg::new("name").value_name("NAME"))
                 .arg(flag("clear"))
@@ -387,7 +387,7 @@ fn agent_command() -> Command {
         .subcommand(
             Command::new("wait")
                 .about("Wait until an agent reaches one of the requested states")
-                .override_usage("herdr agent wait <TARGET> [OPTIONS]")
+                .override_usage("osade agent wait <TARGET> [OPTIONS]")
                 .arg(required("target", "TARGET"))
                 .arg(
                     option("until", "STATUS")
@@ -403,7 +403,7 @@ fn agent_command() -> Command {
         .subcommand(
             Command::new("attach")
                 .about("Attach directly to an agent terminal")
-                .override_usage("herdr agent attach <TARGET> [OPTIONS]")
+                .override_usage("osade agent attach <TARGET> [OPTIONS]")
                 .arg(required("target", "TARGET"))
                 .arg(flag("takeover")),
         )
@@ -411,7 +411,7 @@ fn agent_command() -> Command {
             Command::new("start")
                 .about("Start a supported interactive agent in an existing pane")
                 .override_usage(
-                    "herdr agent start <NAME> --kind <KIND> --pane <ID> [OPTIONS] [-- [AGENT_ARG]...]",
+                    "osade agent start <NAME> --kind <KIND> --pane <ID> [OPTIONS] [-- [AGENT_ARG]...]",
                 )
                 .arg(required("name", "NAME"))
                 .arg(
@@ -436,7 +436,7 @@ fn agent_command() -> Command {
                         .last(true),
                 )
                 .after_help(
-                    "The pane must be at its interactive shell prompt. Success means the expected agent was detected in the same terminal and is ready for input.\n\nnext: herdr agent prompt <TARGET> <TEXT> --wait",
+                    "The pane must be at its interactive shell prompt. Success means the expected agent was detected in the same terminal and is ready for input.\n\nnext: osade agent prompt <TARGET> <TEXT> --wait",
                 ),
         )
         .subcommand(
@@ -544,7 +544,7 @@ fn pane_command() -> Command {
                 .args(current_pane_args())
                 .arg(
                     option("right-click", "TARGET")
-                        .value_parser(["herdr", "pane"])
+                        .value_parser(["osade", "pane"])
                         .required(true),
                 ),
         )
@@ -557,7 +557,7 @@ fn pane_command() -> Command {
                 .arg(option("ratio", "FLOAT"))
                 .arg(path_option("cwd", "PATH"))
                 .arg(env_option())
-                .arg(option("right-click", "TARGET").value_parser(["herdr", "pane"]))
+                .arg(option("right-click", "TARGET").value_parser(["osade", "pane"]))
                 .arg(flag("focus"))
                 .arg(flag("no-focus")),
         )
@@ -592,7 +592,7 @@ fn pane_command() -> Command {
                 .arg(required("pane_id", "PANE_ID"))
                 .arg(required("text", "TEXT"))
                 .after_help(
-                    "next: herdr pane run <PANE_ID> <COMMAND> sends text and Enter in one call",
+                    "next: osade pane run <PANE_ID> <COMMAND> sends text and Enter in one call",
                 ),
         )
         .subcommand(
@@ -1086,19 +1086,19 @@ mod tests {
 
         for path in paths {
             for flag in ["-h", "--help"] {
-                let mut args = vec!["herdr".to_string()];
+                let mut args = vec!["osade".to_string()];
                 args.extend(path.iter().cloned());
                 args.push(flag.to_string());
                 let mut output = Vec::new();
                 assert!(
                     super::write_requested_help(&args, &mut output, || {}).unwrap(),
-                    "help was not handled for herdr {} {flag}",
+                    "help was not handled for osade {} {flag}",
                     path.join(" ")
                 );
                 let output = String::from_utf8(output).unwrap();
                 assert!(
-                    output.contains(&format!("Usage: herdr {}", path.join(" "))),
-                    "unexpected help for herdr {}: {output}",
+                    output.contains(&format!("Usage: osade {}", path.join(" "))),
+                    "unexpected help for osade {}: {output}",
                     path.join(" ")
                 );
             }
@@ -1161,7 +1161,7 @@ mod tests {
             for option in options {
                 assert!(
                     option_arg(&cmd, option).is_required_set(),
-                    "herdr {} --{option} should be required",
+                    "osade {} --{option} should be required",
                     path.join(" ")
                 );
             }
@@ -1172,7 +1172,7 @@ mod tests {
     fn agent_prompt_until_requires_wait() {
         let error = super::command()
             .try_get_matches_from([
-                "herdr", "agent", "prompt", "reviewer", "hello", "--until", "idle",
+                "osade", "agent", "prompt", "reviewer", "hello", "--until", "idle",
             ])
             .unwrap_err();
         assert_eq!(
@@ -1184,14 +1184,14 @@ mod tests {
     #[test]
     fn agent_rename_requires_exactly_one_name_or_clear() {
         for valid in [
-            &["herdr", "agent", "rename", "reviewer", "worker"][..],
-            &["herdr", "agent", "rename", "reviewer", "--clear"][..],
+            &["osade", "agent", "rename", "reviewer", "worker"][..],
+            &["osade", "agent", "rename", "reviewer", "--clear"][..],
         ] {
             assert!(super::command().try_get_matches_from(valid).is_ok());
         }
         for invalid in [
-            &["herdr", "agent", "rename", "reviewer"][..],
-            &["herdr", "agent", "rename", "reviewer", "worker", "--clear"][..],
+            &["osade", "agent", "rename", "reviewer"][..],
+            &["osade", "agent", "rename", "reviewer", "worker", "--clear"][..],
         ] {
             assert!(super::command().try_get_matches_from(invalid).is_err());
         }
@@ -1199,7 +1199,7 @@ mod tests {
         let mut help = Vec::new();
         super::write_requested_help(
             &[
-                "herdr".to_string(),
+                "osade".to_string(),
                 "agent".to_string(),
                 "rename".to_string(),
                 "--help".to_string(),
@@ -1210,7 +1210,7 @@ mod tests {
         .unwrap();
         assert!(String::from_utf8(help)
             .unwrap()
-            .contains("Usage: herdr agent rename <TARGET> <NAME>|--clear"));
+            .contains("Usage: osade agent rename <TARGET> <NAME>|--clear"));
     }
 
     #[test]
@@ -1220,7 +1220,7 @@ mod tests {
             let worktree_command = command_path(&cmd, &["worktree", subcommand]);
             assert!(
                 !has_option(worktree_command, "json"),
-                "herdr worktree {subcommand} should not advertise --json"
+                "osade worktree {subcommand} should not advertise --json"
             );
         }
     }
@@ -1308,13 +1308,13 @@ mod tests {
     }
 
     fn long_help(path: &[&str]) -> String {
-        let mut args = vec!["herdr".to_string()];
+        let mut args = vec!["osade".to_string()];
         args.extend(path.iter().map(|segment| segment.to_string()));
         args.push("--help".to_string());
         let mut output = Vec::new();
         assert!(
             super::write_requested_help(&args, &mut output, || {}).unwrap(),
-            "help was not handled for herdr {}",
+            "help was not handled for osade {}",
             path.join(" ")
         );
         String::from_utf8(output).unwrap()
@@ -1326,7 +1326,7 @@ mod tests {
             let help = long_help(&[group]);
             assert!(
                 help.contains(super::super::AGENT_HELP_FOOTER),
-                "herdr {group} is missing agent resources: {help}"
+                "osade {group} is missing agent resources: {help}"
             );
         }
 
@@ -1345,14 +1345,14 @@ mod tests {
             "agent start dropped its existing after_help: {agent_start}"
         );
         assert!(
-            agent_start.contains("next: herdr agent prompt <TARGET> <TEXT> --wait"),
+            agent_start.contains("next: osade agent prompt <TARGET> <TEXT> --wait"),
             "agent start is missing its next-step hint: {agent_start}"
         );
 
         let pane_send_text = long_help(&["pane", "send-text"]);
         assert!(
             pane_send_text.contains(
-                "next: herdr pane run <PANE_ID> <COMMAND> sends text and Enter in one call"
+                "next: osade pane run <PANE_ID> <COMMAND> sends text and Enter in one call"
             ),
             "pane send-text is missing its next-step hint: {pane_send_text}"
         );
@@ -1369,7 +1369,7 @@ mod tests {
         ] {
             let mut cmd = super::command();
             let mut output = Vec::new();
-            clap_complete::generate(shell, &mut cmd, "herdr", &mut output);
+            clap_complete::generate(shell, &mut cmd, "osade", &mut output);
             assert!(!output.is_empty(), "empty {shell:?} completion output");
         }
     }

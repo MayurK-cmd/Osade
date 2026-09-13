@@ -37,9 +37,9 @@ There is one branch, `main`. Work from it.
 These will send a PR back regardless of how good the code is. Most are lint-enforced
 (`docs/OSADE.md` §20.1) rather than review comments.
 
-- **Never edit anything under `backend/`.** That is the substrate, kept as read-only reference. If
-  the substrate genuinely needs a change it goes in `patches/` with a written rationale and an
-  upstream issue link — or better, upstream first. Osade does not fork the substrate.
+- **Never hand-edit anything under `backend/`.** It is the substrate source, kept as reference.
+  Its one change is the rename applied by `scripts/rebrand-source.mjs`; re-run that script rather
+  than editing a file.
 - **`backend/` is never a codegen input.** substrate client is generated only from the pinned
   schema in `vendor/runtime/<version>-p<protocol>/api-schema.json` (§4.1). The substrate's version
   string is not a contract: two different builds both call themselves `0.8.2`.

@@ -1888,8 +1888,8 @@ osade/
 │   │       └── db/                sqlite, migrations, change_log, cdc poller
 │   ├── cli/                       `osade` verbs (humans and agents, same surface)
 │   └── skill-assets/              using-osade skill, installed to ~/.osade/skills
-├── backend/                       substrate source. READ-ONLY reference for behaviour.
-│                                  Never edited, never a codegen input (§4.1).
+├── backend/                       substrate source, renamed by scripts/rebrand-source.mjs.
+│                                  Otherwise unedited; never a codegen input (§4.1).
 ├── vendor/runtime/<ver>-p<proto>/   THE pinned target: api-schema.json, methods.txt,
 │                                  pin.json, and the prebuilt binary per platform
 ├── patches/                       substrate patches, each with a rationale + upstream link

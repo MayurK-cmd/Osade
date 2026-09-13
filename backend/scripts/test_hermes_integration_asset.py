@@ -8,7 +8,7 @@ ASSET = Path(__file__).parents[1] / "src/integration/assets/hermes/__init__.py"
 
 
 def load_asset():
-    spec = importlib.util.spec_from_file_location("herdr_hermes_integration", ASSET)
+    spec = importlib.util.spec_from_file_location("osade_hermes_integration", ASSET)
     if spec is None or spec.loader is None:
         raise RuntimeError("could not load Hermes integration asset")
     module = importlib.util.module_from_spec(spec)
@@ -52,9 +52,9 @@ class HermesIntegrationAssetTests(unittest.TestCase):
     def test_send_session_uses_cli_with_the_active_pane(self):
         module = load_asset()
         environment = {
-            "HERDR_ENV": "1",
-            "HERDR_PANE_ID": "w1:p2",
-            "HERDR_BIN_PATH": "C:/bin/herdr.exe",
+            "OSADE_ENV": "1",
+            "OSADE_PANE_ID": "w1:p2",
+            "OSADE_BIN_PATH": "C:/bin/herdr.exe",
         }
         with mock.patch.dict(module.os.environ, environment, clear=True):
             with mock.patch.object(module.subprocess, "run") as run:

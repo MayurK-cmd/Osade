@@ -1,11 +1,11 @@
 ---
 name: triage
-description: Triage open herdr GitHub issues into a concise decision-first Markdown table. Use when the user says "triage", asks to triage open issues, asks which issues need attention, or wants issue priority/recommendation lights for herdr.
+description: Triage open osade GitHub issues into a concise decision-first Markdown table. Use when the user says "triage", asks to triage open issues, asks which issues need attention, or wants issue priority/recommendation lights for osade.
 ---
 
-# Herdr Issue Triage
+# Osade Issue Triage
 
-Use this skill only inside the herdr repository.
+Use this skill only inside the osade repository.
 
 When the user says `triage`, inspect open GitHub issues for `herdrdev/herdr` and return a concise Markdown table. Prefer GitHub MCP tools when available. If they are unavailable, use `gh issue list` / `gh issue view` only when authenticated access is already configured.
 

@@ -303,7 +303,7 @@ pub struct CustomCommandKeybind {
     pub height: Option<PopupSize>,
 }
 
-/// Parsed keybinds for Herdr actions.
+/// Parsed keybinds for Osade actions.
 #[derive(Debug, Clone)]
 pub struct NavigateKeybinds {
     pub workspace_up: ActionKeybinds,
@@ -314,7 +314,7 @@ pub struct NavigateKeybinds {
     pub pane_right: ActionKeybinds,
 }
 
-/// Parsed keybinds for Herdr actions.
+/// Parsed keybinds for Osade actions.
 #[derive(Debug, Clone)]
 pub struct Keybinds {
     pub navigate: NavigateKeybinds,

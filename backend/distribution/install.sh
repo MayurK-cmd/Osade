@@ -1,14 +1,14 @@
 #!/bin/sh
 set -eu
 
-BIN="herdr"
+BIN="osade"
 MANIFEST_URL="https://herdr.dev/latest.json"
-INSTALL_DIR="${HERDR_INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${OSADE_INSTALL_DIR:-$HOME/.local/bin}"
 
 main() {
     echo ""
     echo "      ,ww"
-    echo "     wWWWWWWW_)  herdr installer"
+    echo "     wWWWWWWW_)  osade installer"
     echo "     \`WWWWWW'    herdr.dev"
     echo "      II  II"
     echo ""
@@ -34,7 +34,7 @@ main() {
     need curl
     need awk
 
-    # use the same manifest as `herdr update` so installs and updates agree
+    # use the same manifest as `osade update` so installs and updates agree
     # on the public latest release.
     TARGET="${os}-${arch}"
     log "fetching latest release manifest..."
@@ -101,7 +101,7 @@ main() {
         openssl)   ACTUAL_SHA256="$(openssl dgst -sha256 < "${TMP}/${BIN}" | awk '{ print $NF }')" ;;
     esac
     if [ "$ACTUAL_SHA256" != "$SHA256" ]; then
-        err "downloaded Herdr checksum did not match"
+        err "downloaded Osade checksum did not match"
     fi
 
     # install
@@ -127,7 +127,7 @@ main() {
     # verify
     if command -v "$BIN" >/dev/null 2>&1; then
         echo ""
-        log "ready. run 'herdr' to get started."
+        log "ready. run 'osade' to get started."
     fi
 
     echo ""

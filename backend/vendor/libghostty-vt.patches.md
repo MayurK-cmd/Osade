@@ -10,7 +10,7 @@ status: active
 
 patch: `vendor/patches/libghostty-vt/0001-default-grapheme-cluster-mode.patch`
 
-herdr issue: https://github.com/herdrdev/herdr/issues/243
+osade issue: https://github.com/herdrdev/herdr/issues/243
 
 upstream discussion: not opened; libghostty-vt currently exposes current mode mutation but no C API for configuring terminal default modes
 
@@ -22,7 +22,7 @@ local files:
 
 - `vendor/libghostty-vt/src/terminal/c/terminal.zig`
 
-reason: Herdr renders terminal cells directly and requires DEC private mode
+reason: Osade renders terminal cells directly and requires DEC private mode
 2027 to store flags, ZWJ emoji, and other multi-codepoint grapheme clusters in
 one cell. This patch makes clustering active for new terminals and keeps it as
 the reset default so RIS (`ESC c`) does not disable it.
@@ -45,7 +45,7 @@ status: active
 
 patch: `vendor/patches/libghostty-vt/0002-expose-modify-other-keys-mode.patch`
 
-herdr issue: none; fixes the performance regression exposed by
+osade issue: none; fixes the performance regression exposed by
 https://github.com/herdrdev/herdr/pull/2303
 
 upstream discussion: not opened
@@ -59,14 +59,14 @@ local files:
 - `vendor/libghostty-vt/include/ghostty/vt/terminal.h`
 - `vendor/libghostty-vt/src/terminal/c/terminal.zig`
 
-reason: Herdr must know whether xterm modifyOtherKeys mode 2 is active to
+reason: Osade must know whether xterm modifyOtherKeys mode 2 is active to
 request printable key releases from the outer terminal. The formatter API can
 recover this fact only by formatting the active screen and scrollback. A typed
 terminal-data query exposes the authoritative scalar without formatting or
 allocation.
 
 remove when: the vendored source exposes an equivalent scalar query for
-modifyOtherKeys mode 2 and Herdr can use it without this patch.
+modifyOtherKeys mode 2 and Osade can use it without this patch.
 
 verification:
 

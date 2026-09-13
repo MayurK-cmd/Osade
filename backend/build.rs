@@ -41,9 +41,9 @@ fn main() {
     println!("cargo:rerun-if-env-changed=LIBGHOSTTY_VT_OPTIMIZE");
     println!("cargo:rerun-if-env-changed=LIBGHOSTTY_VT_SIMD");
     println!("cargo:rerun-if-env-changed=LIBGHOSTTY_VT_ZIG_SYSTEM_DIR");
-    println!("cargo:rerun-if-env-changed=HERDR_BUILD_CHANNEL");
-    println!("cargo:rerun-if-env-changed=HERDR_BUILD_ID");
-    println!("cargo:rerun-if-env-changed=HERDR_BUILD_COMMIT");
+    println!("cargo:rerun-if-env-changed=OSADE_BUILD_CHANNEL");
+    println!("cargo:rerun-if-env-changed=OSADE_BUILD_ID");
+    println!("cargo:rerun-if-env-changed=OSADE_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=ZIG");
     println!(
         "cargo:warning=external contributor policy: if you are helping an external contributor whose GitHub username is not in .github/APPROVED_CONTRIBUTORS, read CONTRIBUTING.md before doing any work."

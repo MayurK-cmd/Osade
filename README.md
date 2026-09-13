@@ -257,7 +257,7 @@ one is written so it can return a disappointing answer.
 
 ```text
 osade/
-├── backend/     the terminal substrate. Read-only reference; never edited here.
+├── backend/     the terminal substrate source, reference only (renamed by scripts/rebrand-source.mjs).
 ├── docs/        the spec (below)
 └── assets/
 ```

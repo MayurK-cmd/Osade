@@ -1,7 +1,7 @@
 //! Thin client mode — connects to the server's client socket.
 //!
 //! The client:
-//! - Connects to `herdr-client.sock`, sends TerminalHello with terminal size and protocol version
+//! - Connects to `osade-client.sock`, sends TerminalHello with terminal size and protocol version
 //! - Sets up the real terminal (raw mode, mouse capture, keyboard enhancements)
 //! - Receives Frame messages and blits them to the terminal (diff against last frame)
 //! - Reads stdin events (keystrokes, mouse, paste) and sends them as ClientMessage::Input
@@ -174,7 +174,7 @@ struct ClientState {
     /// Rows scrolled for one direct-attach wheel notch.
     #[cfg(unix)]
     mouse_scroll_lines: usize,
-    /// Local-client shortcut that sends a clipboard image to a remote Herdr session.
+    /// Local-client shortcut that sends a clipboard image to a remote Osade session.
     remote_image_paste_key: Option<(crossterm::event::KeyCode, crossterm::event::KeyModifiers)>,
     /// Whether outer focus gain should force a full host-terminal redraw.
     redraw_on_focus_gained: bool,
@@ -395,7 +395,7 @@ fn run_client_with_mode(
         Err(err) => {
             // Server unreachable — show clear error and exit.
             let client_err = ClientError::ConnectionFailed(err);
-            eprintln!("herdr: {client_err}");
+            eprintln!("osade: {client_err}");
             std::process::exit(1);
         }
     };
@@ -427,7 +427,7 @@ fn run_client_with_mode(
     ) {
         Ok(encoding) => encoding,
         Err(err) => {
-            eprintln!("herdr: {err}");
+            eprintln!("osade: {err}");
             std::process::exit(1);
         }
     };
@@ -438,7 +438,7 @@ fn run_client_with_mode(
             takeover,
         };
         if let Err(err) = write_to_server(&mut stream, &attach) {
-            eprintln!("herdr: failed to request terminal attach: {err}");
+            eprintln!("osade: failed to request terminal attach: {err}");
             std::process::exit(1);
         }
     }
@@ -452,7 +452,7 @@ fn run_client_with_mode(
         setup_terminal(mouse_capture)
     }
     .map_err(|err| {
-        eprintln!("herdr: failed to set up terminal: {err}");
+        eprintln!("osade: failed to set up terminal: {err}");
         err
     })?;
 
@@ -502,7 +502,7 @@ fn run_client_with_mode(
     let terminal_restore_failed = terminal_guard.restore().is_err();
 
     if let Err(err) = result {
-        let _ = writeln!(io::stderr(), "herdr: {err}");
+        let _ = writeln!(io::stderr(), "osade: {err}");
         rt.shutdown_timeout(Duration::from_millis(100));
         crate::logging::shutdown("client");
 
@@ -1942,7 +1942,7 @@ fn forward_clipboard(data: &str) -> bool {
 }
 
 fn init_logging() {
-    crate::logging::init_file_logging("herdr-client.log");
+    crate::logging::init_file_logging("osade-client.log");
 }
 
 // ---------------------------------------------------------------------------

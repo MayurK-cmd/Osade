@@ -2830,9 +2830,9 @@ mod tests {
         app.state.ensure_test_terminals();
         app.state.workspaces[0].worktree_space = Some(crate::workspace::WorktreeSpaceMembership {
             key: "repo-key".into(),
-            label: "herdr".into(),
-            repo_root: "/repo/herdr".into(),
-            checkout_path: "/repo/herdr-issue".into(),
+            label: "osade".into(),
+            repo_root: "/repo/osade".into(),
+            checkout_path: "/repo/osade-issue".into(),
             is_linked_worktree: true,
         });
         app
@@ -2848,7 +2848,7 @@ mod tests {
                         .or_insert_with(|| {
                             crate::terminal::TerminalState::new(
                                 pane.attached_terminal_id.clone(),
-                                std::path::PathBuf::from("/herdr-test"),
+                                std::path::PathBuf::from("/osade-test"),
                             )
                         });
                 }
@@ -4362,7 +4362,7 @@ mod tests {
         let _: SuccessResponse = serde_json::from_str(&response).unwrap();
 
         let mut official = metadata_params(pane_id.clone());
-        official.source = "herdr:pi".into();
+        official.source = "osade:pi".into();
         official.seq = Some(200);
         let response = app.handle_pane_report_metadata("official".into(), official);
         let _: SuccessResponse = serde_json::from_str(&response).unwrap();
@@ -4370,7 +4370,7 @@ mod tests {
         let terminal = &app.state.terminals[&terminal_id];
         assert!(terminal.metadata_report_sequence_is_fresh("custom:pi-metadata", Some(1)));
         assert!(terminal.metadata_report_sequence_is_fresh("custom:pi-tokens", Some(1)));
-        assert!(terminal.metadata_report_sequence_is_fresh("herdr:pi", Some(1)));
+        assert!(terminal.metadata_report_sequence_is_fresh("osade:pi", Some(1)));
 
         app.state
             .terminals
@@ -4460,7 +4460,7 @@ mod tests {
     fn pane_report_metadata_rejects_invalid_applies_to_source() {
         let (mut app, pane_id) = app_with_test_workspace();
         let mut params = metadata_params(pane_id);
-        params.applies_to_source = Some("herdr source".into());
+        params.applies_to_source = Some("osade source".into());
 
         let response = app.handle_pane_report_metadata("req".into(), params);
 

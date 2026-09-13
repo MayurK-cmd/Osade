@@ -88,14 +88,20 @@ function main() {
   renameSync(join(staging, extracted), BACKEND);
   rmSync(staging, { recursive: true, force: true });
 
+  // The one change backend/ carries, applied to every fetch so a restored tree matches the
+  // committed one.
+  execFileSync(process.execPath, [join(ROOT, 'scripts', 'rebrand-source.mjs'), 'backend'], {
+    stdio: 'inherit',
+  });
+
   // A marker, so anyone looking at a checkout can tell what they have without re-deriving it.
   writeFileSync(
     join(BACKEND, 'OSADE-PIN.json'),
-    `${JSON.stringify({ ...PIN, fetched_at: new Date().toISOString().slice(0, 10) }, null, 2)}\n`,
+    `${JSON.stringify({ ...PIN, fetched_at: new Date().toISOString().slice(0, 10), modified_by: 'scripts/rebrand-source.mjs' }, null, 2)}\n`,
   );
 
   log(`backend/ is ${PIN.repository}@${PIN.commit.slice(0, 12)} (${PIN.committedAt}).`);
-  log('It is read-only reference. Changes the substrate needs go in patches/ (see patches/README.md).');
+  log('Renamed by scripts/rebrand-source.mjs; otherwise the upstream tree. Do not hand-edit it.');
 }
 
 main();

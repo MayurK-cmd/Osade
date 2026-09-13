@@ -27,8 +27,11 @@ documented JSON API and extension points.
 | License | **Apache-2.0** |
 | Pinned version | see `vendor/runtime/*/pin.json` |
 
-A copy of the herdr source is kept at `backend/` as read-only reference material. It is not
-built, not modified, and not part of the Osade build.
+A copy of the herdr source is kept at `backend/` as reference material. It is not built and not
+part of the Osade build. As Apache-2.0 section 4(b) requires be stated, it is modified in one way:
+`scripts/rebrand-source.mjs` renames the project's name to Osade's throughout, keeping real
+addresses (domain, organisation, release URLs) unchanged. `backend/OSADE-PIN.json` records the
+upstream commit it was applied to.
 
 Apache-2.0 requires that herdr's own `NOTICE` file, if it carries one, be reproduced in
 distributions that include the binary. **Action required before the first release:** fetch

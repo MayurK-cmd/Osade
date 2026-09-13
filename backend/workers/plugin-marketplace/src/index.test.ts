@@ -54,9 +54,9 @@ class MemoryKV {
 function repo(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: 1,
-    full_name: "ogulcancelik/herdr-plugin-example",
+    full_name: "ogulcancelik/osade-plugin-example",
     owner: { login: "ogulcancelik" },
-    name: "herdr-plugin-example",
+    name: "osade-plugin-example",
     description: "Example plugin repository",
     html_url: "https://github.com/ogulcancelik/herdr-plugin-example",
     default_branch: "main",
@@ -64,7 +64,7 @@ function repo(overrides: Record<string, unknown> = {}): Record<string, unknown> 
     forks_count: 1,
     open_issues_count: 0,
     language: "TypeScript",
-    topics: ["herdr-plugin"],
+    topics: ["osade-plugin"],
     created_at: "2026-06-01T00:00:00Z",
     updated_at: "2026-06-02T00:00:00Z",
     pushed_at: "2026-06-03T00:00:00Z",
@@ -82,7 +82,7 @@ function manifest(overrides = ""): string {
 id = "example.plugin"
 name = "Example Plugin"
 version = "0.2.0"
-min_herdr_version = "0.7.0"
+min_osade_version = "0.7.0"
 description = "Example manifest"
 platforms = ["linux", "macos"]
 ${overrides}`;
@@ -127,7 +127,7 @@ function repositoryFetch(options: {
       const status = options.treeStatus?.[fullName];
       if (status) return new Response("tree failed", { status });
       const fixtures = options.trees?.[fullName] ?? [
-        { path: "herdr-plugin.toml", content: manifest() },
+        { path: "osade-plugin.toml", content: manifest() },
       ];
       return Response.json({
         sha: "tree-sha",
@@ -174,7 +174,7 @@ function repositoryFetch(options: {
           const [, alias, owner, name, path] = match;
           const fullName = `${owner}/${name}`;
           const fixture = (options.trees?.[fullName] ?? [
-            { path: "herdr-plugin.toml", content: manifest() },
+            { path: "osade-plugin.toml", content: manifest() },
           ]).find((entry) => entry.path === path);
           data[`item${alias}`] = fixture?.content === undefined
             ? { manifest: null }
@@ -207,12 +207,12 @@ describe("normalizeRepositories", () => {
 
     expect(plugins.map((plugin) => plugin.fullName)).toEqual([
       "other/newer",
-      "ogulcancelik/herdr-plugin-example",
+      "ogulcancelik/osade-plugin-example",
     ]);
     expect(plugins[1]).toMatchObject({
       id: 1,
       owner: "ogulcancelik",
-      name: "herdr-plugin-example",
+      name: "osade-plugin-example",
       defaultBranch: "main",
       stars: 5,
     });
@@ -224,12 +224,12 @@ describe("normalizeRepositories", () => {
       repo({ full_name: "duplicate/name", owner: { login: "duplicate" }, name: "name", html_url: "https://github.com/duplicate/name" }),
     ]);
     expect(plugins).toHaveLength(1);
-    expect(plugins[0].fullName).toBe("ogulcancelik/herdr-plugin-example");
+    expect(plugins[0].fullName).toBe("ogulcancelik/osade-plugin-example");
   });
 
   test("drops unsafe, unavailable, and default-branch-less repositories", () => {
     const plugins = normalizeRepositories([
-      repo({ html_url: "https://example.com/ogulcancelik/herdr-plugin-example" }),
+      repo({ html_url: "https://example.com/ogulcancelik/osade-plugin-example" }),
       repo({ archived: true }),
       repo({ fork: true }),
       repo({ disabled: true }),
@@ -243,12 +243,12 @@ describe("normalizeRepositories", () => {
 });
 
 describe("parseManifestSummary", () => {
-  test("extracts metadata and accepts the UTF-8 BOM accepted by Herdr", () => {
+  test("extracts metadata and accepts the UTF-8 BOM accepted by Osade", () => {
     expect(parseManifestSummary(`\uFEFF${manifest()}`)).toEqual({
       id: "example.plugin",
       name: "Example Plugin",
       version: "0.2.0",
-      minHerdrVersion: "0.7.0",
+      minOsadeVersion: "0.7.0",
       description: "Example manifest",
       platforms: ["linux", "macos"],
     });
@@ -268,14 +268,14 @@ describe("parseManifestSummary", () => {
 describe("refreshPlugins", () => {
   test("publishes one backward-compatible repository card with multiple manifests", async () => {
     const bucket = new MemoryR2();
-    const fullName = "ogulcancelik/herdr-plugin-example";
+    const fullName = "ogulcancelik/osade-plugin-example";
     const fetch = repositoryFetch({
       repositories: [repo()],
       trees: {
         [fullName]: [
-          { path: "herdr-plugin.toml", content: manifest() },
+          { path: "osade-plugin.toml", content: manifest() },
           {
-            path: "plugins/second/herdr-plugin.toml",
+            path: "plugins/second/osade-plugin.toml",
             content: manifest().replace("example.plugin", "example.second").replace("Example Plugin", "Second Plugin"),
           },
         ],
@@ -310,11 +310,11 @@ describe("refreshPlugins", () => {
     expect(snapshot.plugins[0]).toMatchObject({
       id: 1,
       fullName,
-      name: "herdr-plugin-example",
+      name: "osade-plugin-example",
       headCommit: HEAD_COMMIT,
       manifests: [
-        { path: "herdr-plugin.toml", id: "example.plugin" },
-        { path: "plugins/second/herdr-plugin.toml", id: "example.second" },
+        { path: "osade-plugin.toml", id: "example.plugin" },
+        { path: "plugins/second/osade-plugin.toml", id: "example.second" },
       ],
     });
     expect(snapshot.plugins[0]).not.toHaveProperty("defaultBranch");
@@ -360,7 +360,7 @@ describe("refreshPlugins", () => {
     const repository = repo();
     const fullName = String(repository.full_name);
     const commits = { [fullName]: HEAD_COMMIT };
-    const trees = { [fullName]: [{ path: "herdr-plugin.toml", content: manifest() }] };
+    const trees = { [fullName]: [{ path: "osade-plugin.toml", content: manifest() }] };
     const fetch = repositoryFetch({ repositories: [repository], commits, trees });
 
     expect((await refreshPlugins(env(bucket), { fetch, logger: { error() {} } })).ok).toBe(true);
@@ -397,12 +397,12 @@ describe("refreshPlugins", () => {
       fetch: repositoryFetch({
         repositories,
         trees: {
-          "ogulcancelik/herdr-plugin-example": [
-            { path: "one/herdr-plugin.toml", content: manifest() },
-            { path: "two/herdr-plugin.toml", content: manifest().replace("example.plugin", "example.two") },
+          "ogulcancelik/osade-plugin-example": [
+            { path: "one/osade-plugin.toml", content: manifest() },
+            { path: "two/osade-plugin.toml", content: manifest().replace("example.plugin", "example.two") },
           ],
           "example/empty": [{ path: "README.md", content: "empty" }],
-          "example/invalid": [{ path: "herdr-plugin.toml", content: "id = [broken" }],
+          "example/invalid": [{ path: "osade-plugin.toml", content: "id = [broken" }],
         },
       }),
       logger: { error() {} },
@@ -417,14 +417,14 @@ describe("refreshPlugins", () => {
   });
 
   test("ignores manifest symlinks and indexes their regular target", async () => {
-    const fullName = "ogulcancelik/herdr-plugin-example";
+    const fullName = "ogulcancelik/osade-plugin-example";
     const result = await refreshPlugins(env(), {
       fetch: repositoryFetch({
         repositories: [repo()],
         trees: {
           [fullName]: [
-            { path: "herdr-plugin.toml", content: "plugin/herdr-plugin.toml", mode: "120000" },
-            { path: "plugin/herdr-plugin.toml", content: manifest() },
+            { path: "osade-plugin.toml", content: "plugin/osade-plugin.toml", mode: "120000" },
+            { path: "plugin/osade-plugin.toml", content: manifest() },
           ],
         },
       }),
@@ -434,22 +434,22 @@ describe("refreshPlugins", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.snapshot.plugins[0].manifests.map((item) => item.path)).toEqual([
-      "plugin/herdr-plugin.toml",
+      "plugin/osade-plugin.toml",
     ]);
     expect(result.snapshot.source.invalidManifestCount).toBe(0);
   });
 
   test("ignores test fixtures and deduplicates repeated plugin ids", async () => {
-    const fullName = "ogulcancelik/herdr-plugin-example";
+    const fullName = "ogulcancelik/osade-plugin-example";
     const result = await refreshPlugins(env(), {
       fetch: repositoryFetch({
         repositories: [repo()],
         trees: {
           [fullName]: [
-            { path: "herdr-plugin.toml", content: manifest() },
-            { path: "platform/herdr-plugin.toml", content: manifest() },
+            { path: "osade-plugin.toml", content: manifest() },
+            { path: "platform/osade-plugin.toml", content: manifest() },
             {
-              path: "tests/fixtures/helper/herdr-plugin.toml",
+              path: "tests/fixtures/helper/osade-plugin.toml",
               content: manifest().replace("example.plugin", "example.fixture"),
             },
           ],
@@ -461,13 +461,13 @@ describe("refreshPlugins", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.snapshot.plugins[0].manifests.map((item) => item.path)).toEqual([
-      "herdr-plugin.toml",
+      "osade-plugin.toml",
     ]);
     expect(result.snapshot.source.duplicateManifestCount).toBe(1);
   });
 
   test("skips a truncated tree without blocking the marketplace", async () => {
-    const fullName = "ogulcancelik/herdr-plugin-example";
+    const fullName = "ogulcancelik/osade-plugin-example";
     const result = await refreshPlugins(env(), {
       fetch: repositoryFetch({
         repositories: [repo()],
@@ -486,7 +486,7 @@ describe("refreshPlugins", () => {
   test("writes an empty snapshot when every repository is blacklisted", async () => {
     const bucket = new MemoryR2();
     const result = await refreshPlugins(
-      env(bucket, new MemoryKV(["repo:ogulcancelik/herdr-plugin-example"])),
+      env(bucket, new MemoryKV(["repo:ogulcancelik/osade-plugin-example"])),
       { fetch: repositoryFetch({ repositories: [repo()] }), logger: { error() {} } },
     );
 
@@ -510,11 +510,11 @@ describe("refreshPlugins", () => {
 
     expect(result.ok).toBe(true);
     expect(requests.find(([kind]) => kind === "tree")?.[1]).toBe(
-      "ogulcancelik/herdr-plugin-example",
+      "ogulcancelik/osade-plugin-example",
     );
     const manifestQuery = requests.find(([kind]) => kind === "manifest")?.[1] ?? "";
-    expect(manifestQuery).toContain(`${HEAD_COMMIT}:herdr-plugin.toml`);
-    expect(manifestQuery).not.toContain("main:herdr-plugin.toml");
+    expect(manifestQuery).toContain(`${HEAD_COMMIT}:osade-plugin.toml`);
+    expect(manifestQuery).not.toContain("main:osade-plugin.toml");
   });
 
   test("does not overwrite the public snapshot when scanning fails", async () => {
@@ -523,7 +523,7 @@ describe("refreshPlugins", () => {
     const result = await refreshPlugins(env(bucket), {
       fetch: repositoryFetch({
         repositories: [repo()],
-        treeStatus: { "ogulcancelik/herdr-plugin-example": 429 },
+        treeStatus: { "ogulcancelik/osade-plugin-example": 429 },
       }),
       logger: { error() {} },
     });
@@ -649,7 +649,7 @@ describe("refreshPlugins", () => {
       repositories.map((repository) => [
         repository.full_name,
         Array.from({ length: 100 }, (_, index) => ({
-          path: `plugins/${index}/herdr-plugin.toml`,
+          path: `plugins/${index}/osade-plugin.toml`,
           content: manifest(),
         })),
       ]),
@@ -751,7 +751,7 @@ describe("refreshPlugins", () => {
         entries: [
           {
             repositoryId: 1,
-            fullName: "ogulcancelik/herdr-plugin-example",
+            fullName: "ogulcancelik/osade-plugin-example",
             firstSeenAt: "2026-05-01T00:00:00.000Z",
             samples: [
               { date: "2026-05-01", stars: 10 },
@@ -813,7 +813,7 @@ describe("refreshPlugins", () => {
         entries: [
           {
             repositoryId: 1,
-            fullName: "ogulcancelik/herdr-plugin-example",
+            fullName: "ogulcancelik/osade-plugin-example",
             firstSeenAt: "2026-01-01T00:00:00.000Z",
             samples: [
               { date: "2026-01-01", stars: 1 },

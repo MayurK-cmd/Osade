@@ -1,9 +1,9 @@
-//! Headless server mode — runs the herdr event loop without a real terminal.
+//! Headless server mode — runs the osade event loop without a real terminal.
 //!
 //! The server:
 //! - Does not enter raw mode or read stdin
-//! - Creates and listens on both `herdr.sock` (existing JSON API) and
-//!   `herdr-client.sock` (new binary protocol)
+//! - Creates and listens on both `osade.sock` (existing JSON API) and
+//!   `osade-client.sock` (new binary protocol)
 //! - Initializes AppState and all PTYs from session restore or fresh state
 //! - Runs the main event loop (drain events, drain API requests, scheduled tasks)
 //! - Renders to a virtual ratatui Buffer in memory
@@ -189,7 +189,7 @@ enum AltScreenReadConflict {
     Defer,
 }
 
-/// The headless server — runs the herdr event loop without a real terminal.
+/// The headless server — runs the osade event loop without a real terminal.
 pub struct HeadlessServer {
     app: app::App,
     #[cfg(unix)]
@@ -1486,7 +1486,7 @@ impl HeadlessServer {
 
     /// Renders `ui.window_title` against current session state. `None` means
     /// window titles are disabled or every token resolved empty, which leaves
-    /// the client on Herdr's default title.
+    /// the client on Osade's default title.
     fn configured_window_title(&self) -> Option<String> {
         self.app
             .window_title()
@@ -1494,7 +1494,7 @@ impl HeadlessServer {
     }
 
     /// Pushes the configured outer window title to the foreground client when it
-    /// changed. Herdr consumes each pane's own `OSC 0`/`OSC 2`, so without this
+    /// changed. Osade consumes each pane's own `OSC 0`/`OSC 2`, so without this
     /// the host terminal title never follows the session — which is what window
     /// managers read for tab and group bar labels.
     fn sync_window_title(&mut self) {
@@ -1562,7 +1562,7 @@ impl HeadlessServer {
         };
         let set_title = title.is_some();
         // An explicit title suppresses `ui.window_title` until it is cleared,
-        // and clearing restores the configured title rather than only "herdr".
+        // and clearing restores the configured title rather than only "osade".
         self.api_window_title = title.clone();
         let title = title.or_else(|| self.configured_window_title());
         let changed = self.send_window_title(title);
@@ -2084,7 +2084,7 @@ impl HeadlessServer {
                 size,
                 max,
             } => {
-                let detail = format!("Input message is {size} bytes; Herdr's limit is {max} bytes");
+                let detail = format!("Input message is {size} bytes; Osade's limit is {max} bytes");
                 let message = if matches!(
                     self.clients.get(&client_id).map(|client| &client.mode),
                     Some(ClientConnectionMode::ClientShell)
@@ -3168,7 +3168,7 @@ impl HeadlessServer {
         }
 
         // Forward new toast state only when a client-local delivery mode is selected.
-        // Herdr delivery renders the toast in-frame and must not ask clients to
+        // Osade delivery renders the toast in-frame and must not ask clients to
         // show a terminal or system notification.
         let toast_after = self.app.state.toast.clone();
         let forwarded_toast_from_state = if should_forward_toast_to_clients(

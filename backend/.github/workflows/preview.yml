@@ -145,9 +145,9 @@ jobs:
     env:
       LIBGHOSTTY_VT_OPTIMIZE: ReleaseFast
       LIBGHOSTTY_VT_SIMD: 'true'
-      HERDR_BUILD_CHANNEL: preview
-      HERDR_BUILD_ID: ${{ needs.preflight.outputs.build_id }}
-      HERDR_BUILD_COMMIT: ${{ needs.preflight.outputs.commit }}
+      OSADE_BUILD_CHANNEL: preview
+      OSADE_BUILD_ID: ${{ needs.preflight.outputs.build_id }}
+      OSADE_BUILD_COMMIT: ${{ needs.preflight.outputs.commit }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -230,7 +230,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp target/${{ matrix.target }}/release/herdr ${{ matrix.name }}
+          cp target/${{ matrix.target }}/release/osade ${{ matrix.name }}
           if [ "${{ runner.os }}" = "Linux" ]; then
             file ${{ matrix.name }} > BUILD_INFO.txt
             ldd ${{ matrix.name }} > LDD_INFO.txt 2>&1 || true
@@ -263,7 +263,7 @@ jobs:
           $package = Join-Path $env:RUNNER_TEMP "Microsoft.Windows.Console.ConPTY.nupkg"
           $stage = Join-Path $env:RUNNER_TEMP "herdr-windows-x86_64"
           .\scripts\package_windows_conpty.ps1 `
-            -HerdrExe target\${{ matrix.target }}\release\herdr.exe `
+            -OsadeExe target\${{ matrix.target }}\release\osade.exe `
             -PackagePath $package `
             -StageDir $stage `
             -OutputPath ${{ matrix.name }}
@@ -333,7 +333,7 @@ jobs:
           python3 - <<'PY'
           import json, pathlib
           result = {}
-          for path in pathlib.Path('artifacts').glob('herdr-*/*.sha256'):
+          for path in pathlib.Path('artifacts').glob('osade-*/*.sha256'):
               digest, name = path.read_text().split()[:2]
               target = name.removeprefix('herdr-').removesuffix('.exe').removesuffix('.zip')
               result[target] = digest
@@ -490,8 +490,8 @@ jobs:
           fi
 
           PREVIEW_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${PREVIEW_TAG}"
-          PREVIEW_COMMENT_MARKER="<!-- herdr:preview-released:${PREVIEW_TAG} -->"
-          PREVIEW_COMMENT="${PREVIEW_COMMENT_MARKER}"$'\n'"Released on the preview channel in [${PREVIEW_BUILD_ID}](${PREVIEW_URL}). This is available to preview users, but is not in a stable Herdr release yet."
+          PREVIEW_COMMENT_MARKER="<!-- osade:preview-released:${PREVIEW_TAG} -->"
+          PREVIEW_COMMENT="${PREVIEW_COMMENT_MARKER}"$'\n'"Released on the preview channel in [${PREVIEW_BUILD_ID}](${PREVIEW_URL}). This is available to preview users, but is not in a stable Osade release yet."
 
           issue_has_comment_marker() {
             local issue="$1"

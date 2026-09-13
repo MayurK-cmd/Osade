@@ -15,7 +15,7 @@ afterEach(async () => {
 
 describe('documentation release publishing', () => {
   test('publishes immutable tagged snapshots and validates maintained corrections', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'herdr-docs-'));
+    const root = await mkdtemp(join(tmpdir(), 'osade-docs-'));
     temporaryDirectories.push(root);
     await write(root, 'distribution/latest.json', '{"version":"0.9.0"}\n');
     await write(root, 'README.md', 'stable readme\n');
@@ -123,7 +123,7 @@ function git(root: string, args: string[]) {
 function runScript(root: string, args: string[]) {
   execFileSync('node', [script, ...args], {
     cwd: root,
-    env: { ...process.env, HERDR_DOCS_REPO_ROOT: root },
+    env: { ...process.env, OSADE_DOCS_REPO_ROOT: root },
     stdio: 'pipe',
   });
 }

@@ -1215,7 +1215,7 @@ fn windows_unicode_control_to_key_code(unicode: u16) -> Option<crate::protocol::
 
 #[cfg(any(windows, test))]
 fn windows_input_trace_enabled() -> bool {
-    std::env::var_os("HERDR_WINDOWS_INPUT_TRACE").is_some()
+    std::env::var_os("OSADE_WINDOWS_INPUT_TRACE").is_some()
 }
 
 #[cfg(test)]

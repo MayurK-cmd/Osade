@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "herdr-plugin-marketplace-worker",
+      "name": "osade-plugin-marketplace-worker",
       "dependencies": {
         "smol-toml": "1.7.1",
       },

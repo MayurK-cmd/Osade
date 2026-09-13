@@ -26,7 +26,7 @@ fn integration_status(args: &[String]) -> std::io::Result<i32> {
         [] => false,
         [flag] if flag == "--outdated-only" => true,
         _ => {
-            eprintln!("usage: herdr integration status [--outdated-only]");
+            eprintln!("usage: osade integration status [--outdated-only]");
             return Ok(2);
         }
     };
@@ -110,13 +110,13 @@ fn parse_integration_target(
 ) -> std::io::Result<Option<IntegrationTarget>> {
     let Some(target) = args.first().map(|arg| arg.as_str()) else {
         eprintln!(
-            "usage: herdr integration {action} <pi|omp|claude|codex|copilot|devin|droid|kimi|opencode|kilo|hermes|qodercli|qwen|cursor|mastracode|grok>"
+            "usage: osade integration {action} <pi|omp|claude|codex|copilot|devin|droid|kimi|opencode|kilo|hermes|qodercli|qwen|cursor|mastracode|grok>"
         );
         return Ok(None);
     };
     if args.len() != 1 {
         eprintln!(
-            "usage: herdr integration {action} <pi|omp|claude|codex|copilot|devin|droid|kimi|opencode|kilo|hermes|qodercli|qwen|cursor|mastracode|grok>"
+            "usage: osade integration {action} <pi|omp|claude|codex|copilot|devin|droid|kimi|opencode|kilo|hermes|qodercli|qwen|cursor|mastracode|grok>"
         );
         return Ok(None);
     }
@@ -152,40 +152,40 @@ fn parse_integration_target(
 }
 
 fn print_integration_help() {
-    eprintln!("herdr integration commands:");
-    eprintln!("  herdr integration install pi");
-    eprintln!("  herdr integration install omp");
-    eprintln!("  herdr integration install claude");
-    eprintln!("  herdr integration install codex");
-    eprintln!("  herdr integration install copilot");
-    eprintln!("  herdr integration install devin");
-    eprintln!("  herdr integration install droid");
-    eprintln!("  herdr integration install kimi");
-    eprintln!("  herdr integration install opencode");
-    eprintln!("  herdr integration install kilo");
-    eprintln!("  herdr integration install hermes");
-    eprintln!("  herdr integration install qodercli");
-    eprintln!("  herdr integration install qwen");
-    eprintln!("  herdr integration install cursor");
-    eprintln!("  herdr integration install mastracode");
-    eprintln!("  herdr integration install antigravity-cli");
-    eprintln!("  herdr integration install grok");
-    eprintln!("  herdr integration uninstall pi");
-    eprintln!("  herdr integration uninstall omp");
-    eprintln!("  herdr integration uninstall claude");
-    eprintln!("  herdr integration uninstall codex");
-    eprintln!("  herdr integration uninstall copilot");
-    eprintln!("  herdr integration uninstall devin");
-    eprintln!("  herdr integration uninstall droid");
-    eprintln!("  herdr integration uninstall kimi");
-    eprintln!("  herdr integration uninstall opencode");
-    eprintln!("  herdr integration uninstall kilo");
-    eprintln!("  herdr integration uninstall hermes");
-    eprintln!("  herdr integration uninstall qodercli");
-    eprintln!("  herdr integration uninstall qwen");
-    eprintln!("  herdr integration uninstall cursor");
-    eprintln!("  herdr integration uninstall mastracode");
-    eprintln!("  herdr integration uninstall antigravity-cli");
-    eprintln!("  herdr integration uninstall grok");
-    eprintln!("  herdr integration status [--outdated-only]");
+    eprintln!("osade integration commands:");
+    eprintln!("  osade integration install pi");
+    eprintln!("  osade integration install omp");
+    eprintln!("  osade integration install claude");
+    eprintln!("  osade integration install codex");
+    eprintln!("  osade integration install copilot");
+    eprintln!("  osade integration install devin");
+    eprintln!("  osade integration install droid");
+    eprintln!("  osade integration install kimi");
+    eprintln!("  osade integration install opencode");
+    eprintln!("  osade integration install kilo");
+    eprintln!("  osade integration install hermes");
+    eprintln!("  osade integration install qodercli");
+    eprintln!("  osade integration install qwen");
+    eprintln!("  osade integration install cursor");
+    eprintln!("  osade integration install mastracode");
+    eprintln!("  osade integration install antigravity-cli");
+    eprintln!("  osade integration install grok");
+    eprintln!("  osade integration uninstall pi");
+    eprintln!("  osade integration uninstall omp");
+    eprintln!("  osade integration uninstall claude");
+    eprintln!("  osade integration uninstall codex");
+    eprintln!("  osade integration uninstall copilot");
+    eprintln!("  osade integration uninstall devin");
+    eprintln!("  osade integration uninstall droid");
+    eprintln!("  osade integration uninstall kimi");
+    eprintln!("  osade integration uninstall opencode");
+    eprintln!("  osade integration uninstall kilo");
+    eprintln!("  osade integration uninstall hermes");
+    eprintln!("  osade integration uninstall qodercli");
+    eprintln!("  osade integration uninstall qwen");
+    eprintln!("  osade integration uninstall cursor");
+    eprintln!("  osade integration uninstall mastracode");
+    eprintln!("  osade integration uninstall antigravity-cli");
+    eprintln!("  osade integration uninstall grok");
+    eprintln!("  osade integration status [--outdated-only]");
 }

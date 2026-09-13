@@ -3,13 +3,13 @@ import { parse } from "smol-toml";
 const SNAPSHOT_KEY = "plugins/index.json";
 const SCAN_CACHE_KEY = "plugins/scan-cache.json";
 const SNAPSHOT_CACHE_CONTROL = "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600";
-const GITHUB_QUERY = "topic:herdr-plugin is:public";
+const GITHUB_QUERY = "topic:osade-plugin is:public";
 const GITHUB_API_VERSION = "2022-11-28";
 const GITHUB_API_URL = "https://api.github.com";
 const GITHUB_SEARCH_URL = `${GITHUB_API_URL}/search/repositories`;
 const GITHUB_GRAPHQL_URL = `${GITHUB_API_URL}/graphql`;
 const BLACKLIST_REPO_KEY_PREFIX = "repo:";
-const PLUGIN_MANIFEST_FILE = "herdr-plugin.toml";
+const PLUGIN_MANIFEST_FILE = "osade-plugin.toml";
 const PER_PAGE = 100;
 const MAX_REPOS = 1000;
 const GRAPHQL_BATCH_SIZE = 50;
@@ -101,7 +101,7 @@ export type PluginManifestListing = {
   id: string;
   name: string;
   version: string;
-  minHerdrVersion: string;
+  minOsadeVersion: string;
   description: string | null;
   platforms: string[] | null;
 };
@@ -717,7 +717,7 @@ export function parseManifestSummary(manifestText: string): Omit<PluginManifestL
     const id = readTrimmedString(manifest.id);
     const name = readTrimmedString(manifest.name);
     const version = readTrimmedString(manifest.version);
-    const minHerdrVersion = readTrimmedString(manifest.min_herdr_version);
+    const minOsadeVersion = readTrimmedString(manifest.min_osade_version);
     if (
       !id ||
       id.length > 120 ||
@@ -726,9 +726,9 @@ export function parseManifestSummary(manifestText: string): Omit<PluginManifestL
       name.length > PLUGIN_NAME_MAX_CHARS ||
       !version ||
       version.length > PLUGIN_VERSION_MAX_CHARS ||
-      !minHerdrVersion ||
-      minHerdrVersion.length > PLUGIN_VERSION_MAX_CHARS ||
-      !isHerdrVersion(minHerdrVersion)
+      !minOsadeVersion ||
+      minOsadeVersion.length > PLUGIN_VERSION_MAX_CHARS ||
+      !isOsadeVersion(minOsadeVersion)
     ) {
       return null;
     }
@@ -756,7 +756,7 @@ export function parseManifestSummary(manifestText: string): Omit<PluginManifestL
       if (new Set(platforms).size !== platforms.length) return null;
     }
 
-    return { id, name, version, minHerdrVersion, description, platforms };
+    return { id, name, version, minOsadeVersion, description, platforms };
   } catch {
     return null;
   }
@@ -971,7 +971,7 @@ function readCachedManifest(value: unknown): PluginManifestListing | null {
   const id = readString(value.id);
   const name = readString(value.name);
   const version = readString(value.version);
-  const minHerdrVersion = readString(value.minHerdrVersion);
+  const minOsadeVersion = readString(value.minOsadeVersion);
   const description = value.description === null ? null : readString(value.description);
   const platforms = value.platforms === null ? null : readStringArrayOrNull(value.platforms);
   if (
@@ -980,13 +980,13 @@ function readCachedManifest(value: unknown): PluginManifestListing | null {
     !id ||
     !name ||
     !version ||
-    !minHerdrVersion ||
+    !minOsadeVersion ||
     (value.description !== null && !description) ||
     (value.platforms !== null && platforms === null)
   ) {
     return null;
   }
-  return { path, id, name, version, minHerdrVersion, description, platforms };
+  return { path, id, name, version, minOsadeVersion, description, platforms };
 }
 
 export function normalizeRepositories(repositories: GitHubRepository[]): RepositoryListing[] {
@@ -1125,7 +1125,7 @@ function githubRequestInit(token: string): RequestInit {
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${token}`,
-      "User-Agent": "herdr-plugin-marketplace",
+      "User-Agent": "osade-plugin-marketplace",
       "X-GitHub-Api-Version": GITHUB_API_VERSION,
     },
   };
@@ -1251,7 +1251,7 @@ function readIsoString(value: unknown): string | null {
   return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null;
 }
 
-function isHerdrVersion(value: string): boolean {
+function isOsadeVersion(value: string): boolean {
   const normalized = value.startsWith("v") ? value.slice(1) : value;
   const parts = normalized.split(".");
   return (

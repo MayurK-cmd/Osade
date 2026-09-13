@@ -156,7 +156,7 @@ jobs:
       - name: Package artifact
         if: runner.os != 'Windows'
         shell: bash
-        run: cp target/${{ matrix.target }}/release/herdr ${{ matrix.name }}
+        run: cp target/${{ matrix.target }}/release/osade ${{ matrix.name }}
 
       - name: Package artifact
         if: runner.os == 'Windows'
@@ -166,7 +166,7 @@ jobs:
           $package = Join-Path $env:RUNNER_TEMP "Microsoft.Windows.Console.ConPTY.nupkg"
           $stage = Join-Path $env:RUNNER_TEMP "herdr-windows-x86_64"
           .\scripts\package_windows_conpty.ps1 `
-            -HerdrExe target\${{ matrix.target }}\release\herdr.exe `
+            -OsadeExe target\${{ matrix.target }}\release\osade.exe `
             -PackagePath $package `
             -StageDir $stage `
             -OutputPath ${{ matrix.name }}
@@ -288,7 +288,7 @@ jobs:
           fi
 
           RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}"
-          RELEASE_COMMENT_MARKER="<!-- herdr:released:v${VERSION} -->"
+          RELEASE_COMMENT_MARKER="<!-- osade:released:v${VERSION} -->"
           RELEASE_COMMENT="${RELEASE_COMMENT_MARKER}"$'\n'"Released in [v${VERSION}](${RELEASE_URL})."
 
           issue_has_comment_marker() {

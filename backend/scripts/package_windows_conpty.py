@@ -15,7 +15,7 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_METADATA = PROJECT_ROOT / "packaging" / "windows" / "conpty.json"
-MARKER_PATH = PurePosixPath("conpty/herdr-conpty.json")
+MARKER_PATH = PurePosixPath("conpty/osade-conpty.json")
 DOWNLOAD_TIMEOUT_SECONDS = 60
 
 
@@ -103,7 +103,7 @@ def stage_bundle(
     metadata_path: Path,
     architecture: str,
     package_path: Path,
-    herdr_exe: Path,
+    osade_exe: Path,
     output_dir: Path,
 ) -> None:
     metadata = load_metadata(metadata_path)
@@ -111,20 +111,20 @@ def stage_bundle(
         raise ValueError(f"unsupported Windows architecture: {architecture}")
     if output_dir.exists():
         raise ValueError(f"output directory already exists: {output_dir}")
-    if not herdr_exe.is_file():
-        raise ValueError(f"Herdr executable does not exist: {herdr_exe}")
+    if not osade_exe.is_file():
+        raise ValueError(f"Osade executable does not exist: {osade_exe}")
 
     acquire_package(metadata["package"], package_path)
     bundle = metadata["bundles"][architecture]
     metadata_root = metadata_path.resolve().parent
 
     with zipfile.ZipFile(package_path) as archive, tempfile.TemporaryDirectory(
-        prefix="herdr-conpty-stage-", dir=output_dir.parent
+        prefix="osade-conpty-stage-", dir=output_dir.parent
     ) as temporary:
         validate_nuspec(archive, metadata["package"])
         staging = Path(temporary) / "bundle"
         staging.mkdir()
-        shutil.copy2(herdr_exe, staging / "herdr.exe")
+        shutil.copy2(osade_exe, staging / "herdr.exe")
 
         for item in bundle["files"]:
             try:
@@ -210,14 +210,14 @@ def archive_bundle(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Package Herdr with Microsoft's pinned ConPTY runtime")
+    parser = argparse.ArgumentParser(description="Package Osade with Microsoft's pinned ConPTY runtime")
     parser.add_argument("--metadata", type=Path, default=DEFAULT_METADATA)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     stage = subparsers.add_parser("stage")
     stage.add_argument("--architecture", choices=("x86_64",), default="x86_64")
     stage.add_argument("--package", type=Path, required=True)
-    stage.add_argument("--herdr-exe", type=Path, required=True)
+    stage.add_argument("--osade-exe", type=Path, required=True)
     stage.add_argument("--output-dir", type=Path, required=True)
 
     archive = subparsers.add_parser("archive")
@@ -234,7 +234,7 @@ def main() -> None:
             args.metadata,
             args.architecture,
             args.package,
-            args.herdr_exe,
+            args.osade_exe,
             args.output_dir,
         )
     else:

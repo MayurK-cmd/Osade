@@ -125,7 +125,7 @@ fn render_notification_card(
     area: Rect,
     title: &str,
     body: &str,
-    position: crate::config::ToastHerdrPosition,
+    position: crate::config::ToastOsadePosition,
     top_offset: u16,
     dot_color: Color,
     palette: &Palette,
@@ -141,17 +141,17 @@ fn render_notification_card(
         .min(area.width);
     let height: u16 = if body.is_empty() { 3 } else { 4 }.min(area.height);
     let x = match position {
-        crate::config::ToastHerdrPosition::TopLeft
-        | crate::config::ToastHerdrPosition::BottomLeft => area.x,
-        crate::config::ToastHerdrPosition::TopRight
-        | crate::config::ToastHerdrPosition::BottomRight => area.right().saturating_sub(width),
+        crate::config::ToastOsadePosition::TopLeft
+        | crate::config::ToastOsadePosition::BottomLeft => area.x,
+        crate::config::ToastOsadePosition::TopRight
+        | crate::config::ToastOsadePosition::BottomRight => area.right().saturating_sub(width),
     };
     let max_y = area.bottom().saturating_sub(height).max(area.y);
     let y = match position {
-        crate::config::ToastHerdrPosition::TopLeft
-        | crate::config::ToastHerdrPosition::TopRight => area.y.saturating_add(top_offset),
-        crate::config::ToastHerdrPosition::BottomLeft
-        | crate::config::ToastHerdrPosition::BottomRight => area
+        crate::config::ToastOsadePosition::TopLeft
+        | crate::config::ToastOsadePosition::TopRight => area.y.saturating_add(top_offset),
+        crate::config::ToastOsadePosition::BottomLeft
+        | crate::config::ToastOsadePosition::BottomRight => area
             .bottom()
             .saturating_sub(height.saturating_add(top_offset)),
     }
@@ -197,7 +197,7 @@ pub(super) fn render_visible_notification(
     buffer: &mut Buffer,
     area: Rect,
     notification: &ClientVisibleNotification,
-    default_position: crate::config::ToastHerdrPosition,
+    default_position: crate::config::ToastOsadePosition,
     top_offset: u16,
     palette: &Palette,
 ) -> Rect {
@@ -233,7 +233,7 @@ pub(super) fn render_endpoint_notice(
         area,
         &notice.title,
         &notice.body,
-        crate::config::ToastHerdrPosition::TopRight,
+        crate::config::ToastOsadePosition::TopRight,
         top_offset,
         match notice.key.kind {
             ClientEndpointNoticeKind::Unsupported | ClientEndpointNoticeKind::Rejected => {
@@ -345,7 +345,7 @@ impl ClientShellState {
 
             match self.config.toast_delivery {
                 crate::config::ToastDelivery::Off => {}
-                crate::config::ToastDelivery::Herdr if !target_active => {
+                crate::config::ToastDelivery::Osade if !target_active => {
                     let duration = match pending.event.kind {
                         SemanticNotificationKind::NeedsAttention => 8,
                         SemanticNotificationKind::Finished => 5,
@@ -358,7 +358,7 @@ impl ClientShellState {
                     });
                     repaint = true;
                 }
-                crate::config::ToastDelivery::Herdr => {}
+                crate::config::ToastDelivery::Osade => {}
                 crate::config::ToastDelivery::Terminal if !suppress_external => {
                     effects.push(ClientShellNotificationEffect::Terminal {
                         title: pending.event.title,
@@ -468,8 +468,8 @@ mod tests {
         for height in [1, 2] {
             let area = Rect::new(3, 4, 8, height);
             for position in [
-                crate::config::ToastHerdrPosition::TopRight,
-                crate::config::ToastHerdrPosition::BottomRight,
+                crate::config::ToastOsadePosition::TopRight,
+                crate::config::ToastOsadePosition::BottomRight,
             ] {
                 let mut buffer = Buffer::empty(Rect::new(0, 0, 20, 10));
                 let rect = render_visible_notification(

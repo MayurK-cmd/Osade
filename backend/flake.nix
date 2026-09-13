@@ -1,5 +1,5 @@
 {
-  description = "herdr — terminal workspace manager for AI coding agents";
+  description = "osade — terminal workspace manager for AI coding agents";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -54,27 +54,27 @@
         system:
         let
           pkgs = pkgsFor system;
-          herdr = pkgs.callPackage ./nix/package.nix {
+          osade = pkgs.callPackage ./nix/package.nix {
             rustPlatform = rustPlatformFor pkgs;
           };
         in
         {
-          inherit herdr;
-          default = herdr;
+          inherit osade;
+          default = osade;
         }
       );
 
       apps = forAllSystems (system: {
         default = {
           type = "app";
-          program = "${self.packages.${system}.default}/bin/herdr";
-          meta.description = "Run Herdr";
+          program = "${self.packages.${system}.default}/bin/osade";
+          meta.description = "Run Osade";
         };
       });
 
       checks = forAllSystems (system: {
-        herdr = self.packages.${system}.default;
-        default = self.checks.${system}.herdr;
+        osade = self.packages.${system}.default;
+        default = self.checks.${system}.osade;
       });
 
       devShells = forAllSystems (
@@ -85,7 +85,7 @@
         in
         {
           default = pkgs.mkShell {
-            name = "herdr-dev";
+            name = "osade-dev";
             packages = with pkgs; [
               cargo-nextest
               cmake
@@ -108,7 +108,7 @@
 
       overlays.default = lib.composeExtensions rust-overlay.overlays.default (
         final: _prev: {
-          herdr = final.callPackage ./nix/package.nix {
+          osade = final.callPackage ./nix/package.nix {
             rustPlatform = rustPlatformFor final;
           };
         }
