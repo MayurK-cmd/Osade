@@ -21,15 +21,15 @@
   "schema": {
     "path": "api-schema.json",
     "sha256": "033bd61133e91c3f7f1ed27a78f0189b93cf13092e26fb315ed9cb6ccd6c637f",
-    "captured_with": "herdr api schema --json",
+    "captured_with": "osade-runtime api schema --json",
     "captured_at": "2026-09-04",
     "method_list": "methods.txt"
   },
   "binary": {
-    "$comment": "Release assets for v0.8.2, hashed from what GitHub actually serves. NOT committed - ~91 MB of binaries do not belong in git. `node scripts/fetch-herdr-binaries.mjs` downloads and verifies against these. CONFIRMED 2026-09-11: the Windows binary inside the zip hashes to the value the schema was captured from, so the pinned schema comes from the genuine release build - while backend/ source is AHEAD of v0.8.2 (ADR 0002). Binary and source are pinned to different things, deliberately and now provably.",
+    "$comment": "Release assets for v0.8.2, hashed from what GitHub actually serves. NOT committed - ~91 MB of binaries do not belong in git. `node scripts/fetch-substrate-binaries.mjs` downloads and verifies against these. CONFIRMED 2026-09-11: the Windows binary inside the zip hashes to the value the schema was captured from, so the pinned schema comes from the genuine release build - while backend/ source is AHEAD of v0.8.2 (ADR 0002). Binary and source are pinned to different things, deliberately and now provably.",
     "vendored": false,
     "release": "https://github.com/herdrdev/herdr/releases/tag/v0.8.2",
-    "expected_layout": "vendor/herdr/<version>-p<protocol>/<target>/herdr[.exe]",
+    "expected_layout": "vendor/runtime/<version>-p<protocol>/<target>/osade-runtime[.exe]",
     "assets": {
       "herdr-linux-aarch64": {
         "target": "aarch64-unknown-linux-gnu",
@@ -59,7 +59,7 @@
       "$comment": "The Windows zip ships notices for ConPTY only, copied into third-party/. Rust crate attribution is NOT in the release - see RUST-CRATES.md, generated from the pinned Cargo.lock.",
       "path": "third-party/"
     },
-    "verify_at_boot": "A matching checksum is not the only gate. Run the boot drift check (OSADE.md 4.1.1) regardless: a user may have a different herdr on PATH."
+    "verify_at_boot": "A matching checksum is not the only gate. Run the boot drift check (OSADE.md 4.1.1) regardless: a different runtime may be on PATH."
   },
   "license": {
     "$comment": "herdr is Apache-2.0. LICENSE is the file from the pinned tag, byte for byte, so attribution does not depend on the network or on backend/ still being present. There is NO NOTICE file upstream (raw.githubusercontent.com/herdrdev/herdr/v0.8.2/NOTICE is 404), so Apache-2.0 section 4(d) has nothing to propagate - recorded here so nobody re-checks, and so nobody writes one.",

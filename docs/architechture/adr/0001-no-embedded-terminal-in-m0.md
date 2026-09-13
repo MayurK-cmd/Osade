@@ -5,7 +5,7 @@
 - **Supersedes:** OSADE.md §4.4 as originally written ("Canvas 2D grid renderer … 15
   concurrently visible panes at 60fps")
 - **Evidence:** `docs/SUBSTRATE-CONTRACT.md`, `docs/PRD-DELTA.md` #3
-- **Target:** the substrate `0.8.2-p20` (`vendor/herdr/0.8.2-p20/pin.json`)
+- **Target:** the substrate `0.8.2-p20` (`vendor/runtime/0.8.2-p20/pin.json`)
 
 ---
 
@@ -22,7 +22,7 @@ that decision rested on, so the question was reopened:
 
 ## 1. Screen content in the JSON API
 
-Surveyed all **91 methods** in the pinned schema (`vendor/herdr/0.8.2-p20/methods.txt`).
+Surveyed all **91 methods** in the pinned schema (`vendor/runtime/0.8.2-p20/methods.txt`).
 
 the substrate's detector does read a cell grid in-process — `AgentState` is derived from a screen
 snapshot — but **the grid itself is never exposed.** What crosses the JSON API is rendered
@@ -125,7 +125,7 @@ refresh. The cell grid exists only behind the bincode endpoint protocol.
 | | |
 | --- | --- |
 | **Fragility** | **None at the surface layer** — there is no surface layer. Remaining the substrate coupling is the JSON API, already covered by the drift check. |
-| **Work to first pixel** | **Zero.** "Open in the substrate" is `herdr session attach osade`. |
+| **Work to first pixel** | **Zero.** "Open in the substrate" is `osade-runtime session attach osade`. |
 | **On a protocol bump** | Nothing to break. |
 | **What it costs** | The user leaves the window to watch a terminal live. |
 

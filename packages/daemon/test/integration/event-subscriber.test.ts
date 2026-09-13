@@ -36,7 +36,7 @@ let streams: FakeStream[];
 
 function fakeClient(snapshot: unknown = { agents: [] }): SubstrateClient {
   return {
-    socketPath: '/fake/herdr.sock',
+    socketPath: '/fake/osade.sock',
     request: async () => snapshot,
   } as unknown as SubstrateClient;
 }
@@ -267,7 +267,7 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
     db.prepare("UPDATE agent_fact SET substrate_state = 'working', state_change_seq = 3 WHERE task_id = 't1'").run();
 
     const failing = {
-      socketPath: '/fake/herdr.sock',
+      socketPath: '/fake/osade.sock',
       request: async () => {
         throw new Error('the substrate is not running');
       },

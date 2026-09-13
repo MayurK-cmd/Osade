@@ -2,7 +2,7 @@
 /**
  * Generates the typed substrate client from the PINNED schema.
  *
- * OSADE.md §4.1 — INVARIANT: `vendor/herdr/<version>-p<protocol>/api-schema.json` is the only
+ * OSADE.md §4.1 — INVARIANT: `vendor/runtime/<version>-p<protocol>/api-schema.json` is the only
  * permitted codegen source. `backend/` is reference reading for behaviour and is never read
  * here. Method names are never hand-written; everything below is derived from the schema.
  *
@@ -30,7 +30,7 @@ const SCHEMA_KEYS = [
 ];
 
 function findPin() {
-  const vendorDir = join(ROOT, 'vendor/herdr');
+  const vendorDir = join(ROOT, 'vendor/runtime');
   if (!existsSync(vendorDir)) {
     throw new Error(`no vendored substrate at ${vendorDir} — see OSADE.md §4.1`);
   }
@@ -54,9 +54,36 @@ function findPin() {
 }
 
 /**
- * the substrate's bundle uses non-standard refs (`#/schemas/request/$defs/X`). Rewrite them to local
- * `#/$defs/X` so each top-level schema stands alone.
+ * Type names in Osade's vocabulary; values left exactly as the schema has them.
+ *
+ * PascalCase type names are Osade's to choose — nothing reads them off the wire — so the upstream
+ * project's name is taken out of any that carry it. Lowercase words are left alone: string
+ * literal values and snake_case field names *are* the wire, and a client that spells them
+ * differently does not work. Case is the whole discriminator, so the replacement is
+ * case-sensitive and needs no word boundaries.
+ *
+ * The word comes from pin.json's record of the upstream repository rather than being written
+ * here, so the pin stays the one place that says where the runtime came from.
+ *
+ * The "referenced by `undefined`'s JSON-Schema via the definition …" comments that
+ * json-schema-to-typescript emits carry nothing — the schema has no title for them to name —
+ * and are dropped.
  */
+const PROVENANCE_COMMENT =
+  /^ \* This interface was referenced by `[^`]*`'s JSON-Schema\n \* via the `definition` "[^"]*"\.\n/gm;
+
+function osadeNames(ts, pin) {
+  const segments = new URL(pin.license.upstream_repository).pathname.split('/').filter(Boolean);
+  const project = segments[segments.length - 1];
+  const typeWord = project[0].toUpperCase() + project.slice(1);
+  return ts
+    .replace(PROVENANCE_COMMENT, '')
+    .replace(/^\/\*\*\n \*\/\n/gm, '')
+    .replace(/\n \*\n \*\//g, '\n */')
+    .split(typeWord)
+    .join('Substrate');
+}
+
 function localiseRefs(node, schemaKey) {
   if (Array.isArray(node)) return node.map((n) => localiseRefs(n, schemaKey));
   if (node && typeof node === 'object') {
@@ -98,7 +125,7 @@ function extractMethods(requestSchema) {
 const BANNER = (pinKey) => `/**
  * GENERATED — DO NOT EDIT.
  *
- * Source: vendor/herdr/${pinKey}/api-schema.json
+ * Source: vendor/runtime/${pinKey}/api-schema.json
  * Regenerate: pnpm substrate:codegen
  *
  * OSADE.md §4.1 — the pinned schema is the only codegen source. Never hand-write a substrate
@@ -133,7 +160,7 @@ async function main() {
       unreachableDefinitions: true,
       style: { singleQuote: true, printWidth: 100 },
     });
-    files[`types/${schemaKey}.ts`] = BANNER(key) + '\n/* eslint-disable */\n\n' + ts;
+    files[`types/${schemaKey}.ts`] = BANNER(key) + '\n/* eslint-disable */\n\n' + osadeNames(ts, pin);
   }
 
   const types =

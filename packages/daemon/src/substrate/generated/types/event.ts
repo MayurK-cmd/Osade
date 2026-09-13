@@ -1,7 +1,7 @@
 /**
  * GENERATED — DO NOT EDIT.
  *
- * Source: vendor/herdr/0.8.2-p20/api-schema.json
+ * Source: vendor/runtime/0.8.2-p20/api-schema.json
  * Regenerate: pnpm substrate:codegen
  *
  * OSADE.md §4.1 — the pinned schema is the only codegen source. Never hand-write a substrate
@@ -10,10 +10,6 @@
 
 /* eslint-disable */
 
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "EventData".
- */
 export type EventData =
   | {
       type: 'workspace_created';
@@ -162,25 +158,9 @@ export type EventData =
       layout: PaneLayoutSnapshot;
       type: 'layout_updated';
     };
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "AgentStatus".
- */
 export type AgentStatus = 'idle' | 'working' | 'blocked' | 'done' | 'unknown';
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "AgentSessionRefKind".
- */
 export type AgentSessionRefKind = 'id' | 'path';
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "SplitDirection".
- */
 export type SplitDirection = 'right' | 'down';
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "EventKind".
- */
 export type EventKind =
   | 'workspace_created'
   | 'workspace_updated'
@@ -213,10 +193,6 @@ export interface Event {
   data: EventData;
   event: EventKind;
 }
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "WorkspaceInfo".
- */
 export interface WorkspaceInfo {
   active_tab_id: string;
   agent_status: AgentStatus;
@@ -231,10 +207,6 @@ export interface WorkspaceInfo {
   workspace_id: string;
   worktree?: WorkspaceWorktreeInfo | null;
 }
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "WorkspaceWorktreeInfo".
- */
 export interface WorkspaceWorktreeInfo {
   checkout_path: string;
   is_linked_worktree: boolean;
@@ -242,10 +214,6 @@ export interface WorkspaceWorktreeInfo {
   repo_name: string;
   repo_root: string;
 }
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "WorktreeInfo".
- */
 export interface WorktreeInfo {
   branch?: string | null;
   is_bare: boolean;
@@ -256,10 +224,6 @@ export interface WorktreeInfo {
   open_workspace_id?: string | null;
   path: string;
 }
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "TabInfo".
- */
 export interface TabInfo {
   agent_status: AgentStatus;
   focused: boolean;
@@ -269,10 +233,6 @@ export interface TabInfo {
   tab_id: string;
   workspace_id: string;
 }
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "PaneInfo".
- */
 export interface PaneInfo {
   agent?: string | null;
   agent_session?: AgentSessionInfo | null;
@@ -298,29 +258,17 @@ export interface PaneInfo {
   };
   workspace_id: string;
 }
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "AgentSessionInfo".
- */
 export interface AgentSessionInfo {
   agent: string;
   kind: AgentSessionRefKind;
   source: string;
   value: string;
 }
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "PaneScrollInfo".
- */
 export interface PaneScrollInfo {
   max_offset_from_bottom: number;
   offset_from_bottom: number;
   viewport_rows: number;
 }
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "PaneLayoutSnapshot".
- */
 export interface PaneLayoutSnapshot {
   area: PaneLayoutRect;
   focused_pane_id: string;
@@ -330,29 +278,17 @@ export interface PaneLayoutSnapshot {
   workspace_id: string;
   zoomed: boolean;
 }
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "PaneLayoutRect".
- */
 export interface PaneLayoutRect {
   height: number;
   width: number;
   x: number;
   y: number;
 }
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "PaneLayoutPane".
- */
 export interface PaneLayoutPane {
   focused: boolean;
   pane_id: string;
   rect: PaneLayoutRect;
 }
-/**
- * This interface was referenced by `Event`'s JSON-Schema
- * via the `definition` "PaneLayoutSplit".
- */
 export interface PaneLayoutSplit {
   direction: SplitDirection;
   id: string;

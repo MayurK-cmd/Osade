@@ -28,7 +28,7 @@ Thumbs.db
 .idea/
 
 # docs/ is Osade's spec directory and belongs in the repo.
-# herdr generates its own docs/ and ignores it — that rule lives in
+# The upstream runtime generates its own docs/ and ignores it — that rule lives in
 # backend/.gitignore and applies to backend/docs only.
 
 /.local/
@@ -45,8 +45,8 @@ Thumbs.db
 **/.wrangler/
 apps/desktop/smoke.png
 apps/desktop/.smoke/
-vendor/herdr/*/x86_64-*/
-vendor/herdr/*/aarch64-*/
+vendor/runtime/*/x86_64-*/
+vendor/runtime/*/aarch64-*/
 packages/*/dist/
 vendor/node/
 release/

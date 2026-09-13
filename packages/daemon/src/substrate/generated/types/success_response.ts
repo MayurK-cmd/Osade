@@ -1,7 +1,7 @@
 /**
  * GENERATED — DO NOT EDIT.
  *
- * Source: vendor/herdr/0.8.2-p20/api-schema.json
+ * Source: vendor/runtime/0.8.2-p20/api-schema.json
  * Regenerate: pnpm substrate:codegen
  *
  * OSADE.md §4.1 — the pinned schema is the only codegen source. Never hand-write a substrate
@@ -10,10 +10,6 @@
 
 /* eslint-disable */
 
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "ResponseResult".
- */
 export type ResponseResult =
   | {
       capabilities?: ServerCapabilities | null;
@@ -293,40 +289,12 @@ export type ResponseResult =
   | {
       type: 'ok';
     };
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "AgentSessionRefKind".
- */
 export type AgentSessionRefKind = 'id' | 'path';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "AgentStatus".
- */
 export type AgentStatus = 'idle' | 'working' | 'blocked' | 'done' | 'unknown';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "SplitDirection".
- */
 export type SplitDirection = 'right' | 'down';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneSwapReason".
- */
 export type PaneSwapReason = 'no_neighbor' | 'same_pane' | 'not_found' | 'cross_tab';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneMoveReason".
- */
 export type PaneMoveReason = 'same_tab' | 'zoomed_tab';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneZoomReason".
- */
 export type PaneZoomReason = 'single_pane' | 'already_zoomed' | 'already_unzoomed';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "LayoutNode".
- */
 export type LayoutNode =
   | {
       command?: string[] | null;
@@ -345,35 +313,11 @@ export type LayoutNode =
       second: LayoutNode;
       type: 'split';
     };
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneDirection".
- */
 export type PaneDirection = 'left' | 'right' | 'up' | 'down';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneFocusDirectionReason".
- */
 export type PaneFocusDirectionReason = 'no_neighbor';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneResizeReason".
- */
 export type PaneResizeReason = 'unchanged';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "ReadFormat".
- */
 export type ReadFormat = 'text' | 'ansi';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "ReadSource".
- */
 export type ReadSource = 'visible' | 'recent' | 'recent_unwrapped' | 'detection';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "EventData".
- */
 export type EventData =
   | {
       type: 'workspace_created';
@@ -522,10 +466,6 @@ export type EventData =
       layout: PaneLayoutSnapshot;
       type: 'layout_updated';
     };
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "EventKind".
- */
 export type EventKind =
   | 'workspace_created'
   | 'workspace_updated'
@@ -553,21 +493,9 @@ export type EventKind =
   | 'pane_agent_detected'
   | 'pane_agent_status_changed'
   | 'layout_updated';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "NotificationShowReason".
- */
 export type NotificationShowReason =
   'shown' | 'disabled' | 'rate_limited' | 'no_foreground_client' | 'busy';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "ClientWindowTitleReason".
- */
 export type ClientWindowTitleReason = 'set' | 'cleared' | 'no_foreground_client';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "IntegrationTarget".
- */
 export type IntegrationTarget =
   | 'pi'
   | 'omp'
@@ -586,58 +514,22 @@ export type IntegrationTarget =
   | 'mastracode'
   | 'antigravity_cli'
   | 'grok';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginActionContext".
- */
 export type PluginActionContext = 'global' | 'workspace' | 'tab' | 'pane' | 'selection';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginPlatform".
- */
 export type PluginPlatform = 'linux' | 'macos' | 'windows';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PopupSize".
- */
 export type PopupSize = number | string;
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginCommandStatus".
- */
 export type PluginCommandStatus = 'running' | 'succeeded' | 'failed';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "ConfigReloadStatus".
- */
 export type ConfigReloadStatus = 'applied' | 'partial' | 'failed';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginPanePlacement".
- */
 export type PluginPanePlacement = 'overlay' | 'popup' | 'split' | 'tab' | 'zoomed';
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginSourceKind".
- */
 export type PluginSourceKind = 'local' | 'github';
 
 export interface SuccessResponse {
   id: string;
   result: ResponseResult;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "ServerCapabilities".
- */
 export interface ServerCapabilities {
   detached_server_daemon?: boolean;
   live_handoff: boolean;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "SessionSnapshot".
- */
 export interface SessionSnapshot {
   agents: AgentInfo[];
   focused_pane_id?: string | null;
@@ -650,10 +542,6 @@ export interface SessionSnapshot {
   version: string;
   workspaces: WorkspaceInfo[];
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "AgentInfo".
- */
 export interface AgentInfo {
   agent?: string | null;
   agent_session?: AgentSessionInfo | null;
@@ -682,20 +570,12 @@ export interface AgentInfo {
   };
   workspace_id: string;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "AgentSessionInfo".
- */
 export interface AgentSessionInfo {
   agent: string;
   kind: AgentSessionRefKind;
   source: string;
   value: string;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneLayoutSnapshot".
- */
 export interface PaneLayoutSnapshot {
   area: PaneLayoutRect;
   focused_pane_id: string;
@@ -705,39 +585,23 @@ export interface PaneLayoutSnapshot {
   workspace_id: string;
   zoomed: boolean;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneLayoutRect".
- */
 export interface PaneLayoutRect {
   height: number;
   width: number;
   x: number;
   y: number;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneLayoutPane".
- */
 export interface PaneLayoutPane {
   focused: boolean;
   pane_id: string;
   rect: PaneLayoutRect;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneLayoutSplit".
- */
 export interface PaneLayoutSplit {
   direction: SplitDirection;
   id: string;
   ratio: number;
   rect: PaneLayoutRect;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneInfo".
- */
 export interface PaneInfo {
   agent?: string | null;
   agent_session?: AgentSessionInfo | null;
@@ -763,19 +627,11 @@ export interface PaneInfo {
   };
   workspace_id: string;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneScrollInfo".
- */
 export interface PaneScrollInfo {
   max_offset_from_bottom: number;
   offset_from_bottom: number;
   viewport_rows: number;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "TabInfo".
- */
 export interface TabInfo {
   agent_status: AgentStatus;
   focused: boolean;
@@ -785,10 +641,6 @@ export interface TabInfo {
   tab_id: string;
   workspace_id: string;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "WorkspaceInfo".
- */
 export interface WorkspaceInfo {
   active_tab_id: string;
   agent_status: AgentStatus;
@@ -803,10 +655,6 @@ export interface WorkspaceInfo {
   workspace_id: string;
   worktree?: WorkspaceWorktreeInfo | null;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "WorkspaceWorktreeInfo".
- */
 export interface WorkspaceWorktreeInfo {
   checkout_path: string;
   is_linked_worktree: boolean;
@@ -814,10 +662,6 @@ export interface WorkspaceWorktreeInfo {
   repo_name: string;
   repo_root: string;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "WorktreeSourceInfo".
- */
 export interface WorktreeSourceInfo {
   repo_key: string;
   repo_name: string;
@@ -825,10 +669,6 @@ export interface WorktreeSourceInfo {
   source_checkout_path: string;
   source_workspace_id?: string | null;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "WorktreeInfo".
- */
 export interface WorktreeInfo {
   branch?: string | null;
   is_bare: boolean;
@@ -839,10 +679,6 @@ export interface WorktreeInfo {
   open_workspace_id?: string | null;
   path: string;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneSwapResult".
- */
 export interface PaneSwapResult {
   changed: boolean;
   focused_pane_id: string;
@@ -851,10 +687,6 @@ export interface PaneSwapResult {
   source_pane_id: string;
   target_pane_id?: string | null;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneMoveResult".
- */
 export interface PaneMoveResult {
   changed: boolean;
   closed_tab_id?: string | null;
@@ -870,10 +702,6 @@ export interface PaneMoveResult {
   source_layout?: PaneLayoutSnapshot | null;
   target_layout: PaneLayoutSnapshot;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneZoomResult".
- */
 export interface PaneZoomResult {
   changed: boolean;
   focus_changed: boolean;
@@ -884,10 +712,6 @@ export interface PaneZoomResult {
   zoom_changed: boolean;
   zoomed: boolean;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneProcessInfo".
- */
 export interface PaneProcessInfo {
   foreground_process_group_id?: number | null;
   foreground_processes?: PaneProcessInfoProcess[];
@@ -895,10 +719,6 @@ export interface PaneProcessInfo {
   shell_pid?: number | null;
   tty?: string | null;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneProcessInfoProcess".
- */
 export interface PaneProcessInfoProcess {
   argv?: string[] | null;
   argv0?: string | null;
@@ -907,10 +727,6 @@ export interface PaneProcessInfoProcess {
   name: string;
   pid: number;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "LayoutDescription".
- */
 export interface LayoutDescription {
   focused_pane_id: string;
   root: LayoutNode;
@@ -918,20 +734,12 @@ export interface LayoutDescription {
   workspace_id: string;
   zoomed: boolean;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneNeighborResult".
- */
 export interface PaneNeighborResult {
   direction: PaneDirection;
   layout: PaneLayoutSnapshot;
   neighbor_pane_id?: string | null;
   pane_id: string;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneEdgesResult".
- */
 export interface PaneEdgesResult {
   down: boolean;
   layout: PaneLayoutSnapshot;
@@ -940,10 +748,6 @@ export interface PaneEdgesResult {
   right: boolean;
   up: boolean;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneFocusDirectionResult".
- */
 export interface PaneFocusDirectionResult {
   changed: boolean;
   focused_pane_id?: string | null;
@@ -951,10 +755,6 @@ export interface PaneFocusDirectionResult {
   reason?: PaneFocusDirectionReason | null;
   source_pane_id: string;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneResizeResult".
- */
 export interface PaneResizeResult {
   changed: boolean;
   focused_pane_id: string;
@@ -962,10 +762,6 @@ export interface PaneResizeResult {
   pane_id: string;
   reason?: PaneResizeReason | null;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PaneReadResult".
- */
 export interface PaneReadResult {
   format: ReadFormat;
   pane_id: string;
@@ -976,32 +772,16 @@ export interface PaneReadResult {
   truncated: boolean;
   workspace_id: string;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "EventEnvelope".
- */
 export interface EventEnvelope {
   data: EventData;
   event: EventKind;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "IntegrationInstallResult".
- */
 export interface IntegrationInstallResult {
   messages: string[];
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "IntegrationUninstallResult".
- */
 export interface IntegrationUninstallResult {
   messages: string[];
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "AgentManifestInfo".
- */
 export interface AgentManifestInfo {
   active_version?: string | null;
   agent: string;
@@ -1014,10 +794,6 @@ export interface AgentManifestInfo {
   source_kind: string;
   warning?: string | null;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "InstalledPluginInfo".
- */
 export interface InstalledPluginInfo {
   actions?: PluginManifestAction[];
   build?: PluginManifestBuild[];
@@ -1041,10 +817,6 @@ export interface InstalledPluginInfo {
    */
   warnings?: string[];
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginManifestAction".
- */
 export interface PluginManifestAction {
   command: string[];
   contexts?: PluginActionContext[];
@@ -1053,27 +825,15 @@ export interface PluginManifestAction {
   platforms?: PluginPlatform[] | null;
   title: string;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginManifestBuild".
- */
 export interface PluginManifestBuild {
   command: string[];
   platforms?: PluginPlatform[] | null;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginManifestEventHook".
- */
 export interface PluginManifestEventHook {
   command: string[];
   on: string;
   platforms?: PluginPlatform[] | null;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginManifestLinkHandler".
- */
 export interface PluginManifestLinkHandler {
   action: string;
   id: string;
@@ -1081,10 +841,6 @@ export interface PluginManifestLinkHandler {
   platforms?: PluginPlatform[] | null;
   title: string;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginManifestPane".
- */
 export interface PluginManifestPane {
   command: string[];
   description?: string | null;
@@ -1105,18 +861,10 @@ export interface PluginSourceInfo {
   resolved_commit?: string | null;
   subdir?: string | null;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginManifestStartup".
- */
 export interface PluginManifestStartup {
   command: string[];
   platforms?: PluginPlatform[] | null;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginActionInfo".
- */
 export interface PluginActionInfo {
   action_id: string;
   command: string[];
@@ -1126,10 +874,6 @@ export interface PluginActionInfo {
   plugin_id: string;
   title: string;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginInvocationContext".
- */
 export interface PluginInvocationContext {
   clicked_url?: string | null;
   correlation_id?: string | null;
@@ -1147,10 +891,6 @@ export interface PluginInvocationContext {
   workspace_label?: string | null;
   worktree?: WorkspaceWorktreeInfo | null;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginCommandLogInfo".
- */
 export interface PluginCommandLogInfo {
   action_id?: string | null;
   command: string[];
@@ -1165,19 +905,11 @@ export interface PluginCommandLogInfo {
   stderr?: string | null;
   stdout?: string | null;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginPaneInfo".
- */
 export interface PluginPaneInfo {
   entrypoint: string;
   pane: PaneInfo;
   plugin_id: string;
 }
-/**
- * This interface was referenced by `SuccessResponse`'s JSON-Schema
- * via the `definition` "PluginSourceInfo".
- */
 export interface PluginSourceInfo1 {
   installed_unix_ms?: number | null;
   kind?: 'local' | 'github';

@@ -22,7 +22,12 @@ app.setPath('sessionData', join(OSADE_ROOT, 'electron', 'session'));
 
 import { repoFromArgv } from './argv.js';
 import { adoptOrSpawnDaemon } from './supervisor/daemon.js';
-import { adoptOrSpawnSubstrate } from './supervisor/substrate.js';
+import {
+  adoptOrSpawnSubstrate,
+  OSADE_SESSION,
+  runtimeEnv,
+  substrateBinary,
+} from './supervisor/substrate.js';
 
 const isDev = !app.isPackaged;
 
@@ -353,7 +358,7 @@ ipcMain.handle('osade:opened-repo', () => openedRepo);
  * `done` to `idle` for that tab. That is safe only because `idle` is inert in the event
  * mapping (§6.1) — the task keeps its `awaiting_review`.
  */
-ipcMain.handle('osade:open-in-the substrate', async () => {
+ipcMain.handle('osade:open-in-substrate', async () => {
   const command =
     process.platform === 'win32'
       ? 'start'
@@ -361,7 +366,15 @@ ipcMain.handle('osade:open-in-the substrate', async () => {
         ? 'open'
         : 'x-terminal-emulator';
   // Best effort: we cannot know which terminal the user prefers, so hand them the command.
-  return { command, hint: 'herdr session attach osade' };
+  //
+  // Spelled out in full, including the socket overrides, because Osade runs the substrate on
+  // sockets of its own naming under `~/.osade` (§2.2). Without them an attach looks at the
+  // runtime's default location, finds nothing there, and reports no session.
+  const env = runtimeEnv(OSADE_SESSION);
+  const exports = Object.entries(env)
+    .map(([name, value]) => `${name}=${JSON.stringify(value)}`)
+    .join(' ');
+  return { command, hint: `${exports} ${substrateBinary()} session attach ${OSADE_SESSION}` };
 });
 
 app.whenReady().then(

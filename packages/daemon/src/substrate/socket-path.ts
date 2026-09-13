@@ -1,65 +1,76 @@
-import { homedir, platform } from 'node:os';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { platform } from 'node:os';
 
 /**
- * Resolving the substrate's sockets — SUBSTRATE-CONTRACT.md §2.1, OSADE.md §2.1.
+ * Where Osade's runtime sockets are — OSADE.md §2.1, §2.2.
  *
- * On Unix these are real unix domain sockets, mode 0600. On Windows they are **named pipes**:
- * `interprocess` maps the whole path string through `GenericNamespaced`, so a Node client
- * connects to `\\.\pipe\C:\…\herdr.sock`. The `.sock` path also exists on disk as a marker
- * file — its presence does not mean a server is listening, so always probe with `ping`.
+ * Osade names these, rather than reading them out of the runtime's own config directory. The
+ * substrate takes `HERDR_SOCKET_PATH` and `HERDR_CLIENT_SOCKET_PATH` as its socket overrides —
+ * its two documented inputs, and the only two places its vocabulary reaches Osade's source —
+ * and the supervisor passes exactly these paths when it spawns the process. So the names, the
+ * layout and the lifetime are Osade's.
+ *
+ * The practical gain is §2.2: the sockets live under `~/.osade/` with everything else, instead
+ * of in a platform config directory belonging to another program. `rm -rf ~/.osade` really does
+ * reset the system.
+ *
+ * On Unix these are unix domain sockets, mode 0600. On Windows they are **named pipes**: the
+ * whole path string is mapped through `GenericNamespaced`, so a Node client connects to
+ * `\\.\pipe\C:\…\osade.sock`. The path also exists on disk as a marker file — its presence does
+ * not mean a server is listening, so always probe with `ping`.
  */
 
-/** OSADE.md §2.2 — Osade runs substrate on its own named session so it never collides. */
+/** §2.2 — Osade runs the substrate on its own named session so it never collides. */
 export const OSADE_SESSION = 'osade';
 
 const WINDOWS_PIPE_PREFIX = '\\\\.\\pipe\\';
 
-/** substrate's config dir, which is the substrate's business rather than ours (§2.2). */
-export function substrateConfigDir(env: NodeJS.ProcessEnv = process.env): string {
-  const explicit = env.HERDR_CONFIG_DIR;
-  if (explicit) return explicit;
+/** `~/.osade`, or wherever `OSADE_HOME` points. Absolute, because a relative root is a bug. */
+export function osadeRoot(env: NodeJS.ProcessEnv = process.env): string {
+  return resolve(env.OSADE_HOME ?? join(homedir(), '.osade'));
+}
 
-  if (platform() === 'win32') {
-    const appData = env.APPDATA ?? join(homedir(), 'AppData', 'Roaming');
-    return join(appData, 'herdr');
-  }
-  const xdg = env.XDG_CONFIG_HOME;
-  return xdg ? join(xdg, 'herdr') : join(homedir(), '.config', 'herdr');
+/** One directory per session, holding that session's sockets. */
+export function runtimeDir(
+  session: string = OSADE_SESSION,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return join(osadeRoot(env), 'runtime', session);
+}
+
+export function apiSocketPath(
+  session: string = OSADE_SESSION,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return env.OSADE_SUBSTRATE_SOCKET ?? join(runtimeDir(session, env), 'osade.sock');
+}
+
+export function clientSocketPath(
+  session: string = OSADE_SESSION,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return env.OSADE_SUBSTRATE_CLIENT_SOCKET ?? join(runtimeDir(session, env), 'osade-client.sock');
 }
 
 /**
- * The data directory for a session.
+ * The environment that puts the runtime's sockets where Osade expects them.
  *
- * `default` is treated as "no name" by the substrate (`backend/src/session.rs:99`), so it maps to the
- * config root rather than to `sessions/default`.
+ * Handed to the process at spawn. These two variable names are the substrate's input contract,
+ * so they are spelled its way; everything they point at is spelled ours.
  */
-export function substrateSessionDir(
+export function runtimeEnv(
   session: string = OSADE_SESSION,
   env: NodeJS.ProcessEnv = process.env,
-): string {
-  const root = substrateConfigDir(env);
-  if (session === 'default') return root;
-  return join(root, 'sessions', session);
+): Record<string, string> {
+  return {
+    HERDR_SESSION: session,
+    HERDR_SOCKET_PATH: apiSocketPath(session, env),
+    HERDR_CLIENT_SOCKET_PATH: clientSocketPath(session, env),
+  };
 }
 
-export function substrateApiSocketPath(
-  session: string = OSADE_SESSION,
-  env: NodeJS.ProcessEnv = process.env,
-): string {
-  const override = env.HERDR_SOCKET_PATH;
-  if (override) return override;
-  return join(substrateSessionDir(session, env), 'herdr.sock');
-}
-
-export function substrateClientSocketPath(
-  session: string = OSADE_SESSION,
-  env: NodeJS.ProcessEnv = process.env,
-): string {
-  return join(substrateSessionDir(session, env), 'herdr-client.sock');
-}
-
-/** Translates a substrate socket path into what `net.connect` needs on this platform. */
+/** Translates a socket path into what `net.connect` needs on this platform. */
 export function toConnectTarget(socketPath: string): string {
   if (platform() !== 'win32') return socketPath;
   if (socketPath.startsWith(WINDOWS_PIPE_PREFIX)) return socketPath;

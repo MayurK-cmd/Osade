@@ -29,7 +29,7 @@ installed binary rejects, and one capability field is missing from the binary's
 ships*, never from `backend/src`. Command:
 
 ```
-herdr api schema --json > vendor/herdr/<version>/herdr-api.schema.json
+osade-runtime api schema --json > vendor/runtime/<version>/api-schema.json
 ```
 
 ---
@@ -39,7 +39,7 @@ herdr api schema --json > vendor/herdr/<version>/herdr-api.schema.json
 ### 1.1 The file OSADE.md §4.1 names does not exist in `backend/`
 
 `backend/docs/` is absent from this checkout. The schema lives at
-`docs/next/api/herdr-api.schema.json` in the upstream substrate and is `include_str!`'d
+the schema file under `docs/next/api/` in the upstream substrate and is `include_str!`'d
 into the binary (`backend/src/cli/api.rs:1`), so **`backend/` as vendored here
 cannot compile.**
 
@@ -56,9 +56,9 @@ When the file is present it is authoritative.
 The installed binary embeds and prints its own schema — no repo needed:
 
 ```
-herdr api schema --json      # full JSON Schema, 265 KB, verified working
-herdr api schema             # human summary
-herdr api schema --output <path>
+osade-runtime api schema --json      # full JSON Schema, 265 KB, verified working
+osade-runtime api schema             # human summary
+osade-runtime api schema --output <path>
 ```
 
 Document shape (`backend/src/api/schema/tests.rs:32-46`):
@@ -95,8 +95,8 @@ error. Gate the boot guard on `protocol` (exact match against the pinned schema'
 
 | Socket | Path (default session) | Protocol |
 | --- | --- | --- |
-| JSON API | `<data_dir>/herdr.sock` | newline-delimited JSON |
-| Client shell | `<data_dir>/herdr-client.sock` | `[u32LE len][bincode]` |
+| JSON API | `~/.osade/runtime/<session>/osade.sock` | newline-delimited JSON |
+| Client shell | `~/.osade/runtime/<session>/osade-client.sock` | `[u32LE len][bincode]` |
 
 `data_dir` = `<config_dir>` for the default session, `<config_dir>/sessions/<name>`
 for a named one (`backend/src/session.rs:157-185`).
@@ -105,7 +105,7 @@ On **Windows** these are not files — `interprocess` maps the path string to a
 named pipe (`backend/src/ipc.rs:44-51`). A Node client connects with:
 
 ```js
-net.connect('\\\\.\\pipe\\' + 'C:\\Users\\…\\herdr.sock')
+net.connect('\\\\.\\pipe\\' + 'C:\\Users\\…\\osade.sock')
 ```
 
 Verified working from Node 22 (`ping` round-tripped). On Unix they are real unix
@@ -144,7 +144,7 @@ the substrate side (`backend/src/api/server.rs:90-100`), so batch where you can.
 
 ### 3.1 The server runs with zero clients, forever
 
-`herdr server` (`backend/src/server/headless/bootstrap.rs:4-87`) starts the JSON
+`osade-runtime server` (`backend/src/server/headless/bootstrap.rs:4-87`) starts the JSON
 API listener, builds `AppState`, spawns PTYs, and runs the event loop rendering
 into an in-memory ratatui buffer. The module doc is explicit: *"Does not enter raw
 mode or read stdin … Continues running after client disconnect"*
@@ -166,7 +166,7 @@ Full sequence executed against an isolated `osade` session with **no client ever
 attached** and no TUI running:
 
 ```
-$ HERDR_SESSION=osade herdr server &                   # headless, no tty
+$ HERDR_SESSION=osade osade-runtime server &                   # headless, no tty
 $ substrate workspace create --cwd <repo> --label osade-task-1
   → {"type":"workspace_created","workspace":{"workspace_id":"w1",…},
      "root_pane":{"pane_id":"w1:p1","scroll":{"viewport_rows":40},…}}
@@ -229,12 +229,12 @@ earlier). A restart is not a task death — do not set `terminated`.
 `HERDR_SOCKET_PATH` to point at a socket directly
 (`backend/src/api/mod.rs:20`, `backend/src/session.rs:173-181`).
 
-Verified: `HERDR_SESSION=osade herdr server` created
-`%APPDATA%\the substrate\sessions\osade\{herdr.sock,herdr-client.sock,herdr-server.log,session.json}`
+Verified: `HERDR_SESSION=osade osade-runtime server` created
+`~/.osade/runtime/osade/{osade.sock,osade-client.sock}` when given Osade's socket overrides,
 and ran **concurrently with the user's own `default` session** with no
-interference (`herdr session list` showed both `running`).
+interference (`osade-runtime session list` showed both `running`).
 
-`herdr session stop osade` shuts one down cleanly.
+`osade-runtime session stop osade` shuts one down cleanly.
 
 **Osade must set `HERDR_SESSION=osade` on the server it spawns and on every API
 call.** Note the name `default` is treated as "no name" (`session.rs:99`).
@@ -621,7 +621,7 @@ path if a prompt cannot be matched.
 **Nothing bundled calls `pane.report_metadata`.** `activity_text`, `tool_name`
 and `final_message` in OSADE §5.2 have no substrate-native source for Claude Code.
 
-For `claude`, the hook (`backend/src/integration/assets/claude/herdr-agent-state.sh`)
+For `claude`, the hook (the agent-state script in `backend/src/integration/assets/claude/`)
 fires on `SessionStart` only, skips subagents, and posts exactly one
 `pane.report_agent_session` carrying `session_id` and `transcript_path`. Claude
 Code's status therefore comes **entirely from the substrate's screen-detection
@@ -659,7 +659,7 @@ targets at `backend/src/integration/registry.rs:7-29`.
 
 Generation 1 is a genuinely stable, version-independent **handshake and control
 contract** (`backend/src/protocol/endpoint.rs:1-9`) — but it rides on
-`herdr-client.sock`, whose framing is
+`osade-client.sock`, whose framing is
 
 ```
 [u32 little-endian length][bincode payload]           backend/src/protocol/wire.rs:1592-1602
@@ -746,7 +746,7 @@ worktree.create  worktree.list  worktree.open  worktree.remove
 
 **Not** in the list: `agent.start`, `agent.prompt`, `agent.list`,
 `events.subscribe`, `pane.send_*`, `pane.read`. Those are daemon-only over
-`herdr.sock` — which matches OSADE §4.2's split, and the boundary is enforced by
+`osade.sock` — which matches OSADE §4.2's split, and the boundary is enforced by
 the substrate, not just by Osade lint. A method missing from `welcome.methods` must
 disable one action, never the connection (`endpoint.rs:6-9`).
 
@@ -762,7 +762,7 @@ disable one action, never the connection (`endpoint.rs:6-9`).
 | `python3` (maintenance tests) | ❌ |
 | `bun` (docs/integration tests) | ✅ 1.3.6 |
 | Node | ✅ 22.21.0 |
-| **`herdr` binary** | ✅ **0.8.2 already installed** |
+| **runtime binary** | ✅ **0.8.2 already installed** |
 
 `just build` cannot run here — `build.rs` shells out to `zig build` for
 `vendor/libghostty-vt` (source dist pinned at `libghostty-vt 1.3.2-HEAD-+c5a21edfc`,
@@ -781,7 +781,7 @@ every call in this document.
 ## 12. Cheat sheet — M0 task launch
 
 ```
-0.  spawn:  HERDR_SESSION=osade herdr server        (detached; capabilities.detached_server_daemon
+0.  spawn:  HERDR_SESSION=osade osade-runtime server        (detached; capabilities.detached_server_daemon
                                                      is false on Windows, so Osade owns the child)
 1.  ping                          → assert protocol == pinned, version == pinned
 2.  worktree.create               { cwd: repo.path, branch, base: task.base_sha,

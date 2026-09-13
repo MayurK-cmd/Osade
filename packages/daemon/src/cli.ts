@@ -37,8 +37,9 @@ async function main(argv: string[]): Promise<number> {
 
     case 'drift': {
       const { assertNoDrift, SubstrateDriftError } = await import('./substrate/drift-check.js');
+      const { runtimeBinary } = await import('./substrate/runtime-binary.js');
       try {
-        const result = await assertNoDrift(argv[1] ?? 'herdr');
+        const result = await assertNoDrift(argv[1] ?? runtimeBinary());
         console.log(result.ok ? `ok: ${result.message}` : `warning: ${result.message}`);
         return 0;
       } catch (err) {

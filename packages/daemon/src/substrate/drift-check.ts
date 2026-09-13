@@ -20,7 +20,7 @@ import { SUBSTRATE_METHODS, SUBSTRATE_PIN } from './generated/index.js';
 
 const execFileAsync = promisify(execFile);
 
-/** How long we give `herdr api schema --json` before giving up. */
+/** How long we give `<runtime> api schema --json` before giving up. */
 const SCHEMA_CAPTURE_TIMEOUT_MS = 10_000;
 
 /** substrate's schema bundle prints ~265 KB; allow generous headroom. */
@@ -114,15 +114,15 @@ export function compareToPin(liveSchema: unknown, binaryPath: string): DriftResu
       `${SUBSTRATE_PIN.protocol}, binary at ${binaryPath} reports ` +
       `${Number.isNaN(liveProtocol) ? 'no protocol field' : liveProtocol}.\n` +
       `missing methods: ${summary(missing)}   unexpected methods: ${summary(unexpected)}\n` +
-      `re-pin with: herdr api schema --json > ` +
-      `vendor/herdr/<version>-p<protocol>/api-schema.json`;
+      `re-pin with: ${binaryPath} api schema --json > ` +
+      `vendor/runtime/<version>-p<protocol>/api-schema.json`;
   } else if (missing.length > 0) {
     message =
       `the substrate is missing ${missing.length} pinned method(s): ${summary(missing)}.\n` +
       `binary at ${binaryPath} reports protocol ${liveProtocol}, which matches the pin, ` +
       `so this is a build difference rather than a protocol bump.\n` +
-      `re-pin with: herdr api schema --json > ` +
-      `vendor/herdr/<version>-p<protocol>/api-schema.json`;
+      `re-pin with: ${binaryPath} api schema --json > ` +
+      `vendor/runtime/<version>-p<protocol>/api-schema.json`;
   } else if (unexpected.length > 0) {
     message =
       `the substrate at ${binaryPath} has ${unexpected.length} method(s) beyond the pin ` +

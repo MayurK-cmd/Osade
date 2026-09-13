@@ -11,22 +11,23 @@ import { LaunchTask } from '../../src/domain/launch-task.js';
 import { SubstrateClient } from '../../src/substrate/client.js';
 import { assertNoDrift } from '../../src/substrate/drift-check.js';
 import { SubstrateEventSubscriber } from '../../src/substrate/event-subscriber.js';
-import { substrateApiSocketPath, substrateSessionDir } from '../../src/substrate/socket-path.js';
+import { apiSocketPath, runtimeDir, runtimeEnv } from '../../src/substrate/socket-path.js';
+import { runtimeBinary } from '../../src/substrate/runtime-binary.js';
 
 /**
  * The M0 acceptance test — OSADE.md §21.
  *
- * Real the substrate, real git repository, one full task. Runs against an **isolated `osade-e2e`
+ * A real substrate, a real git repository, one full task. Runs against an **isolated `osade-e2e`
  * named session** so it never touches the user's own substrate (§2.2, §4.4 verified live).
  *
- * Skipped unless `OSADE_E2E=1`, because it spawns a herdr server, creates a git worktree, and
+ * Skipped unless `OSADE_E2E=1`, because it spawns a substrate server, creates a git worktree, and
  * (when an agent binary is present) launches a real coding agent. `just`-style CI runs it;
  * the pre-commit gate does not.
  */
 
 const E2E = process.env.OSADE_E2E === '1';
 const SESSION = 'osade-e2e';
-const SUBSTRATE_BIN = process.env.OSADE_SUBSTRATE_BIN ?? 'herdr';
+const SUBSTRATE_BIN = runtimeBinary();
 
 let workdir: string;
 let repoPath: string;
@@ -69,7 +70,7 @@ beforeAll(async () => {
 
   // §18.1 — an isolated named session, spawned detached with HERDR_STARTUP_CWD cleared so
   // the substrate does not create a stray workspace we did not ask for.
-  const env: NodeJS.ProcessEnv = { ...process.env, HERDR_SESSION: SESSION };
+  const env: NodeJS.ProcessEnv = { ...process.env, ...runtimeEnv(SESSION) };
   delete env.HERDR_STARTUP_CWD;
   server = spawn(SUBSTRATE_BIN, ['server'], { env, stdio: 'ignore', detached: false });
 
@@ -94,7 +95,7 @@ afterAll(async () => {
   db?.close();
   // Best-effort: on Windows a just-exited PTY can still hold its cwd for a moment, and a
   // noisy teardown must not fail an otherwise-green run.
-  for (const dir of [substrateSessionDir(SESSION), workdir]) {
+  for (const dir of [runtimeDir(SESSION), workdir]) {
     try {
       rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     } catch {
@@ -111,7 +112,7 @@ describe.skipIf(!E2E)('M0 acceptance — one task end to end', () => {
     const pong = await substrate.ping();
     expect(pong.protocol).toBe(20);
     // Isolation: our socket is the named session's, not the user's default.
-    expect(substrate.socketPath).toBe(substrateApiSocketPath(SESSION));
+    expect(substrate.socketPath).toBe(apiSocketPath(SESSION));
   });
 
   it('creates a task with a pinned base commit', async () => {

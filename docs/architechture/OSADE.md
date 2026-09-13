@@ -115,12 +115,12 @@ Three processes. Two of them survive the window closing.
 │  substrate/        ─ THE ONLY caller   │            │
 │  db/           ─ sqlite + change_log + CDC      │
 └───────┬────────────────────────────┘            │
-        │ JSON API (herdr.sock)                   │
+        │ JSON API (osade.sock)                   │
         v                                         v
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│  herdr server  (vendored binary, headless)                                    │
+│  osade-runtime server  (vendored binary, headless)                            │
 │    owns: AppState, PTYs, panes, tabs, worktrees, detection, hooks, persist    │
-│    sockets: herdr.sock (JSON API)   herdr-client.sock (private bincode)       │
+│    sockets: osade.sock (JSON API)   osade-client.sock (private bincode)       │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -147,7 +147,7 @@ dialogs. An Electron `utilityProcess` opens the socket, decodes frames, and is h
 - the substrate sockets are unix domain sockets, mode `0600` — **on Unix**.
   *Corrected 2026-09-04 per PRD-DELTA #12.* On Windows they are **named pipes**, not files:
   `interprocess` maps the path string through `GenericNamespaced`
-  (`backend/src/ipc.rs:44-51`), so a client connects to `\\.\pipe\C:\…\herdr.sock` and access
+  (`backend/src/ipc.rs:44-51`), so a client connects to `\\.\pipe\C:\…\osade.sock` and access
   is governed by an SDDL descriptor (`backend/src/ipc.rs:156`), not a file mode. The `.sock`
   path also exists on disk as a marker file (`backend/src/ipc.rs:76`); **its presence does not
   mean a server is listening** — probe with `ping`.
@@ -215,8 +215,8 @@ string is a label.
 **INVARIANT — the pinned vendored schema is the only codegen source.**
 
 ```
-vendor/herdr/<version>-p<protocol>/
-├── api-schema.json     captured with `herdr api schema --json` from the vendored binary
+vendor/runtime/<version>-p<protocol>/
+├── api-schema.json     captured with `osade-runtime api schema --json` from the vendored binary
 ├── methods.txt         the sorted method set, for diffing
 ├── pin.json            protocol, method count, schema sha256, binary sha256, known gaps
 └── <target>/substrate      the binary itself (M0 packaging)
@@ -226,7 +226,7 @@ vendor/herdr/<version>-p<protocol>/
 is an unreleased tree ahead of any binary Osade ships. Read it to understand what a method
 *does*; never to learn that a method exists.
 
-The upstream file OSADE.md previously named — `docs/next/api/herdr-api.schema.json` — is
+The upstream file OSADE.md previously named — the schema file under `docs/next/api/` — is
 absent from `backend/` as vendored, and is `include_str!`'d at `backend/src/cli/api.rs:1`, so
 that tree does not compile. Do not try to restore it. The binary embeds and prints its own
 schema; that is the capture path.
@@ -269,7 +269,7 @@ share it. Never gate on it, never print it as the reason.
 substrate protocol mismatch: pinned 0.8.2-p20 expects protocol 20, binary at
   <path> reports protocol 22.
 missing methods: (none)   unexpected methods: command.invoke, pane.scroll, +8
-re-pin with: herdr api schema --json > vendor/herdr/<version>-p<protocol>/api-schema.json
+re-pin with: osade-runtime api schema --json > vendor/runtime/<version>-p<protocol>/api-schema.json
 ```
 
 *Where it runs.* In CI as a test against the vendored binary; at daemon boot before the first
@@ -286,9 +286,9 @@ records but which cannot gate a user's own installed the substrate.
 
 | Need | Transport | Notes |
 | --- | --- | --- |
-| Create/destroy worktrees, spawn agents, send prompts, query state | `herdr.sock` JSON API | daemon only; one connection per call |
-| Subscribe to agent status | `herdr.sock` `events.subscribe` | daemon only; **one connection per pane** (§7) |
-| Subscribe to workspace/tab/pane lifecycle | `herdr.sock` `events.subscribe` | daemon only; one connection, global |
+| Create/destroy worktrees, spawn agents, send prompts, query state | `osade.sock` JSON API | daemon only; one connection per call |
+| Subscribe to agent status | `osade.sock` `events.subscribe` | daemon only; **one connection per pane** (§7) |
+| Subscribe to workspace/tab/pane lifecycle | `osade.sock` `events.subscribe` | daemon only; one connection, global |
 | Terminal cell content, semantic input | endpoint protocol, generation 1 | renderer utility process only — **deferred past M0**, see §4.4 |
 | Git status / diff state | **not the substrate.** `git` in the worktree, debounced | no such event exists (§7); §1 carve-out |
 | Anything else | — | there is nothing else |
@@ -307,7 +307,7 @@ prompt-then-poll, and keep the steady-state connection count proportional to liv
 to time.
 
 **INVARIANT:** `packages/daemon/src/substrate/**` is the only directory permitted to import the
-generated substrate client or open `herdr.sock`. Enforced by lint (§20).
+generated substrate client or open `osade.sock`. Enforced by lint (§20).
 
 ### 4.3 The endpoint protocol — treat generation 1 as a floor
 
@@ -328,7 +328,7 @@ codec names and **never compares the substrate build versions**
 (`backend/src/client/handshake.rs:219-232`). An Osade shell built against generation 1 keeps
 working across the substrate upgrades. That part of §4.3 was right.
 
-What it does not guarantee: the wire. The endpoint rides on `herdr-client.sock`, framed
+What it does not guarantee: the wire. The endpoint rides on `osade-client.sock`, framed
 
 ```
 [u32 little-endian length][bincode payload]        backend/src/protocol/wire.rs:1592-1602
@@ -396,7 +396,7 @@ Osade owns on disk (`~/.osade/runs/`), not the substrate cells.
   every status change — observed as `"Pong response"` after a turn. Free.
 - **On-demand transcript panel** via `pane.read`, the one screen-content method the pinned
   schema exposes (§4.4.1). On explicit user action or a slow refresh, never a render loop.
-- **"Open in the substrate"**, which runs `herdr session attach osade` (or `herdr --session osade`) in
+- **"Open in the substrate"**, which runs `osade-runtime session attach osade` (or `osade-runtime --session osade`) in
   the user's terminal. Zero Osade rendering code, full fidelity, real input.
 
 **INVARIANT — attaching a client mutates the substrate state that Osade derives status from.**
@@ -1677,7 +1677,7 @@ reconnect it discards local state and takes the snapshot.
      concurrently with a user's own `default` session — separate sockets, separate
      `session.json`, no interference (`backend/src/session.rs:10-11`, `:157-185`).
    - **Spawn detached, copying the substrate's own recipe** (`backend/src/server/autodetect.rs:188-233`):
-     `herdr server` with stdin/stdout/stderr null and `DETACHED_PROCESS` on Windows /
+     `osade-runtime server` with stdin/stdout/stderr null and `DETACHED_PROCESS` on Windows /
      `setsid` on Unix. Without this the server dies with its parent, and "agents survive the
      app quitting" quietly stops being true. (`ping`'s
      `capabilities.detached_server_daemon` reports whether *this* server was started that
@@ -1716,7 +1716,7 @@ window silently produces. It is the only automated check that sees the renderer 
 daemon. Agents keep running. Add an explicit "Stop everything" menu item and a tray state so
 this is discoverable rather than surprising.
 
-**Vendoring the substrate:** ship a prebuilt substrate binary per platform in `vendor/herdr/<target>/`.
+**Vendoring the substrate:** ship a prebuilt substrate binary per platform in `vendor/runtime/<target>/`.
 Do not build it at install time — the substrate requires Zig 0.15.2 as a hard build dependency for
 `libghostty-vt`, which is not an acceptable user prerequisite. Pin the version and verify a
 checksum at boot.
@@ -1890,7 +1890,7 @@ osade/
 │   └── skill-assets/              using-osade skill, installed to ~/.osade/skills
 ├── backend/                       substrate source. READ-ONLY reference for behaviour.
 │                                  Never edited, never a codegen input (§4.1).
-├── vendor/herdr/<ver>-p<proto>/   THE pinned target: api-schema.json, methods.txt,
+├── vendor/runtime/<ver>-p<proto>/   THE pinned target: api-schema.json, methods.txt,
 │                                  pin.json, and the prebuilt binary per platform
 ├── patches/                       substrate patches, each with a rationale + upstream link
 └── docs/
@@ -1900,9 +1900,9 @@ osade/
     └── adr/                       one file per DECISION taken during the build
 ```
 
-*Corrected 2026-09-04 per PRD-DELTA #14.* `vendor/herdr/` is keyed by
+*Corrected 2026-09-04 per PRD-DELTA #14.* `vendor/runtime/` is keyed by
 `<version>-p<protocol>`, not by version alone, because the version string is not a contract
-(§4.1). The substrate's own repo furniture — its `AGENTS.md`, `.github/`, `.agents/skills/herdr-*` —
+(§4.1). The substrate's own repo furniture — its `AGENTS.md`, `.github/`, `.agents/skills/*` —
 belongs under `backend/`, not at the Osade root, where it would be read as Osade's own
 guidance. CLAUDE.md's rule that the substrate's `AGENTS.md` governs `backend/` only depends on it
 actually living there.
@@ -1957,7 +1957,7 @@ Prove the three-process architecture works before building any product on it.
 
 *Corrected 2026-09-04 per PRD-DELTA #15.*
 
-- [ ] Vendor the substrate binary into `vendor/herdr/<version>-p<protocol>/`; generate the typed
+- [ ] Vendor the substrate binary into `vendor/runtime/<version>-p<protocol>/`; generate the typed
       client **from the pinned `api-schema.json`, never from `backend/`**; implement the boot
       drift check (§4.1.1) — protocol and method set, never the version string
 - [ ] Daemon: sqlite + migrations + change_log + CDC + ws snapshot/push

@@ -12,7 +12,7 @@ copy with no upstream link. Submodule, vendored at a pinned tag, or fetched by s
 
 Fetched by script. Nothing builds against `backend/` — every reference in Osade's code is a
 citation inside a comment (`backend/src/api/server.rs:154-300`), the API contract comes from the
-pinned `vendor/herdr/0.8.2-p20/api-schema.json`, and `pnpm check` passes with `backend/` absent.
+pinned `vendor/runtime/0.8.2-p20/api-schema.json`, and `pnpm check` passes with `backend/` absent.
 Documentation that happens to be source code does not belong in Osade's history, and a copied
 tree spreads: the substrate's `.github/` and `.agents/` sat at Osade's root until 2026-09-11, where its
 CI and dependabot quietly competed with Osade's.
@@ -21,7 +21,7 @@ CI and dependabot quietly competed with Osade's.
 
 **The tree at `backend/` is not any the substrate release, and we cannot say what it is.**
 
-Fetching `herdrdev/herdr` at `v0.8.2` — the version `backend/Cargo.toml` declares, and the
+Fetching the upstream repository at `v0.8.2` — the version `backend/Cargo.toml` declares, and the
 version the pinned schema was captured from — produces a different tree:
 
 ```
@@ -65,7 +65,7 @@ Done properly, by comparing every tracked blob hash against upstream trees:
 | `cc88b3b8` | 2026-09-01 | 1686 |
 | **`94f6d9c0`** | **2026-09-02** | **1766 — all of them** |
 
-`backend/` is `herdrdev/herdr@94f6d9c0d9bb`, "fix: reveal newly focused spaces in the sidebar".
+`backend/` is upstream commit `94f6d9c0d9bb`, "fix: reveal newly focused spaces in the sidebar".
 Every tracked file is byte-identical. **Nothing in the read-only tree has been edited**, and the
 worry that something had was an artefact of the sampling, not a finding.
 
@@ -79,7 +79,7 @@ same day so it would stop competing with Osade's at the root. One genuinely fore
 up in the sweep — `skills/opensource/SKILL.md`, Osade's own writing about contribution, sitting
 inside someone else's tree. Moved to `docs/skills/`.
 
-Source and binary stay pinned to different things, deliberately: `vendor/herdr/0.8.2-p20` pins
+Source and binary stay pinned to different things, deliberately: `vendor/runtime/0.8.2-p20` pins
 the release Osade actually runs, with a verified checksum, while this source is ahead of it and
 explains its behaviour.
 

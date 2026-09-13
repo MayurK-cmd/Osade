@@ -61,9 +61,9 @@ module.exports = {
     // §17 — the same surface for humans and agents, so the CLI ships too.
     { from: 'packages/cli/dist', to: 'cli' },
     {
-      from: 'vendor/herdr/0.8.2-p20',
-      to: 'herdr',
-      filter: ['LICENSE', 'RUST-CRATES.md', 'third-party/**', '*/herdr*'],
+      from: 'vendor/runtime/0.8.2-p20',
+      to: 'runtime',
+      filter: ['LICENSE', 'RUST-CRATES.md', 'third-party/**', '*/osade-runtime*'],
     },
     // Populated by scripts/fetch-node-runtime.mjs.
     { from: 'vendor/node/${platform}-${arch}', to: 'node' },

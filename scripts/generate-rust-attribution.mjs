@@ -27,7 +27,7 @@ import { join } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const LOCK = join(ROOT, 'backend', 'Cargo.lock');
-const OUT = join(ROOT, 'vendor', 'herdr', '0.8.2-p20', 'RUST-CRATES.md');
+const OUT = join(ROOT, 'vendor', 'runtime', '0.8.2-p20', 'RUST-CRATES.md');
 
 /**
  * Crates with no `source` are herdr's own or path dependencies — not third party.

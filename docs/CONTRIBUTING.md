@@ -5,7 +5,7 @@ as open-source contributors.
 
 > Rewritten 2026-09-04. This guide previously described Osade as an IDE built on VS Code, with
 > a `vscode` upstream-tracking branch. That plan was abandoned: Osade is an Electron shell over
-> the [substrate](https://herdr.dev) runtime, and there is no `vscode` branch. If you are following
+> the substrate runtime, and there is no `vscode` branch. If you are following
 > an older copy of this file, none of it applies.
 
 ---
@@ -41,7 +41,7 @@ These will send a PR back regardless of how good the code is. Most are lint-enfo
   the substrate genuinely needs a change it goes in `patches/` with a written rationale and an
   upstream issue link — or better, upstream first. Osade does not fork the substrate.
 - **`backend/` is never a codegen input.** substrate client is generated only from the pinned
-  schema in `vendor/herdr/<version>-p<protocol>/api-schema.json` (§4.1). The substrate's version
+  schema in `vendor/runtime/<version>-p<protocol>/api-schema.json` (§4.1). The substrate's version
   string is not a contract: two different builds both call themselves `0.8.2`.
 - **No `status` column, in any table, ever.** Status is a pure function over durable facts,
   recomputed at read time (§6). This is the single most important rule in the project.

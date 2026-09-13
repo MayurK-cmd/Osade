@@ -135,7 +135,7 @@ export default tseslint.config(
   // ── one boundary to the substrate (§4.2) ──────────────────────────────────
   //
   // The rule is about the *protocol*, not the facade. §4.2 says only `daemon/src/substrate/**` may
-  // import the **generated** client or open `herdr.sock` — so domain code calling the typed
+  // import the **generated** client or open the runtime socket — so domain code calling the typed
   // `SubstrateClient` is the boundary working as intended, and forbidding that would only push the
   // same coupling through a wrapper. What must not leak is (a) generated method names and
   // (b) raw socket access, so those are what is restricted.

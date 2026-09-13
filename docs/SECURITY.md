@@ -49,8 +49,8 @@ Out of scope:
 
 - Vulnerabilities in the coding agents themselves (Claude Code, Codex, and others). Report
   those to their vendors.
-- **the substrate.** Osade vendors it but does not maintain it — report to
-  https://github.com/herdrdev/herdr. If a substrate issue is exploitable *through* Osade
+- **The substrate.** Osade vendors it but does not maintain it — report to
+  the upstream project listed in `docs/THIRD-PARTY-NOTICES.md`. If a substrate issue is exploitable *through* Osade
   specifically, tell us too so we can pin or mitigate.
 - An agent writing bad code inside its own worktree. That is what verification and review are
   for.

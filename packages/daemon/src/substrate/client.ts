@@ -8,12 +8,12 @@ import type { SubstrateMethod, SubstrateMethodParams } from './generated/index.j
  * directly — §4.2 restricts the *generated* module, not the facade.
  */
 export type { SubstrateMethod, SubstrateMethodParams } from './generated/index.js';
-import { substrateApiSocketPath, OSADE_SESSION, toConnectTarget } from './socket-path.js';
+import { apiSocketPath, OSADE_SESSION, toConnectTarget } from './socket-path.js';
 
 /**
  * The substrate JSON API client — OSADE.md §4.2.
  *
- * INVARIANT: `packages/daemon/src/substrate/**` is the only place that opens `herdr.sock` or
+ * INVARIANT: `packages/daemon/src/substrate/**` is the only place that opens the runtime socket or
  * imports the generated client.
  *
  * INVARIANT: **one request per connection.** `handle_connection_with_stop` reads exactly one
@@ -69,7 +69,7 @@ export class SubstrateClient {
   readonly #timeoutMs: number;
 
   constructor(options: SubstrateClientOptions = {}) {
-    this.socketPath = options.socketPath ?? substrateApiSocketPath(options.session ?? OSADE_SESSION);
+    this.socketPath = options.socketPath ?? apiSocketPath(options.session ?? OSADE_SESSION);
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 

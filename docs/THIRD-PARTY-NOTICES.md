@@ -15,7 +15,7 @@ Osade distributes or depends on.
 
 ### herdr
 
-Osade ships a prebuilt **herdr** binary in `vendor/herdr/<version>-p<protocol>/` and uses it
+Osade ships a prebuilt **herdr** binary in `vendor/runtime/<version>-p<protocol>/` and uses it
 as its execution substrate. Osade does not fork or modify herdr; it drives it through herdr's
 documented JSON API and extension points.
 
@@ -25,7 +25,7 @@ documented JSON API and extension points.
 | Homepage | https://herdr.dev |
 | Source | https://github.com/herdrdev/herdr |
 | License | **Apache-2.0** |
-| Pinned version | see `vendor/herdr/*/pin.json` |
+| Pinned version | see `vendor/runtime/*/pin.json` |
 
 A copy of the herdr source is kept at `backend/` as read-only reference material. It is not
 built, not modified, and not part of the Osade build.
@@ -33,7 +33,7 @@ built, not modified, and not part of the Osade build.
 Apache-2.0 requires that herdr's own `NOTICE` file, if it carries one, be reproduced in
 distributions that include the binary. **Action required before the first release:** fetch
 `LICENSE` and `NOTICE` from the pinned herdr tag into
-`vendor/herdr/<version>-p<protocol>/` and reference them here. Neither file was present in
+`vendor/runtime/<version>-p<protocol>/` and reference them here. Neither file was present in
 the `backend/` copy.
 
 ### Vendored inside the herdr binary

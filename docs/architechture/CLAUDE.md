@@ -38,7 +38,7 @@ backend/ is read-only. You are reading it to find out what is actually true.
 
 Answer these against the source, citing file paths and line numbers:
 
-1. Does docs/next/api/herdr-api.schema.json exist in backend/, and is it current
+1. Does the schema file under docs/next/api/ exist in backend/, and is it current
    with src/api/schema/? If stale, note how it's regenerated.
 2. List the exact JSON API Method variants for: creating a workspace rooted at a
    path, creating/removing a git worktree, creating a tab, spawning a process in a

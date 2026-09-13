@@ -15,7 +15,8 @@ import { VerifyRunner } from '../../src/domain/verify-run.js';
 import { SubstrateClient } from '../../src/substrate/client.js';
 import { assertNoDrift } from '../../src/substrate/drift-check.js';
 import { SubstrateEventSubscriber } from '../../src/substrate/event-subscriber.js';
-import { substrateSessionDir } from '../../src/substrate/socket-path.js';
+import { runtimeDir, runtimeEnv } from '../../src/substrate/socket-path.js';
+import { runtimeBinary } from '../../src/substrate/runtime-binary.js';
 
 /**
  * The M1 acceptance test — OSADE.md §21.
@@ -31,7 +32,7 @@ import { substrateSessionDir } from '../../src/substrate/socket-path.js';
 
 const E2E = process.env.OSADE_E2E === '1';
 const SESSION = 'osade-m1';
-const SUBSTRATE_BIN = process.env.OSADE_SUBSTRATE_BIN ?? 'herdr';
+const SUBSTRATE_BIN = runtimeBinary();
 
 let workdir: string;
 let repoPath: string;
@@ -103,7 +104,7 @@ beforeAll(async () => {
 
   await assertNoDrift(SUBSTRATE_BIN);
 
-  const env: NodeJS.ProcessEnv = { ...process.env, HERDR_SESSION: SESSION };
+  const env: NodeJS.ProcessEnv = { ...process.env, ...runtimeEnv(SESSION) };
   delete env.HERDR_STARTUP_CWD;
   server = spawn(SUBSTRATE_BIN, ['server'], { env, stdio: 'ignore' });
 
@@ -138,7 +139,7 @@ afterAll(async () => {
   }
   server?.kill();
   db?.close();
-  for (const dir of [substrateSessionDir(SESSION), workdir]) {
+  for (const dir of [runtimeDir(SESSION), workdir]) {
     try {
       rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     } catch {

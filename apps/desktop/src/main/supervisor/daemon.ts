@@ -1,6 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
+
+import { runtimeEnv, substrateBinary } from './substrate.js';
 import { delimiter, dirname, join } from 'node:path';
 
 /**
@@ -79,6 +81,10 @@ export function daemonCommand(entry: string): {
   // checkout it is still in the package's own node_modules.
   const addon = sqliteAddon(entry);
   if (addon) env.OSADE_SQLITE_BINDING = addon;
+  // The daemon's boot drift check spawns the runtime. A packaged machine has nothing on PATH,
+  // so it is handed the binary Osade ships rather than left to search for one.
+  env.OSADE_SUBSTRATE_BIN = substrateBinary();
+  Object.assign(env, runtimeEnv());
 
   const args = entry.endsWith('.ts')
     ? // `--` separates vite-node's own arguments from the script's; without it `start` is eaten.

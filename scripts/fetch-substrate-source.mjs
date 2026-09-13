@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, rmSync, renameSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -23,12 +31,23 @@ import { join } from 'node:path';
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const BACKEND = join(ROOT, 'backend');
 
-/** The substrate Osade reads. Bump alongside `vendor/herdr/<version>-p<protocol>/`. */
+/**
+ * `owner/name` of the upstream repository, from the runtime pin's provenance record — the one
+ * place the project is named, so this script does not repeat it.
+ */
+function upstreamRepository() {
+  const pinDir = join(ROOT, 'vendor', 'runtime');
+  const [key] = readdirSync(pinDir).sort().reverse();
+  const pin = JSON.parse(readFileSync(join(pinDir, key, 'pin.json'), 'utf8'));
+  return new URL(pin.license.upstream_repository).pathname.replace(/^\/|\/$/g, '');
+}
+
+/** The substrate Osade reads. Bump alongside `vendor/runtime/<version>-p<protocol>/`. */
 const PIN = {
-  repository: 'herdrdev/herdr',
+  repository: upstreamRepository(),
   // The commit `backend/` actually is — established by comparing every tracked blob hash
   // against the upstream tree (all 1766 identical). Not the v0.8.2 tag: the source is ahead of
-  // the binary, which is pinned separately in vendor/herdr/0.8.2-p20.
+  // the binary, which is pinned separately in vendor/runtime/0.8.2-p20.
   commit: '94f6d9c0d9bb',
   committedAt: '2026-09-02',
 };
@@ -51,11 +70,11 @@ function main() {
   }
 
   const url = `https://codeload.github.com/${PIN.repository}/tar.gz/${PIN.commit}`;
-  const staging = join(ROOT, '.herdr-src');
+  const staging = join(ROOT, '.substrate-src');
   rmSync(staging, { recursive: true, force: true });
   mkdirSync(staging, { recursive: true });
 
-  const archive = join(staging, 'the substrate.tar.gz');
+  const archive = join(staging, 'source.tar.gz');
   log(`fetching ${PIN.repository}@${PIN.commit.slice(0, 12)} …`);
   execFileSync('curl', ['-sSL', '--fail', '-o', archive, url], { stdio: 'inherit' });
 
@@ -63,8 +82,8 @@ function main() {
   execFileSync('tar', ['-xzf', archive, '-C', staging], { stdio: 'inherit' });
 
   // codeload names the top directory <repo>-<sha>.
-  const extracted = readdirSync(staging).find((entry) => entry.startsWith('herdr-'));
-  if (!extracted) throw new Error('the archive did not contain a substrate- directory');
+  const extracted = readdirSync(staging).find((entry) => entry.startsWith(`${PIN.repository.split('/')[1]}-`));
+  if (!extracted) throw new Error('the archive did not contain the expected top-level directory');
 
   renameSync(join(staging, extracted), BACKEND);
   rmSync(staging, { recursive: true, force: true });

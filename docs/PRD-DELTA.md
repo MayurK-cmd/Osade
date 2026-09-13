@@ -46,8 +46,8 @@ pane.
 
 **Correction.** OSADE.md §4.1 says "vendor that schema"; make it precise:
 
-> The schema is whatever `herdr api schema --json` prints **from the exact binary
-> in `vendor/herdr/<target>/`**. Commit that JSON, the binary, its checksum, and
+> The schema is whatever `osade-runtime api schema --json` prints **from the exact binary
+> in `vendor/runtime/<target>/`**. Commit that JSON, the binary, its checksum, and
 > the version string together. `backend/` is a reading reference for semantics
 > only and is never an input to code generation.
 
@@ -61,7 +61,7 @@ doc is just noise — delete it.
 
 ---
 
-## 2. BLOCKER — `docs/next/api/herdr-api.schema.json` does not exist in `backend/`
+## 2. BLOCKER — the schema file under `docs/next/api/` does not exist in `backend/`
 
 OSADE.md §4.1 and recon question 1 both assume it is there. `backend/docs/` is
 absent entirely. The file is `include_str!`'d at `backend/src/cli/api.rs:1`, so
@@ -93,7 +93,7 @@ Generation 1 is a real, build-independent contract — `do_handshake` compares
 `generation` and codec names and **never** compares the substrate versions
 (`backend/src/client/handshake.rs:219-232`). That promise holds.
 
-But it rides on `herdr-client.sock`, framed
+But it rides on `osade-client.sock`, framed
 `[u32LE length][bincode payload]` (`backend/src/protocol/wire.rs:1592-1602`) of
 the Rust `ClientMessage`/`ServerMessage` enums. Only the *handshake and control*
 messages carry JSON, as a string inside
@@ -170,7 +170,7 @@ Reading every asset in `backend/src/integration/assets/`:
 | --- | --- | --- |
 | kilo, kimi, mastracode, omp, opencode, pi | **claude**, **codex**, antigravity_cli, copilot, cursor, devin, droid, grok | hermes, qodercli, qwen |
 
-Claude's hook (`assets/claude/herdr-agent-state.sh`) fires on `SessionStart`
+Claude's hook (the agent-state script in `assets/claude/`) fires on `SessionStart`
 only and posts one `pane.report_agent_session` with `session_id` and
 `transcript_path`. Nothing more.
 
@@ -447,7 +447,7 @@ separate sockets, separate `session.json`, no interference
 Two additions from the source:
 
 - **Copy the substrate's own detached-spawn recipe** (`backend/src/server/autodetect.rs:188-233`):
-  `herdr server` with stdin/stdout/stderr null and
+  `osade-runtime server` with stdin/stdout/stderr null and
   `detach_server_daemon_command` — `DETACHED_PROCESS` on Windows, `setsid` on
   Unix. Without it the server dies with its parent. (`ping`'s
   `capabilities.detached_server_daemon` reports whether *this* server was started
@@ -460,7 +460,7 @@ Two additions from the source:
 Also worth pinning in §2.1: on Windows the substrate sockets are **named pipes**, not
 files — `interprocess` maps the path string through `GenericNamespaced`
 (`backend/src/ipc.rs:44-51`), so a Node client connects to
-`\\.\pipe\C:\…\herdr.sock`. Verified working from Node 22. The `.sock` file on
+`\\.\pipe\C:\…\osade.sock`. Verified working from Node 22. The `.sock` file on
 disk is only a marker (`backend/src/ipc.rs:76`); its presence does not mean a
 server is listening. §2.1's "mode 0600" is Unix-only; Windows uses an SDDL
 descriptor (`backend/src/ipc.rs:156`).
@@ -595,7 +595,7 @@ dirty checkout without `force` is a different error and must be rethrown at once
   Osade. CLAUDE.md's line *"the substrate's own AGENTS.md rules apply to `backend/` only"*
   is therefore already violated by file placement. Move it to
   `backend/AGENTS.md`.
-- the substrate's `.github/` and `.agents/skills/herdr-*` are at the Osade repo root and
+- the substrate's `.github/` and `.agents/skills/*` are at the Osade repo root and
   will be read as Osade's CI and skills. Move them under `backend/`.
 - `backend/` is untracked (`git ls-files backend | wc -l` → 0). Decide now:
   submodule, vendored-and-committed at a pinned tag, or `.gitignore`d with a
@@ -610,7 +610,7 @@ Against OSADE.md §21's six checkboxes:
 
 | M0 item | Change |
 | --- | --- |
-| Vendor the substrate binary + api schema; generate client; version guard | Schema comes from `herdr api schema --json` on the vendored binary, not from `backend/`. Guard on `protocol` **and** `version`. |
+| Vendor the substrate binary + api schema; generate client; version guard | Schema comes from `osade-runtime api schema --json` on the vendored binary, not from `backend/`. Guard on `protocol` **and** `version`. |
 | Daemon: sqlite + migrations + change_log + CDC + ws | Unchanged. |
 | Electron: userData redirect, supervisor, utilityProcess, canvas renderer | Add the bincode decoder (§3a) and detached spawn + `HERDR_STARTUP_CWD` removal (§12). Benchmark surfaces here, not in M1 (§3c). |
 | One task end-to-end | Unchanged — **proven to work** (SUBSTRATE-CONTRACT.md §3.3). |

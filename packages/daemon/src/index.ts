@@ -14,6 +14,7 @@ import { Knowledge } from './knowledge/service.js';
 import { SubstrateClient } from './substrate/client.js';
 import { assertNoDrift, SubstrateDriftError } from './substrate/drift-check.js';
 import { SubstrateEventSubscriber } from './substrate/event-subscriber.js';
+import { runtimeBinary } from './substrate/runtime-binary.js';
 import { osadePaths } from './paths.js';
 import { startDaemonServer, type RunningDaemon } from './server/index.js';
 
@@ -54,7 +55,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
   // missing pinned method; a superset only warns, or every the substrate upgrade is an outage.
   if (!options.skipDriftCheck) {
     try {
-      const result = await assertNoDrift(options.substrateBinary ?? 'herdr');
+      const result = await assertNoDrift(options.substrateBinary ?? runtimeBinary());
       if (result.ok) onInfo(result.message);
       else onWarning(result.message);
     } catch (err) {

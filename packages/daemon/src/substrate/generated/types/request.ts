@@ -1,7 +1,7 @@
 /**
  * GENERATED — DO NOT EDIT.
  *
- * Source: vendor/herdr/0.8.2-p20/api-schema.json
+ * Source: vendor/runtime/0.8.2-p20/api-schema.json
  * Regenerate: pnpm substrate:codegen
  *
  * OSADE.md §4.1 — the pinned schema is the only codegen source. Never hand-write a substrate
@@ -378,26 +378,10 @@ export type Request = {
       params: PluginPaneCloseParams;
     }
 );
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentStatus".
- */
 export type AgentStatus = 'idle' | 'working' | 'blocked' | 'done' | 'unknown';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ReadSource".
- */
 export type ReadSource = 'visible' | 'recent' | 'recent_unwrapped' | 'detection';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentViewBuiltinField".
- */
 export type AgentViewBuiltinField =
   'status' | 'workspace_id' | 'tab_id' | 'pane_id' | 'agent' | 'seen' | 'state_change_seq';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentViewBuiltinSortField".
- */
 export type AgentViewBuiltinSortField =
   | 'workspace_order'
   | 'tab_order'
@@ -407,24 +391,12 @@ export type AgentViewBuiltinSortField =
   | 'agent'
   | 'seen'
   | 'state_change_seq';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentViewContext".
- */
 export type AgentViewContext = 'current_workspace_id' | 'current_tab_id';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentViewField".
- */
 export type AgentViewField =
   | AgentViewBuiltinField
   | {
       token: string;
     };
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentViewFilter".
- */
 export type AgentViewFilter =
   | {
       filters: AgentViewFilter[];
@@ -452,10 +424,6 @@ export type AgentViewFilter =
       field: AgentViewField;
       op: 'exists';
     };
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentViewValue".
- */
 export type AgentViewValue =
   | string
   | boolean
@@ -463,24 +431,12 @@ export type AgentViewValue =
   | {
       context: AgentViewContext;
     };
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentViewSortField".
- */
 export type AgentViewSortField =
   | AgentViewBuiltinSortField
   | {
       token: string;
     };
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentViewSortOrder".
- */
 export type AgentViewSortOrder = 'asc' | 'desc';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "EventMatch".
- */
 export type EventMatch =
   | {
       event: 'workspace_created';
@@ -565,10 +521,6 @@ export type EventMatch =
       event: 'pane_agent_status_changed';
       pane_id: string;
     };
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "Subscription".
- */
 export type Subscription =
   | {
       type: 'workspace.created';
@@ -659,10 +611,6 @@ export type Subscription =
   | {
       type: 'layout.updated';
     };
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "OutputMatch".
- */
 export type OutputMatch =
   | {
       type: 'substring';
@@ -672,10 +620,6 @@ export type OutputMatch =
       type: 'regex';
       value: string;
     };
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "IntegrationTarget".
- */
 export type IntegrationTarget =
   | 'pi'
   | 'omp'
@@ -694,10 +638,6 @@ export type IntegrationTarget =
   | 'mastracode'
   | 'antigravity_cli'
   | 'grok';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "LayoutNode".
- */
 export type LayoutNode =
   | {
       command?: string[] | null;
@@ -716,45 +656,13 @@ export type LayoutNode =
       second: LayoutNode;
       type: 'split';
     };
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "SplitDirection".
- */
 export type SplitDirection = 'right' | 'down';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ToastHerdrPosition".
- */
-export type ToastHerdrPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "NotificationShowSound".
- */
+export type ToastSubstratePosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 export type NotificationShowSound = 'none' | 'done' | 'request';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneAgentState".
- */
 export type PaneAgentState = 'idle' | 'working' | 'blocked' | 'unknown';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneDirection".
- */
 export type PaneDirection = 'left' | 'right' | 'up' | 'down';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneGraphicsFormat".
- */
 export type PaneGraphicsFormat = 'png' | 'rgb' | 'rgba' | 'bgra';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneRightClickTarget".
- */
 export type PaneRightClickTarget = 'herdr' | 'pane';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneMoveDestination".
- */
 export type PaneMoveDestination =
   | {
       ratio?: number | null;
@@ -773,53 +681,21 @@ export type PaneMoveDestination =
       tab_label?: string | null;
       type: 'new_workspace';
     };
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneZoomMode".
- */
 export type PaneZoomMode = 'toggle' | 'on' | 'off';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PopupSize".
- */
 export type PopupSize = number | string;
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginPanePlacement".
- */
 export type PluginPanePlacement = 'overlay' | 'popup' | 'split' | 'tab' | 'zoomed';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginSourceKind".
- */
 export type PluginSourceKind = 'local' | 'github';
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ReadFormat".
- */
 export type ReadFormat = 'text' | 'ansi';
 
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentPromptParams".
- */
 export interface AgentPromptParams {
   target: string;
   text: string;
   wait?: AgentPromptWaitOptions | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentPromptWaitOptions".
- */
 export interface AgentPromptWaitOptions {
   timeout_ms?: number | null;
   until?: AgentStatus[];
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentReadParams".
- */
 export interface AgentReadParams {
   format?: 'text' | 'ansi';
   lines?: number | null;
@@ -827,26 +703,14 @@ export interface AgentReadParams {
   strip_ansi?: boolean;
   target: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentRenameParams".
- */
 export interface AgentRenameParams {
   name?: string | null;
   target: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentSendKeysParams".
- */
 export interface AgentSendKeysParams {
   keys: string[];
   target: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentStartParams".
- */
 export interface AgentStartParams {
   args?: string[];
   kind: string;
@@ -857,92 +721,44 @@ export interface AgentStartParams {
    */
   timeout_ms?: number | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentTarget".
- */
 export interface AgentTarget {
   target: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentViewClearParams".
- */
 export interface AgentViewClearParams {
   source?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentViewSetParams".
- */
 export interface AgentViewSetParams {
   filter?: AgentViewFilter | null;
   label?: string | null;
   sort?: AgentViewSort[];
   source: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentViewSort".
- */
 export interface AgentViewSort {
   field: AgentViewSortField;
   order?: 'asc' | 'desc';
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "AgentWaitParams".
- */
 export interface AgentWaitParams {
   target: string;
   timeout_ms?: number | null;
   until?: AgentStatus[];
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ClientWindowTitleSetParams".
- */
 export interface ClientWindowTitleSetParams {
   title: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "EmptyParams".
- */
 export interface EmptyParams {}
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "EventsSubscribeParams".
- */
 export interface EventsSubscribeParams {
   subscriptions: Subscription[];
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "EventsWaitParams".
- */
 export interface EventsWaitParams {
   match_event: EventMatch;
   timeout_ms?: number | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "IntegrationInstallParams".
- */
 export interface IntegrationInstallParams {
   target: IntegrationTarget;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "IntegrationUninstallParams".
- */
 export interface IntegrationUninstallParams {
   target: IntegrationTarget;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "LayoutApplyParams".
- */
 export interface LayoutApplyParams {
   focus?: boolean;
   root: LayoutNode;
@@ -950,87 +766,47 @@ export interface LayoutApplyParams {
   tab_label?: string | null;
   workspace_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "LayoutExportParams".
- */
 export interface LayoutExportParams {
   pane_id?: string | null;
   tab_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "LayoutSetSplitRatioParams".
- */
 export interface LayoutSetSplitRatioParams {
   pane_id?: string | null;
   path: boolean[];
   ratio: number;
   tab_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "NotificationShowParams".
- */
 export interface NotificationShowParams {
   body?: string | null;
-  position?: ToastHerdrPosition | null;
+  position?: ToastSubstratePosition | null;
   sound?: NotificationShowSound;
   title: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneClearAgentAuthorityParams".
- */
 export interface PaneClearAgentAuthorityParams {
   pane_id: string;
   seq?: number | null;
   source?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneCurrentParams".
- */
 export interface PaneCurrentParams {
   caller_pane_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneEdgesParams".
- */
 export interface PaneEdgesParams {
   pane_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneFocusDirectionParams".
- */
 export interface PaneFocusDirectionParams {
   direction: PaneDirection;
   pane_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneGraphicsClearParams".
- */
 export interface PaneGraphicsClearParams {
   layer_id?: string | null;
   pane_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneGraphicsPlacementParams".
- */
 export interface PaneGraphicsPlacementParams {
   grid_cols?: number;
   grid_rows?: number;
   viewport_col?: number;
   viewport_row?: number;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneGraphicsSetParams".
- */
 export interface PaneGraphicsSetParams {
   data_base64?: string;
   format: PaneGraphicsFormat;
@@ -1047,56 +823,28 @@ export interface PaneGraphicsPlacementParams1 {
   viewport_col?: number;
   viewport_row?: number;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneInputSetParams".
- */
 export interface PaneInputSetParams {
   pane_id: string;
   right_click: PaneRightClickTarget;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneLayoutParams".
- */
 export interface PaneLayoutParams {
   pane_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneListParams".
- */
 export interface PaneListParams {
   workspace_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneMoveParams".
- */
 export interface PaneMoveParams {
   destination: PaneMoveDestination;
   focus?: boolean;
   pane_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneNeighborParams".
- */
 export interface PaneNeighborParams {
   direction: PaneDirection;
   pane_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneProcessInfoParams".
- */
 export interface PaneProcessInfoParams {
   pane_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneReadParams".
- */
 export interface PaneReadParams {
   format?: 'text' | 'ansi';
   lines?: number | null;
@@ -1104,28 +852,16 @@ export interface PaneReadParams {
   source: ReadSource;
   strip_ansi?: boolean;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneReleaseAgentParams".
- */
 export interface PaneReleaseAgentParams {
   agent: string;
   pane_id: string;
   seq?: number | null;
   source: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneRenameParams".
- */
 export interface PaneRenameParams {
   label?: string | null;
   pane_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneReportAgentParams".
- */
 export interface PaneReportAgentParams {
   agent: string;
   agent_session_id?: string | null;
@@ -1136,10 +872,6 @@ export interface PaneReportAgentParams {
   source: string;
   state: PaneAgentState;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneReportAgentSessionParams".
- */
 export interface PaneReportAgentSessionParams {
   agent: string;
   agent_session_id?: string | null;
@@ -1149,10 +881,6 @@ export interface PaneReportAgentSessionParams {
   session_start_source?: string | null;
   source: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneReportMetadataParams".
- */
 export interface PaneReportMetadataParams {
   agent?: string | null;
   applies_to_source?: string | null;
@@ -1172,44 +900,24 @@ export interface PaneReportMetadataParams {
   };
   ttl_ms?: number | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneResizeParams".
- */
 export interface PaneResizeParams {
   amount?: number | null;
   direction: PaneDirection;
   pane_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneSendInputParams".
- */
 export interface PaneSendInputParams {
   keys?: string[];
   pane_id: string;
   text?: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneSendKeysParams".
- */
 export interface PaneSendKeysParams {
   keys: string[];
   pane_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneSendTextParams".
- */
 export interface PaneSendTextParams {
   pane_id: string;
   text: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneSplitParams".
- */
 export interface PaneSplitParams {
   cwd?: string | null;
   direction: SplitDirection;
@@ -1222,27 +930,15 @@ export interface PaneSplitParams {
   target_pane_id?: string | null;
   workspace_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneSwapParams".
- */
 export interface PaneSwapParams {
   direction?: PaneDirection | null;
   pane_id?: string | null;
   source_pane_id?: string | null;
   target_pane_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneTarget".
- */
 export interface PaneTarget {
   pane_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneWaitForOutputParams".
- */
 export interface PaneWaitForOutputParams {
   lines?: number | null;
   match: OutputMatch;
@@ -1251,32 +947,16 @@ export interface PaneWaitForOutputParams {
   strip_ansi?: boolean;
   timeout_ms?: number | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PaneZoomParams".
- */
 export interface PaneZoomParams {
   mode?: 'toggle' | 'on' | 'off';
   pane_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PingParams".
- */
 export interface PingParams {}
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginActionInvokeParams".
- */
 export interface PluginActionInvokeParams {
   action_id: string;
   context?: PluginInvocationContext | null;
   plugin_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginInvocationContext".
- */
 export interface PluginInvocationContext {
   clicked_url?: string | null;
   correlation_id?: string | null;
@@ -1294,10 +974,6 @@ export interface PluginInvocationContext {
   workspace_label?: string | null;
   worktree?: WorkspaceWorktreeInfo | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorkspaceWorktreeInfo".
- */
 export interface WorkspaceWorktreeInfo {
   checkout_path: string;
   is_linked_worktree: boolean;
@@ -1305,26 +981,14 @@ export interface WorkspaceWorktreeInfo {
   repo_name: string;
   repo_root: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginActionListParams".
- */
 export interface PluginActionListParams {
   plugin_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginLinkParams".
- */
 export interface PluginLinkParams {
   enabled?: boolean;
   path: string;
   source?: PluginSourceInfo | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginSourceInfo".
- */
 export interface PluginSourceInfo {
   installed_unix_ms?: number | null;
   kind?: 'local' | 'github';
@@ -1335,39 +999,19 @@ export interface PluginSourceInfo {
   resolved_commit?: string | null;
   subdir?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginListParams".
- */
 export interface PluginListParams {
   plugin_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginLogListParams".
- */
 export interface PluginLogListParams {
   limit?: number | null;
   plugin_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginPaneCloseParams".
- */
 export interface PluginPaneCloseParams {
   pane_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginPaneFocusParams".
- */
 export interface PluginPaneFocusParams {
   pane_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginPaneOpenParams".
- */
 export interface PluginPaneOpenParams {
   cwd?: string | null;
   direction?: SplitDirection | null;
@@ -1383,33 +1027,17 @@ export interface PluginPaneOpenParams {
   width?: PopupSize | null;
   workspace_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginSetEnabledParams".
- */
 export interface PluginSetEnabledParams {
   plugin_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "PluginUnlinkParams".
- */
 export interface PluginUnlinkParams {
   plugin_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "ServerLiveHandoffParams".
- */
 export interface ServerLiveHandoffParams {
   expected_protocol?: number | null;
   expected_version?: string | null;
   import_exe?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "TabCreateParams".
- */
 export interface TabCreateParams {
   cwd?: string | null;
   env?: {
@@ -1419,40 +1047,20 @@ export interface TabCreateParams {
   label?: string | null;
   workspace_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "TabListParams".
- */
 export interface TabListParams {
   workspace_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "TabMoveParams".
- */
 export interface TabMoveParams {
   insert_index: number;
   tab_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "TabRenameParams".
- */
 export interface TabRenameParams {
   label: string;
   tab_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "TabTarget".
- */
 export interface TabTarget {
   tab_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorkspaceCreateParams".
- */
 export interface WorkspaceCreateParams {
   cwd?: string | null;
   env?: {
@@ -1461,34 +1069,18 @@ export interface WorkspaceCreateParams {
   focus?: boolean;
   label?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorkspaceMoveBlockParams".
- */
 export interface WorkspaceMoveBlockParams {
   before_workspace_id?: string | null;
   workspace_ids: string[];
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorkspaceMoveParams".
- */
 export interface WorkspaceMoveParams {
   insert_index: number;
   workspace_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorkspaceRenameParams".
- */
 export interface WorkspaceRenameParams {
   label: string;
   workspace_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorkspaceReportMetadataParams".
- */
 export interface WorkspaceReportMetadataParams {
   seq?: number | null;
   source: string;
@@ -1498,17 +1090,9 @@ export interface WorkspaceReportMetadataParams {
   ttl_ms?: number | null;
   workspace_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorkspaceTarget".
- */
 export interface WorkspaceTarget {
   workspace_id: string;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorktreeCreateParams".
- */
 export interface WorktreeCreateParams {
   base?: string | null;
   branch?: string | null;
@@ -1518,18 +1102,10 @@ export interface WorktreeCreateParams {
   path?: string | null;
   workspace_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorktreeListParams".
- */
 export interface WorktreeListParams {
   cwd?: string | null;
   workspace_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorktreeOpenParams".
- */
 export interface WorktreeOpenParams {
   branch?: string | null;
   cwd?: string | null;
@@ -1538,10 +1114,6 @@ export interface WorktreeOpenParams {
   path?: string | null;
   workspace_id?: string | null;
 }
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorktreeRemoveParams".
- */
 export interface WorktreeRemoveParams {
   force?: boolean;
   workspace_id: string;

@@ -15,3 +15,4 @@ photographs the window.
       **The criterion (§13.6):** N ≥ 10 comparable tasks with and without injected conventions on
       the same repo. **If the number does not move, the feature is wrong and should be redesigned,
       not shipped.** Nothing in the test suite can answer this one.
+

@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, renameSync } from 'node:fs
 import { join } from 'node:path';
 
 /**
- * Download the pinned the substrate binaries and verify them — OSADE.md §18.1.
+ * Download the pinned runtime binaries and verify them — OSADE.md §18.1.
  *
  * The binaries are **not committed**: ~91 MB across five platforms, which git stores badly and
  * every clone would pay for. What is committed is the thing that matters — a sha256 per asset in
@@ -25,21 +25,26 @@ import { join } from 'node:path';
  */
 
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
-const PIN_DIR = join(ROOT, 'vendor', 'herdr', '0.8.2-p20');
+const PIN_DIR = join(ROOT, 'vendor', 'runtime', '0.8.2-p20');
 const pin = JSON.parse(readFileSync(join(PIN_DIR, 'pin.json'), 'utf8'));
 
-const RELEASE = 'https://github.com/herdrdev/herdr/releases/download/v0.8.2';
+// pin.json is the provenance record, so the release URL and the asset names come from there
+// rather than being repeated here.
+const RELEASE = pin.binary.release.replace('/releases/tag/', '/releases/download/');
 
-/** node's platform/arch to the asset that serves it. */
+/** Rust target triples by Node platform and arch — the `target` of each asset in pin.json. */
+const TARGETS = {
+  'win32-x64': 'x86_64-pc-windows-msvc',
+  'linux-x64': 'x86_64-unknown-linux-gnu',
+  'linux-arm64': 'aarch64-unknown-linux-gnu',
+  'darwin-x64': 'x86_64-apple-darwin',
+  'darwin-arm64': 'aarch64-apple-darwin',
+};
+
+/** The pinned asset that serves this machine. */
 function assetForThisMachine() {
-  const key = `${process.platform}-${process.arch}`;
-  return {
-    'linux-x64': 'herdr-linux-x86_64',
-    'linux-arm64': 'herdr-linux-aarch64',
-    'darwin-x64': 'herdr-macos-x86_64',
-    'darwin-arm64': 'herdr-macos-aarch64',
-    'win32-x64': 'herdr-windows-x86_64.zip',
-  }[key];
+  const target = TARGETS[`${process.platform}-${process.arch}`];
+  return Object.keys(pin.binary.assets).find((name) => pin.binary.assets[name].target === target);
 }
 
 function sha256(path) {
@@ -94,9 +99,15 @@ function fetchOne(name) {
         throw new Error(`checksum mismatch for ${inner} inside ${name}: got ${got}`);
       }
     }
+    // Verified under the archive's own name, then given the name the supervisor looks for.
+    for (const inner of Object.keys(expected.contains ?? {})) {
+      if (inner.endsWith('.exe')) {
+        renameSync(join(target, inner), join(target, 'osade-runtime.exe'));
+      }
+    }
   } else {
     // The bare assets are the executable itself; give it the name everything expects.
-    renameSync(download, join(target, 'herdr'));
+    renameSync(download, join(target, 'osade-runtime'));
   }
 
   process.stdout.write('ok\n');
@@ -107,13 +118,13 @@ function main() {
   const names = all ? Object.keys(pin.binary.assets) : [assetForThisMachine()];
 
   if (!names[0]) {
-    throw new Error(`no the substrate release for ${process.platform}-${process.arch}`);
+    throw new Error(`no runtime release for ${process.platform}-${process.arch}`);
   }
 
   for (const name of names) fetchOne(name);
 
   process.stdout.write(
-    `\nverified against vendor/herdr/0.8.2-p20/pin.json.\n` +
+    `\nverified against vendor/runtime/0.8.2-p20/pin.json.\n` +
       `The boot drift check (OSADE.md §4.1.1) still runs — this says nothing about the substrate on PATH.\n`,
   );
   if (!all && !existsSync(join(PIN_DIR, 'third-party'))) {
