@@ -1,4 +1,12 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  shell,
+  type OpenDialogOptions,
+} from 'electron';
 import type { ChildProcess } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -349,6 +357,28 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
 
 ipcMain.handle('osade:daemon-port', () => daemonPort);
 ipcMain.handle('osade:opened-repo', () => openedRepo);
+
+/**
+ * The New task form's "choose folder…": the operating system's own folder picker.
+ *
+ * Main-process only, because the renderer has no filesystem access (contextIsolation, §18.1). It
+ * returns the folder the person chose and nothing more — whether that folder is a repository,
+ * and which one, is the daemon's question. Modal to the asking window, so it cannot end up
+ * behind it.
+ */
+ipcMain.handle('osade:choose-repository', async (event, defaultPath?: unknown) => {
+  const options: OpenDialogOptions = {
+    title: 'Choose a repository',
+    buttonLabel: 'Choose',
+    properties: ['openDirectory'],
+    ...(typeof defaultPath === 'string' && defaultPath !== '' ? { defaultPath } : {}),
+  };
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  const result = owner
+    ? await dialog.showOpenDialog(owner, options)
+    : await dialog.showOpenDialog(options);
+  return result.canceled ? null : (result.filePaths[0] ?? null);
+});
 
 /**
  * §4.4 — "Open in the substrate" replaces the embedded terminal in M0. A real substrate client, full

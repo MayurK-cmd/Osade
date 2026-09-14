@@ -19,6 +19,7 @@ declare global {
       daemonPort(): Promise<number | null>;
       openInSubstrate(): Promise<{ command: string; hint: string }>;
       openedRepo(): Promise<string | null>;
+      chooseRepository(defaultPath?: string): Promise<string | null>;
       onRepoOpened(handler: (path: string) => void): () => void;
     };
   }

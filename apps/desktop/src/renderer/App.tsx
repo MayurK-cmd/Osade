@@ -238,7 +238,9 @@ function Header({
 
       <span style={{ flex: 1 }} />
 
-      <button onClick={onNew}>new task</button>
+      <button data-new-task onClick={onNew}>
+        new task
+      </button>
 
       {/* Only when it is bad news. The steady-state reading lives in the footer. */}
       {(error || !connected) && (

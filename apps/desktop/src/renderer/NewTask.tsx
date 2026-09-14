@@ -30,7 +30,12 @@ export function NewTask({
   const [intent, setIntent] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState(false);
+  /** The repository a chosen folder resolved to, once the daemon has said which one it is. */
+  const [chosenRepo, setChosenRepo] = useState<string | null>(null);
 
+  // Only inside the app: a plain browser has no folder picker to call.
+  const canChoose = typeof window !== 'undefined' && Boolean(window.osade?.chooseRepository);
   const ready = repoPath.trim().length > 0 && intent.trim().length > 0;
 
   function create(): void {
@@ -45,6 +50,33 @@ export function NewTask({
       .finally(() => setBusy(false));
   }
 
+  /**
+   * The operating system's folder picker, then the daemon's answer about what was picked.
+   *
+   * The daemon owns the git question: it resolves a subfolder to its repository's root, and a
+   * folder that is not a repository fails here — where the person is looking — rather than at
+   * "create task".
+   */
+  function chooseRepository(): void {
+    const bridge = window.osade;
+    if (!bridge || choosing) return;
+    setChoosing(true);
+    setError(null);
+
+    void bridge
+      .chooseRepository(repoPath.trim() || undefined)
+      .then(async (folder) => {
+        if (!folder) return;
+        setRepoPath(folder);
+        setChosenRepo(null);
+        const repo = await api.repoOpen(folder);
+        setRepoPath(repo.path);
+        setChosenRepo(repo.slug ?? repo.name);
+      })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setChoosing(false));
+  }
+
   return (
     <section
       style={{
@@ -55,18 +87,43 @@ export function NewTask({
     >
       <h2 style={{ margin: '0 0 12px', fontSize: 'var(--t-m)', fontWeight: 600 }}>new task</h2>
 
-      <label style={{ display: 'block', marginBottom: 12 }}>
-        <span style={{ display: 'block', marginBottom: 4, color: 'var(--ink-soft)' }}>
+      <div style={{ marginBottom: 12 }}>
+        <label
+          htmlFor="new-task-repository"
+          style={{ display: 'block', marginBottom: 4, color: 'var(--ink-soft)' }}
+        >
           repository
-        </span>
-        <input
-          className="mono"
-          autoFocus={initialRepo === ''}
-          value={repoPath}
-          placeholder="/path/to/the/repository"
-          onChange={(event) => setRepoPath(event.target.value)}
-          onKeyDown={(event) => event.key === 'Escape' && onClose()}
-        />
+        </label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            id="new-task-repository"
+            className="mono"
+            autoFocus={initialRepo === '' && !canChoose}
+            value={repoPath}
+            // Short on purpose: the sidebar is narrow, and the button beside it already says
+            // "choose folder".
+            placeholder={canChoose ? 'or paste a path' : '/path/to/the/repository'}
+            style={{ minWidth: 0 }}
+            onChange={(event) => {
+              setRepoPath(event.target.value);
+              setChosenRepo(null);
+            }}
+            onKeyDown={(event) => event.key === 'Escape' && onClose()}
+          />
+          {canChoose && (
+            <button
+              type="button"
+              data-choose-repository
+              autoFocus={initialRepo === ''}
+              disabled={choosing}
+              style={{ flexShrink: 0 }}
+              onClick={chooseRepository}
+              onKeyDown={(event) => event.key === 'Escape' && onClose()}
+            >
+              {choosing ? 'opening…' : 'choose folder…'}
+            </button>
+          )}
+        </div>
         <span
           style={{
             display: 'block',
@@ -75,10 +132,18 @@ export function NewTask({
             fontSize: 'var(--t-xs)',
           }}
         >
-          A git repository already on this machine. Osade works in its own worktree and never
-          touches your checkout.
+          {chosenRepo ? (
+            <>
+              <span className="mono" style={{ color: 'var(--ink)' }}>
+                {chosenRepo}
+              </span>
+              {' — '}Osade works in its own worktree and never touches your checkout.
+            </>
+          ) : (
+            'A git repository already on this machine. Osade works in its own worktree and never touches your checkout.'
+          )}
         </span>
-      </label>
+      </div>
 
       <label style={{ display: 'block', marginBottom: 14 }}>
         <span style={{ display: 'block', marginBottom: 4, color: 'var(--ink-soft)' }}>
