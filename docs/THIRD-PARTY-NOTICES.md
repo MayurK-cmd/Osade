@@ -19,14 +19,6 @@ Osade ships a prebuilt runtime binary, built by the upstream project below, in
 `vendor/runtime/<version>-p<protocol>/`, and uses it as its execution substrate. Osade does not
 modify the binary; it drives it through the runtime's documented JSON API and extension points.
 
-| | |
-| --- | --- |
-| Project | herdr — terminal workspace manager for AI coding agents |
-| Homepage | https://herdr.dev |
-| Source | https://github.com/herdrdev/herdr |
-| License | **Apache-2.0** |
-| Pinned version | see `vendor/runtime/*/pin.json` |
-
 A copy of the runtime's source is kept at `backend/` as reference material. It is not built and not
 part of the Osade build. As Apache-2.0 section 4(b) requires be stated, it is modified in one way:
 `scripts/rebrand-source.mjs` renames the project's name to Osade's throughout. Links to where
