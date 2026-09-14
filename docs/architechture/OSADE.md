@@ -1,5 +1,7 @@
 # Osade — Product Requirements & Build Spec
 
+> `<prefix>` in variable names below is the runtime's environment-variable prefix, recorded in `vendor/runtime/<pin>/pin.json` as `substrate.env_prefix`.
+
 > **Read this whole document before writing code.** It is written to be handed to a coding
 > agent. Sections marked **INVARIANT** are load-bearing; breaking one produces a class of bug
 > that is expensive to find later. Sections marked **DECISION** record a choice that was made
@@ -830,8 +832,8 @@ citations, is `docs/SUBSTRATE-CONTRACT.md` §7.*
 
 **Do not build a parallel hook system.** the substrate installs per-agent hook scripts
 (`backend/src/integration/assets/<agent>/`) and panes identify themselves via
-`HERDR_ENV`, `HERDR_SOCKET_PATH`, `HERDR_BIN_PATH`, `HERDR_PANE_ID`, `HERDR_TAB_ID` and
-`HERDR_WORKSPACE_ID`, injected at spawn (`backend/src/pane.rs:115-137`) — that much was right.
+`<prefix>_ENV`, `<prefix>_SOCKET_PATH`, `<prefix>_BIN_PATH`, `<prefix>_PANE_ID`, `<prefix>_TAB_ID` and
+`<prefix>_WORKSPACE_ID`, injected at spawn (`backend/src/pane.rs:115-137`) — that much was right.
 
 But the hooks report less than this section assumed. **The three names used here —
 `HookStateReported`, `HookMetadataReported`, `AgentSessionReported` — are not events.** They
@@ -927,7 +929,7 @@ Reimplementing that badly is a guaranteed source of flapping cards.
 
 The one supported exception, **M2 or later**: if Osade wants tool-level activity for Claude
 Code, install an *additional* Claude Code hook that calls `pane.report_metadata` using
-`HERDR_PANE_ID` and `HERDR_SOCKET_PATH` from the environment. That is the substrate's own documented
+`<prefix>_PANE_ID` and `<prefix>_SOCKET_PATH` from the environment. That is the substrate's own documented
 inbound API, not a parallel system. Token limits apply: ≤16 keys per patch, ≤32 stored, key
 `^[A-Za-z0-9_-]{1,32}$` (`backend/src/api/schema/common.rs:3-23`).
 
@@ -1673,7 +1675,7 @@ reconnect it discards local state and takes the snapshot.
 2. Run the boot drift check (§4.1.1) against the substrate binary about to be used. Fatal on
    protocol or missing-method mismatch, **before** anything is spawned.
 3. Adopt-or-spawn the substrate server on the `osade` named session, then wait for `ping`.
-   - `HERDR_SESSION=osade` on the server process and on every subsequent call. Verified to run
+   - `<prefix>_SESSION=osade` on the server process and on every subsequent call. Verified to run
      concurrently with a user's own `default` session — separate sockets, separate
      `session.json`, no interference (`backend/src/session.rs:10-11`, `:157-185`).
    - **Spawn detached, copying the substrate's own recipe** (`backend/src/server/autodetect.rs:188-233`):
@@ -1682,7 +1684,7 @@ reconnect it discards local state and takes the snapshot.
      app quitting" quietly stops being true. (`ping`'s
      `capabilities.detached_server_daemon` reports whether *this* server was started that
      way — it is a status report, not a platform limit.)
-   - **`env_remove('HERDR_STARTUP_CWD')`.** If it is set and the session has no workspaces,
+   - **`env_remove('<prefix>_STARTUP_CWD')`.** If it is set and the session has no workspaces,
      the substrate creates a workspace at that cwd on boot
      (`backend/src/server/headless/bootstrap.rs:89-117`) and Osade inherits a stray workspace
      it did not create.
@@ -1966,7 +1968,7 @@ Prove the three-process architecture works before building any product on it.
       (§5.4.1)
 - [ ] `deriveStatus` implemented for rows 4, 10, 11, 13, 14 only
 - [ ] Electron: userData redirect; supervisor with detached the substrate spawn and
-      `HERDR_STARTUP_CWD` cleared (§18.1); ledger, task detail, diff view, verification log
+      `<prefix>_STARTUP_CWD` cleared (§18.1); ledger, task detail, diff view, verification log
       tail. **No utility process, no canvas renderer** (§4.4)
 - [ ] One task: create → prune + `worktree.create` + mirror → `tab.create` with env →
       subscribe → `agent.start` → resolve the trust prompt → `agent.prompt`

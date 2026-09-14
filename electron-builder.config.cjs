@@ -63,7 +63,7 @@ module.exports = {
     {
       from: 'vendor/runtime/0.8.2-p20',
       to: 'runtime',
-      filter: ['LICENSE', 'RUST-CRATES.md', 'third-party/**', '*/osade-runtime*'],
+      filter: ['LICENSE', 'RUST-CRATES.md', 'pin.json', 'third-party/**', '*/osade-runtime*'],
     },
     // Populated by scripts/fetch-node-runtime.mjs.
     { from: 'vendor/node/${platform}-${arch}', to: 'node' },

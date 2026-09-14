@@ -81,7 +81,7 @@ rustPlatform.buildRustPackage {
 
   meta = {
     description = "Terminal workspace manager for AI coding agents";
-    homepage = "https://herdr.dev";
+    homepage = "https://github.com/OsadeOSS/Osade";
     license = lib.licenses.asl20;
     mainProgram = "osade";
     platforms = lib.platforms.linux ++ lib.platforms.darwin;

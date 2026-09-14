@@ -5,7 +5,8 @@
     "protocol": 20,
     "schema_version": 1,
     "method_count": 91,
-    "endpoint_protocol_generation": null
+    "endpoint_protocol_generation": null,
+    "env_prefix": "HERDR"
   },
   "identity": {
     "$comment": "The substrate's version string is NOT a contract. Two builds both report 0.8.2 with different protocols and a 10-method gap (PRD-DELTA #1). The identity of a substrate target is the tuple (protocol, method set), and the version string is a label. Directory names are <version>-p<protocol> for that reason.",
@@ -69,7 +70,8 @@
     "source": "https://raw.githubusercontent.com/herdrdev/herdr/v0.8.2/LICENSE",
     "fetched_at": "2026-09-11",
     "notice_file": null,
-    "upstream_repository": "https://github.com/herdrdev/herdr"
+    "upstream_repository": "https://github.com/herdrdev/herdr",
+    "upstream_website": "https://herdr.dev"
   },
   "known_gaps": {
     "$comment": "Methods present in backend/src/api/schema.rs but absent from this pinned schema. Calling any of these against this target returns invalid_request. See PRD-DELTA #1.",

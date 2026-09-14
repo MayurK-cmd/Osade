@@ -46,9 +46,9 @@ const TERMINAL_SESSION_CONTROL_USAGE: &str =
 pub(crate) const AGENT_HELP_FOOTER: &str = concat!(
     "Are you an AI? Use these resources ONLY IF your task specifically asks you to:\n",
     "  Help a human understand or set up Osade for the first time:\n",
-    "    https://herdr.dev/agent-guide.md\n",
+    "    https://raw.githubusercontent.com/OsadeOSS/Osade/main/backend/distribution/agent-guide.md\n",
     "  Debug or investigate a problem with Osade:\n",
-    "    https://herdr.dev/llms.txt\n",
+    "    https://github.com/OsadeOSS/Osade\n",
     "  Control Osade panes, agents, or workspaces:\n",
     "    SKIP if a Osade skill is already in your context. Otherwise run: osade --skill",
 );

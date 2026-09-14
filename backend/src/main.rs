@@ -685,7 +685,7 @@ fn main() -> io::Result<()> {
         println!("Config: {}", config::config_path().display());
         println!("Logs:   {}", logging::help_log_paths_summary());
         println!("Env:    OSADE_CONFIG_PATH overrides config file path");
-        println!("Home:   https://herdr.dev");
+        println!("Home:   https://github.com/OsadeOSS/Osade");
         println!();
         println!("{}", cli::AGENT_HELP_FOOTER);
         return Ok(());

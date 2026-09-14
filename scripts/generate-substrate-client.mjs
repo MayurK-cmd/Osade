@@ -198,13 +198,15 @@ ${methods.map((m) => `  '${m.method}',`).join('\n')}
   // ---- pin.ts -------------------------------------------------------------
   const pinTs =
     BANNER(key) +
-    `/** Identity of the pinned the substrate target. The version string is NOT a contract (§4.1). */
+    `/** Identity of the pinned substrate target. The version string is NOT a contract (§4.1). */
 export const SUBSTRATE_PIN = Object.freeze({
   key: ${JSON.stringify(pin.identity.key)},
   version: ${JSON.stringify(pin.substrate.version)},
   protocol: ${pin.substrate.protocol},
   schemaVersion: ${pin.substrate.schema_version},
   methodCount: ${methods.length},
+  /** The prefix of the runtime's own environment variables, e.g. \`<prefix>_SOCKET_PATH\`. */
+  envPrefix: ${JSON.stringify(pin.substrate.env_prefix)},
 });
 `;
 

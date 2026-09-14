@@ -1,5 +1,7 @@
 # PRD Delta — where OSADE.md is wrong about the substrate
 
+> `<prefix>` in variable names below is the runtime's environment-variable prefix, recorded in `vendor/runtime/<pin>/pin.json` as `substrate.env_prefix`.
+
 > Every assumption in OSADE.md that recon proved wrong, unverifiable, or more
 > expensive than written, with a proposed correction. Evidence is in
 > SUBSTRATE-CONTRACT.md; this file is the argument, not the transcript.
@@ -72,7 +74,7 @@ upstream fact.
 
 Upstream the file is CI-enforced current — `backend/src/api/schema/tests.rs:181-206`
 byte-compares it against a live `schemars` render and regenerates under
-`HERDR_UPDATE_API_SCHEMA=1`. When present it is authoritative.
+`<prefix>_UPDATE_API_SCHEMA=1`. When present it is authoritative.
 
 **Correction.** Do not try to restore `backend/docs/`. Take the schema from the
 binary (§1). Either finish the vendoring (`git clone` the substrate at the pinned tag
@@ -193,7 +195,7 @@ lifecycle for Claude Code — `blocked` (trust prompt) → `idle` → `working` 
    `codex`**. This is exactly the case §8.1 designed capabilities for.
 3. If Osade later wants tool-level activity for Claude Code, the supported path
    is to install an **additional** Claude Code hook that calls
-   `pane.report_metadata` with `HERDR_PANE_ID`/`HERDR_SOCKET_PATH` from the
+   `pane.report_metadata` with `<prefix>_PANE_ID`/`<prefix>_SOCKET_PATH` from the
    environment. That is not "a parallel hook system" — it is the substrate's own
    documented inbound API. Note the token limits: ≤16 keys per patch, ≤32
    stored, `^[A-Za-z0-9_-]{1,32}$`
@@ -439,7 +441,7 @@ is survivable; neither is honest.
 ## 12. WRONG — §18.1's startup order needs two more steps
 
 Confirmed correct: userData redirect first; adopt-or-spawn on the `osade` named
-session; wait for `Ping`; never a fixed sleep. `HERDR_SESSION=osade` gives full
+session; wait for `Ping`; never a fixed sleep. `<prefix>_SESSION=osade` gives full
 isolation — verified running concurrently with the user's own `default` session,
 separate sockets, separate `session.json`, no interference
 (`backend/src/session.rs:10-11`, `:157-185`).
@@ -452,7 +454,7 @@ Two additions from the source:
   Unix. Without it the server dies with its parent. (`ping`'s
   `capabilities.detached_server_daemon` reports whether *this* server was started
   that way; it read `false` in my test precisely because I did not detach.)
-- **Clear `HERDR_STARTUP_CWD`.** If it is set and the session has no workspaces,
+- **Clear `<prefix>_STARTUP_CWD`.** If it is set and the session has no workspaces,
   the substrate creates a workspace at that cwd on boot
   (`backend/src/server/headless/bootstrap.rs:89-117`). Osade would inherit a
   stray workspace it did not create. `env_remove` it explicitly.
@@ -476,8 +478,8 @@ descriptor (`backend/src/ipc.rs:156`).
   the substrate's detector classified it `blocked` correctly, and
   `pane.wait_for_output` + `pane.send_keys` resolved it. Full recipe in
   SUBSTRATE-CONTRACT.md §8.
-- **§7 env injection.** `HERDR_ENV`, `HERDR_SOCKET_PATH`, `HERDR_BIN_PATH`,
-  `HERDR_WORKSPACE_ID`, `HERDR_TAB_ID`, `HERDR_PANE_ID` are all injected
+- **§7 env injection.** `<prefix>_ENV`, `<prefix>_SOCKET_PATH`, `<prefix>_BIN_PATH`,
+  `<prefix>_WORKSPACE_ID`, `<prefix>_TAB_ID`, `<prefix>_PANE_ID` are all injected
   (`backend/src/pane.rs:115-137`).
 - **§7 "extend the substrate properly".** Detection is 21 versioned TOML manifests with
   an `index.toml` for remote updates (`backend/distribution/agent-detection/`).
@@ -590,7 +592,7 @@ dirty checkout without `force` is a different error and must be rethrown at once
   The root file drafted inside `docs/CLAUDE.md` needs to actually exist at
   `Osade/CLAUDE.md`.
 - **`docs/AGENTS.md` is the substrate's `AGENTS.md`**, not Osade's — 305 lines of the substrate
-  maintainer policy (`.github/MAINTAINERS`, `HERDR_ENV=1`, release workflow,
+  maintainer policy (`.github/MAINTAINERS`, `<prefix>_ENV=1`, release workflow,
   ratatui render rules). Sitting in `docs/` it reads as project guidance for
   Osade. CLAUDE.md's line *"the substrate's own AGENTS.md rules apply to `backend/` only"*
   is therefore already violated by file placement. Move it to
@@ -612,7 +614,7 @@ Against OSADE.md §21's six checkboxes:
 | --- | --- |
 | Vendor the substrate binary + api schema; generate client; version guard | Schema comes from `osade-runtime api schema --json` on the vendored binary, not from `backend/`. Guard on `protocol` **and** `version`. |
 | Daemon: sqlite + migrations + change_log + CDC + ws | Unchanged. |
-| Electron: userData redirect, supervisor, utilityProcess, canvas renderer | Add the bincode decoder (§3a) and detached spawn + `HERDR_STARTUP_CWD` removal (§12). Benchmark surfaces here, not in M1 (§3c). |
+| Electron: userData redirect, supervisor, utilityProcess, canvas renderer | Add the bincode decoder (§3a) and detached spawn + `<prefix>_STARTUP_CWD` removal (§12). Benchmark surfaces here, not in M1 (§3c). |
 | One task end-to-end | Unchanged — **proven to work** (SUBSTRATE-CONTRACT.md §3.3). |
 | — | **New:** event-subscriber as an N+1 connection manager (§6a). |
 | — | **New:** `state_change_seq` monotonic gate + `session.snapshot` reconcile (§5). |

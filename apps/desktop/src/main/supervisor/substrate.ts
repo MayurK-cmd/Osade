@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as net from 'node:net';
@@ -17,7 +17,7 @@ export const OSADE_SESSION = 'osade';
 /**
  * The runtime's sockets, named by Osade and living under `~/.osade` with everything else (§2.2).
  *
- * The substrate takes `HERDR_SOCKET_PATH` and `HERDR_CLIENT_SOCKET_PATH` as overrides, so the
+ * The substrate takes its socket-path variables as overrides, so the
  * supervisor decides where they go rather than discovering them in a config directory belonging
  * to another program. Kept in step with `packages/daemon/src/substrate/socket-path.ts` — the
  * daemon connects to the same two paths, and the two processes do not share a package.
@@ -43,15 +43,45 @@ function clientSocketPath(session: string): string {
 /**
  * The environment that puts the runtime's sockets where Osade expects them.
  *
- * These two variable names are the substrate's input contract, so they are spelled its way;
- * everything they point at is spelled ours. Kept in step with the daemon's copy.
+ * The variable names are the substrate's input contract, built from the prefix recorded in the
+ * runtime's pin.json; everything they point at is Osade's. Kept in step with the daemon's copy.
  */
 export function runtimeEnv(session = OSADE_SESSION): Record<string, string> {
   return {
-    HERDR_SESSION: session,
-    HERDR_SOCKET_PATH: substrateSocketPath(session),
-    HERDR_CLIENT_SOCKET_PATH: clientSocketPath(session),
+    [runtimeVariable('SESSION')]: session,
+    [runtimeVariable('SOCKET_PATH')]: substrateSocketPath(session),
+    [runtimeVariable('CLIENT_SOCKET_PATH')]: clientSocketPath(session),
   };
+}
+
+/**
+ * One of the runtime's own environment variables, named with the prefix its pin records.
+ *
+ * The daemon gets the prefix through codegen; this process cannot import that, so it reads the
+ * record itself — shipped beside the runtime in a packaged app, in `vendor/runtime/<pin>/` in a
+ * checkout.
+ */
+export function runtimeVariable(name: string): string {
+  return `${runtimePin().substrate.env_prefix}_${name}`;
+}
+
+interface RuntimePin {
+  substrate: { env_prefix: string };
+}
+
+let loadedPin: RuntimePin | null = null;
+
+function runtimePin(): RuntimePin {
+  if (loadedPin) return loadedPin;
+  const resources = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  const candidates = [
+    resources ? join(resources, 'runtime', 'pin.json') : undefined,
+    join(__dirname, '../../../../..', 'vendor', 'runtime', RUNTIME_PIN, 'pin.json'),
+  ].filter((path): path is string => path !== undefined);
+  const found = candidates.find((path) => existsSync(path));
+  if (!found) throw new Error(`the runtime's pin.json was not found (looked in ${candidates.join(', ')})`);
+  loadedPin = JSON.parse(readFileSync(found, 'utf8')) as RuntimePin;
+  return loadedPin;
 }
 
 /**
@@ -140,7 +170,7 @@ export interface SubstrateSupervisorOptions {
  * stdio, and detached from this process. Without that the server dies with the app, and
  * "agents survive the window closing" quietly stops being true.
  *
- * `HERDR_STARTUP_CWD` is removed deliberately: when it is set and the session has no
+ * The runtime's `STARTUP_CWD` variable is removed deliberately: when it is set and the session has no
  * workspaces, the substrate creates one at that cwd on boot and Osade inherits a stray workspace it
  * never asked for.
  */
@@ -158,7 +188,7 @@ export async function adoptOrSpawnSubstrate(options: SubstrateSupervisorOptions 
   }
 
   const env: NodeJS.ProcessEnv = { ...process.env, ...runtimeEnv(session) };
-  delete env.HERDR_STARTUP_CWD;
+  Reflect.deleteProperty(env, runtimeVariable('STARTUP_CWD'));
 
   const child = spawn(options.binary ?? substrateBinary(), ['server'], {
     env,

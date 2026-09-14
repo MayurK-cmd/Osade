@@ -1,5 +1,7 @@
 # the substrate Contract — the verified integration surface
 
+> `<prefix>` in variable names below is the runtime's environment-variable prefix, recorded in `vendor/runtime/<pin>/pin.json` as `substrate.env_prefix`.
+
 > This document records what the substrate **actually does**, verified against
 > `backend/` source and against a live `the substrate 0.8.2` server on this machine.
 > Where the two disagree, both are recorded.
@@ -48,7 +50,7 @@ cannot compile.**
 It is not hand-maintained. `backend/src/api/schema/tests.rs:181-206` asserts the
 committed artifact byte-equals `serde_json::to_string_pretty` of a document built
 live from the `schemars` derives, and regenerates on
-`HERDR_UPDATE_API_SCHEMA=1 just test-one generated_protocol_schema_artifact_is_current`.
+`<prefix>_UPDATE_API_SCHEMA=1 just test-one generated_protocol_schema_artifact_is_current`.
 When the file is present it is authoritative.
 
 ### 1.3 Get it from the binary instead
@@ -166,7 +168,7 @@ Full sequence executed against an isolated `osade` session with **no client ever
 attached** and no TUI running:
 
 ```
-$ HERDR_SESSION=osade osade-runtime server &                   # headless, no tty
+$ <prefix>_SESSION=osade osade-runtime server &                   # headless, no tty
 $ substrate workspace create --cwd <repo> --label osade-task-1
   → {"type":"workspace_created","workspace":{"workspace_id":"w1",…},
      "root_pane":{"pane_id":"w1:p1","scroll":{"viewport_rows":40},…}}
@@ -224,19 +226,19 @@ earlier). A restart is not a task death — do not set `terminated`.
 
 ## 4. Named sessions — VERIFIED
 
-`HERDR_SESSION=<name>` selects an isolated session
+`<prefix>_SESSION=<name>` selects an isolated session
 (`backend/src/session.rs:10-11`, `:96-101`). Also `--session <name>`, or
-`HERDR_SOCKET_PATH` to point at a socket directly
+`<prefix>_SOCKET_PATH` to point at a socket directly
 (`backend/src/api/mod.rs:20`, `backend/src/session.rs:173-181`).
 
-Verified: `HERDR_SESSION=osade osade-runtime server` created
+Verified: `<prefix>_SESSION=osade osade-runtime server` created
 `~/.osade/runtime/osade/{osade.sock,osade-client.sock}` when given Osade's socket overrides,
 and ran **concurrently with the user's own `default` session** with no
 interference (`osade-runtime session list` showed both `running`).
 
 `osade-runtime session stop osade` shuts one down cleanly.
 
-**Osade must set `HERDR_SESSION=osade` on the server it spawns and on every API
+**Osade must set `<prefix>_SESSION=osade` on the server it spawns and on every API
 call.** Note the name `default` is treated as "no name" (`session.rs:99`).
 
 ---
@@ -639,10 +641,10 @@ Env injected into every managed pane (`backend/src/pane.rs:115-137`,
 `backend/src/integration/env.rs:8-33`), confirming OSADE §7:
 
 ```
-HERDR_ENV=1
-HERDR_SOCKET_PATH=<active api socket>
-HERDR_BIN_PATH=<substrate executable>
-HERDR_WORKSPACE_ID / HERDR_TAB_ID / HERDR_PANE_ID
+<prefix>_ENV=1
+<prefix>_SOCKET_PATH=<active api socket>
+<prefix>_BIN_PATH=<substrate executable>
+<prefix>_WORKSPACE_ID / <prefix>_TAB_ID / <prefix>_PANE_ID
 ```
 
 Osade adds its own via the `env` map on `workspace.create` / `tab.create` /
@@ -781,7 +783,7 @@ every call in this document.
 ## 12. Cheat sheet — M0 task launch
 
 ```
-0.  spawn:  HERDR_SESSION=osade osade-runtime server        (detached; capabilities.detached_server_daemon
+0.  spawn:  <prefix>_SESSION=osade osade-runtime server        (detached; capabilities.detached_server_daemon
                                                      is false on Windows, so Osade owns the child)
 1.  ping                          → assert protocol == pinned, version == pinned
 2.  worktree.create               { cwd: repo.path, branch, base: task.base_sha,

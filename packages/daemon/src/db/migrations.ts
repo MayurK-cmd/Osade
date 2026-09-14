@@ -11,24 +11,6 @@ export interface Migration {
   readonly id: number;
   readonly name: string;
   readonly sql: string;
-  /**
-   * Run only if this says so — the migration is recorded as applied either way.
-   *
-   * For migrations that repair an older shape. A database created after the change is already
-   * correct, and the repair would fail on it; recording it keeps the two paths at the same
-   * version rather than leaving fresh databases permanently one behind.
-   */
-  readonly when?: (db: MigrationProbe) => boolean;
-}
-
-/** Just enough of the handle to ask a question before running. Structural, to avoid a cycle. */
-export interface MigrationProbe {
-  pragma(source: string): unknown;
-}
-
-function hasColumn(db: MigrationProbe, table: string, column: string): boolean {
-  const rows = db.pragma(`table_info(${table})`) as { name: string }[];
-  return rows.some((row) => row.name === column);
 }
 
 /** Tables whose mutations must reach the UI. Each gets the three CDC triggers below. */
@@ -329,23 +311,6 @@ ALTER TABLE mine_run ADD COLUMN progress_done INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE mine_run ADD COLUMN progress_total INTEGER NOT NULL DEFAULT 0;
 `;
 
-/**
- * The substrate's name out of the schema.
- *
- * These three columns were `herdr_workspace_id`, `herdr_pane_id` and `herdr_state` — named after
- * the program that supplies the values rather than after the role it plays. The role is what the
- * rest of the code calls it, so the columns say that now too.
- *
- * A rename rather than an edit to migration 1: a ledger that already exists has the old columns,
- * and rewriting history in `M001_CORE` would leave it unreadable. SQLite carries the index on
- * `substrate_pane_id` across the rename by itself.
- */
-const M006_SUBSTRATE_COLUMNS = `
-ALTER TABLE task RENAME COLUMN herdr_workspace_id TO substrate_workspace_id;
-ALTER TABLE agent_fact RENAME COLUMN herdr_pane_id TO substrate_pane_id;
-ALTER TABLE agent_fact RENAME COLUMN herdr_state TO substrate_state;
-`;
-
 export const MIGRATIONS: readonly Migration[] = [
   {
     id: 1,
@@ -371,11 +336,5 @@ export const MIGRATIONS: readonly Migration[] = [
     id: 5,
     name: 'mining progress, for runs that take minutes',
     sql: M005_MINE_PROGRESS,
-  },
-  {
-    id: 6,
-    name: 'name the substrate columns after their role',
-    sql: M006_SUBSTRATE_COLUMNS,
-    when: (db) => hasColumn(db, 'task', 'herdr_workspace_id'),
   },
 ];

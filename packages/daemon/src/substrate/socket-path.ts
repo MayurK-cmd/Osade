@@ -2,13 +2,15 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { platform } from 'node:os';
 
+import { SUBSTRATE_PIN } from './generated/index.js';
+
 /**
  * Where Osade's runtime sockets are — OSADE.md §2.1, §2.2.
  *
  * Osade names these, rather than reading them out of the runtime's own config directory. The
- * substrate takes `HERDR_SOCKET_PATH` and `HERDR_CLIENT_SOCKET_PATH` as its socket overrides —
- * its two documented inputs, and the only two places its vocabulary reaches Osade's source —
- * and the supervisor passes exactly these paths when it spawns the process. So the names, the
+ * substrate takes its `SOCKET_PATH` and `CLIENT_SOCKET_PATH` variables as socket overrides —
+ * named with the prefix the pin records, see `runtimeVariable` — and the supervisor passes
+ * exactly these paths when it spawns the process. So the names, the
  * layout and the lifetime are Osade's.
  *
  * The practical gain is §2.2: the sockets live under `~/.osade/` with everything else, instead
@@ -56,18 +58,23 @@ export function clientSocketPath(
 /**
  * The environment that puts the runtime's sockets where Osade expects them.
  *
- * Handed to the process at spawn. These two variable names are the substrate's input contract,
- * so they are spelled its way; everything they point at is spelled ours.
+ * Handed to the process at spawn. The variable names are the substrate's input contract, built
+ * from the prefix the pin records rather than written out; everything they point at is Osade's.
  */
 export function runtimeEnv(
   session: string = OSADE_SESSION,
   env: NodeJS.ProcessEnv = process.env,
 ): Record<string, string> {
   return {
-    HERDR_SESSION: session,
-    HERDR_SOCKET_PATH: apiSocketPath(session, env),
-    HERDR_CLIENT_SOCKET_PATH: clientSocketPath(session, env),
+    [runtimeVariable('SESSION')]: session,
+    [runtimeVariable('SOCKET_PATH')]: apiSocketPath(session, env),
+    [runtimeVariable('CLIENT_SOCKET_PATH')]: clientSocketPath(session, env),
   };
+}
+
+/** One of the runtime's own environment variables, e.g. `runtimeVariable('STARTUP_CWD')`. */
+export function runtimeVariable(name: string): string {
+  return `${SUBSTRATE_PIN.envPrefix}_${name}`;
 }
 
 /** Translates a socket path into what `net.connect` needs on this platform. */

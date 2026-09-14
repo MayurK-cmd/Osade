@@ -14,8 +14,8 @@
   "modified": {
     "by": "scripts/rebrand-source.mjs",
     "applied_at": "2026-09-13",
-    "what": "The upstream project name, in every case and in file and directory names, becomes Osade. The home and session environment variables take an OSADE_RUNTIME_ prefix instead, so a runtime built from this source cannot read the variables Osade itself sets.",
-    "kept": "Real addresses: URLs on real hosts, the upstream domain, organisation, maintainer address and third-party repositories. Rewritten, they would point at domains and organisations Osade does not own.",
+    "what": "The upstream project name, in every case and in file and directory names, becomes Osade. The home and session environment variables take an OSADE_RUNTIME_ prefix instead, so a runtime built from this source cannot read the variables Osade itself sets. The release manifests keep only the pinned release. Links to where the project lives point at Osade’s repository.",
+    "kept": "Release, download and update endpoints and the release file names they serve; upstream history links, maintainer addresses and third-party repositories. Rewritten, they would point at files and domains Osade does not own, or credit other people’s work to Osade.",
     "line_numbers": "Unchanged. The rename never adds or removes a line, so citations into backend/ still hold."
   },
   "not_from_upstream": {
