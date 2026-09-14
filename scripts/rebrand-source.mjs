@@ -20,23 +20,27 @@ import { basename, dirname, join, relative } from 'node:path';
  * What changes — the tree becomes a self-consistent Osade fork:
  *   - The upstream project name, in every case, in text and in file and directory names. A word
  *     swap of equal length keeps every line where it was, so `backend/…:line` citations hold.
- *   - Where the project lives — the repository, issue tracker, discussions, files in it, workflow
- *     repository guards, the website's home and documentation — points at Osade's repository.
+ *   - Where the project lives — the repository, issues, pull requests, discussions, files in it,
+ *     workflow repository guards, the website's home and documentation — points at Osade's
+ *     repository.
  *   - Its release, install and update addresses are Osade's too: release links and release file
- *     names name Osade's GitHub releases, and a website address serving a file this tree has
- *     (the release manifests, the install scripts, the agent guide) becomes that file's raw copy
- *     in Osade's repository. This tree's installers and self-updater therefore look for Osade's
- *     releases. Osade itself does not use them: it ships its own pinned, checksummed runtime
+ *     names name Osade's GitHub releases, the package-registry lookup names Osade's package, and a
+ *     website address serving a file this tree has (release manifests, install scripts, the agent
+ *     guide, the agent-detection catalog) becomes that file's raw copy in Osade's repository.
+ *     Osade itself does not use any of them: it ships its own pinned, checksummed runtime
  *     (vendor/runtime/<pin>/pin.json), which is untouched.
+ *   - The website's own infrastructure (the plugin marketplace worker) names Osade's
+ *     organisation's GitHub Pages host, which only that organisation can publish to.
+ *   - Test fixtures naming other repositories after the project are renamed with it; the owner
+ *     part is never touched.
  *   - The release manifests keep only the pinned release.
  *
  * What does not:
- *   - Upstream history links (pull requests, issues, commits), maintainer addresses, and other
- *     people's repositories and registries. Pointed at Osade, they would credit other people's
- *     work to Osade.
- *   - The plugin marketplace's live API and the website's own deployment config, which have no
- *     Osade equivalent. The upstream organisation's bare name, which renamed would invent an
- *     organisation someone else could register.
+ *   - The vendored patches' provenance: the issue and pull-request links that say why each patch to
+ *     a third-party library exists, and the author addresses in their headers. Rewritten, they would
+ *     misstate who wrote those patches and why.
+ *   - The upstream organisation's bare name and its other repositories, which renamed would invent
+ *     organisations and repositories someone else could register.
  *   - Two environment variables that would collide: HOME and SESSION would take names Osade
  *     itself sets, so a runtime built from this source would read Osade's own home directory as
  *     its own. They take an OSADE_RUNTIME_ prefix instead.
@@ -71,6 +75,7 @@ const OSADE_SLUG = new URL(String(osadeRepository.url ?? osadeRepository).replac
   .join('/');
 const OSADE_REPO = `https://github.com/${OSADE_SLUG}`;
 const OSADE_RAW = `https://raw.githubusercontent.com/${OSADE_SLUG}/main`;
+const OSADE_PAGES = `https://${OSADE_SLUG.split('/')[0].toLowerCase()}.github.io`;
 /** Where this tree sits inside Osade's repository. */
 const IN_OSADE = 'backend';
 
@@ -108,8 +113,8 @@ function hostOf(url) {
 }
 
 /**
- * What a URL mentioning the project becomes: itself (kept), an address in Osade's repository, or
- * null when it is on a dummy host and is renamed like any other text.
+ * What a URL mentioning the project becomes: itself (kept), an address of Osade's, or null when it
+ * is on a dummy host and is renamed like any other text.
  */
 function mapUrl(url) {
   const host = hostOf(url);
@@ -118,23 +123,22 @@ function mapUrl(url) {
 
   if (host === 'github.com' || host === 'www.github.com') {
     const repo = path.match(new RegExp(`^/${SLUG}(?=$|[/?#.])(.*)$`, 'i'));
-    if (!repo) return url;
+    if (!repo) {
+      // Another repository. The upstream organisation's other repositories are real and theirs;
+      // anyone else's named after the project is a test fixture, renamed with its owner untouched.
+      const [, owner = '', ...rest] = path.split('/');
+      if (owner.toLowerCase() === OWNER.toLowerCase()) return url;
+      return `https://github.com/${owner}/${swap(rest.join('/'))}`;
+    }
     const rest = repo[1];
     if (rest === '' || rest === '/' || rest === '.git') return OSADE_REPO;
     // Releases are Osade's: the links and the file names they serve.
     if (/^\/releases\b/i.test(rest)) return OSADE_REPO + swap(rest);
-    // The release manifests are Osade's release notes now, so their compare links follow. They
-    // name commit ranges, not people.
-    if (currentFile.startsWith('distribution/') && /^\/compare\//i.test(rest)) return OSADE_REPO + rest;
-    // The repository's own agent tooling uses issue links as examples of an output format, not as
-    // history — they describe how to triage *this* repository.
-    if (currentFile.startsWith('.agents/') && /^\/(?:issues|pull)\/\d+/i.test(rest)) return OSADE_REPO + rest;
-    if (/^\/(?:issues|discussions|security)\/?$/i.test(rest) || /^\/issues\/new\b/i.test(rest)) {
-      return OSADE_REPO + rest;
-    }
+    // The vendored patches' provenance — why each patch to a third-party library exists — stays.
+    if (currentFile.startsWith('vendor/') && /^\/(?:issues|pull|commit|compare)\b/i.test(rest)) return url;
+    if (/^\/(?:issues|pull|commit|compare|discussions|security)\b/i.test(rest)) return OSADE_REPO + rest;
     const file = rest.match(/^\/(blob|tree)\/[^/]+\/(.+)$/);
     if (file) return `${OSADE_REPO}/${file[1]}/main/${IN_OSADE}/${swap(file[2])}`;
-    // History: pull requests, issues and commits are other people's work, and stay theirs.
     return url;
   }
 
@@ -145,13 +149,16 @@ function mapUrl(url) {
     return url;
   }
 
+  // Package registries: the updater asks about the package under Osade's name.
+  if (host === 'formulae.brew.sh') return `https://formulae.brew.sh${swap(path)}`;
+
   if (host === WEBSITE_HOST || host.endsWith(`.${WEBSITE_HOST}`)) {
-    // Deployment config for the website's own infrastructure names the site as an origin, and the
-    // plugin marketplace is a live service; neither has an Osade equivalent, and pointed at a
-    // repository page the marketplace client would fetch HTML.
-    if (currentFile.startsWith('workers/') || /^\/api\//i.test(path)) return url;
-    // The website serves files this tree has — release manifests, install scripts, the agent
-    // guide. Those addresses become the files' raw copies in Osade's repository.
+    // The website's own infrastructure: Osade's organisation's GitHub Pages host.
+    if (currentFile.startsWith('workers/')) return OSADE_PAGES + path;
+    // The plugin marketplace is a live service with no Osade equivalent; a repository page in its
+    // place would hand its client HTML.
+    if (/^\/api\//i.test(path)) return url;
+    // The website serves files this tree has. Those addresses become the files' raw copies.
     const served = path.replace(/^\//, '').split(/[?#]/)[0];
     if (/\.\w+$/.test(served) && treeHas(join('distribution', served))) {
       return `${OSADE_RAW}/${IN_OSADE}/distribution/${swap(served)}`;
@@ -164,11 +171,8 @@ function mapUrl(url) {
 
 // ---- text -----------------------------------------------------------------------------------
 
-/** Held verbatim, first match wins: maintainer addresses and other people's repositories. */
-const KEPT = [
-  new RegExp(`[\\w.+-]+@(?:[\\w-]+\\.)*${escape(WEBSITE_HOST)}\\b`, 'gi'),
-  new RegExp(`\\b[\\w.-]+\\/${W}-plugin-examples\\b`, 'gi'),
-];
+/** Held verbatim: author addresses in the vendored patches' headers. */
+const KEPT = [new RegExp(`[\\w.+-]+@(?:[\\w-]+\\.)*${escape(WEBSITE_HOST)}\\b`, 'gi')];
 
 /** The website and repository named without a URL: Osade's repository. */
 const RELINKED = [

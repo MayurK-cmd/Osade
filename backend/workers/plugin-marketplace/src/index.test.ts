@@ -58,7 +58,7 @@ function repo(overrides: Record<string, unknown> = {}): Record<string, unknown> 
     owner: { login: "ogulcancelik" },
     name: "osade-plugin-example",
     description: "Example plugin repository",
-    html_url: "https://github.com/ogulcancelik/herdr-plugin-example",
+    html_url: "https://github.com/ogulcancelik/osade-plugin-example",
     default_branch: "main",
     stargazers_count: 5,
     forks_count: 1,
@@ -917,7 +917,7 @@ describe("refreshPlugins", () => {
 
 describe("fetch handler", () => {
   test("does not expose a public Worker API", async () => {
-    const response = await worker.fetch(new Request("https://herdr.dev/api/plugins"), env());
+    const response = await worker.fetch(new Request("https://osadeoss.github.io/api/plugins"), env());
     expect(response.status).toBe(404);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });

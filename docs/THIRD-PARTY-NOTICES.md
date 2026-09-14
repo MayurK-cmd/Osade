@@ -5,7 +5,7 @@ Osade distributes or depends on.
 
 > **Regenerated 2026-09-04.** This replaces `docs/ThirdPartyNotices.txt`, which was Visual
 > Studio Code's notices file, inherited when Osade was planned as a Code-OSS fork. That plan
-> was abandoned; Osade is an Electron shell over the herdr runtime and depends on none of the
+> was abandoned; Osade is an Electron shell over its terminal runtime and depends on none of the
 > 60 packages that file listed (TextMate grammars, `microsoft/vscode-*`, `atom/language-*`,
 > `@fig/autocomplete`). It has been deleted rather than trimmed.
 
@@ -13,11 +13,11 @@ Osade distributes or depends on.
 
 ## Distributed in the Osade application
 
-### herdr
+### Terminal runtime
 
-Osade ships a prebuilt **herdr** binary in `vendor/runtime/<version>-p<protocol>/` and uses it
-as its execution substrate. Osade does not fork or modify herdr; it drives it through herdr's
-documented JSON API and extension points.
+Osade ships a prebuilt runtime binary, built by the upstream project below, in
+`vendor/runtime/<version>-p<protocol>/`, and uses it as its execution substrate. Osade does not
+modify the binary; it drives it through the runtime's documented JSON API and extension points.
 
 | | |
 | --- | --- |
@@ -27,34 +27,34 @@ documented JSON API and extension points.
 | License | **Apache-2.0** |
 | Pinned version | see `vendor/runtime/*/pin.json` |
 
-A copy of the herdr source is kept at `backend/` as reference material. It is not built and not
+A copy of the runtime's source is kept at `backend/` as reference material. It is not built and not
 part of the Osade build. As Apache-2.0 section 4(b) requires be stated, it is modified in one way:
 `scripts/rebrand-source.mjs` renames the project's name to Osade's throughout. Links to where
 the project lives, and its release, install and update addresses, point at Osade's repository;
-upstream history links, maintainer addresses and third-party repositories are kept, and the
-release manifests are trimmed to the pinned release. Osade's own runtime is unaffected: it is the
+the vendored patches' rationale links and author addresses are kept, and the release manifests
+are trimmed to the pinned release. Osade's own runtime is unaffected: it is the
 upstream release binary, fetched and checksummed from `vendor/runtime/<version>-p<protocol>/pin.json`. `backend/OSADE-PIN.json` records the
 upstream commit it was applied to.
 
-Apache-2.0 requires that herdr's own `NOTICE` file, if it carries one, be reproduced in
+Apache-2.0 requires that the runtime's own `NOTICE` file, if it carries one, be reproduced in
 distributions that include the binary. **Action required before the first release:** fetch
-`LICENSE` and `NOTICE` from the pinned herdr tag into
+`LICENSE` and `NOTICE` from the pinned tag into
 `vendor/runtime/<version>-p<protocol>/` and reference them here. Neither file was present in
 the `backend/` copy.
 
-### Vendored inside the herdr binary
+### Vendored inside the runtime binary
 
-The herdr binary statically includes these. They are listed because Osade redistributes that
+The runtime binary statically includes these. They are listed because Osade redistributes that
 binary.
 
 | Component | License | Copyright / source |
 | --- | --- | --- |
 | **libghostty-vt** (Ghostty terminal core) | MIT | Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors — `backend/vendor/libghostty-vt/LICENSE`, pinned at 1.3.2-HEAD-+c5a21edfc |
 | **portable-pty** (vendored fork) | MIT | wezterm project — `backend/vendor/portable-pty/Cargo.toml` |
-| herdr's Rust dependency graph | mixed permissive (MIT / Apache-2.0 / BSD) | resolved in `backend/Cargo.lock` |
+| The runtime's Rust dependency graph | mixed permissive (MIT / Apache-2.0 / BSD) | resolved in `backend/Cargo.lock` |
 
 **Action required before the first release:** generate the full Rust crate attribution with
-`cargo about` or `cargo deny` against the pinned herdr tag's `Cargo.lock` and append it here.
+`cargo about` or `cargo deny` against the pinned tag's `Cargo.lock` and append it here.
 The crate graph is not enumerated in this file yet.
 
 ---

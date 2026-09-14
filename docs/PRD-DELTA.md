@@ -1,6 +1,6 @@
 # PRD Delta — where OSADE.md is wrong about the substrate
 
-> `<prefix>` in variable names below is the runtime's environment-variable prefix, recorded in `vendor/runtime/<pin>/pin.json` as `substrate.env_prefix`.
+> `<prefix>` in variable names below is the runtime's environment-variable prefix: the upstream project name recorded in `vendor/runtime/<pin>/pin.json` (`license.upstream_repository`), upper-cased.
 
 > Every assumption in OSADE.md that recon proved wrong, unverifiable, or more
 > expensive than written, with a proposed correction. Evidence is in

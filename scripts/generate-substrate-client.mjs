@@ -72,6 +72,12 @@ function findPin() {
 const PROVENANCE_COMMENT =
   /^ \* This interface was referenced by `[^`]*`'s JSON-Schema\n \* via the `definition` "[^"]*"\.\n/gm;
 
+/** The upstream project's name: the last segment of the repository the pin records. */
+function projectName(pin) {
+  const segments = new URL(pin.license.upstream_repository).pathname.split('/').filter(Boolean);
+  return segments[segments.length - 1];
+}
+
 function osadeNames(ts, pin) {
   const segments = new URL(pin.license.upstream_repository).pathname.split('/').filter(Boolean);
   const project = segments[segments.length - 1];
@@ -206,7 +212,7 @@ export const SUBSTRATE_PIN = Object.freeze({
   schemaVersion: ${pin.substrate.schema_version},
   methodCount: ${methods.length},
   /** The prefix of the runtime's own environment variables, e.g. \`<prefix>_SOCKET_PATH\`. */
-  envPrefix: ${JSON.stringify(pin.substrate.env_prefix)},
+  envPrefix: ${JSON.stringify(projectName(pin).toUpperCase())},
 });
 `;
 

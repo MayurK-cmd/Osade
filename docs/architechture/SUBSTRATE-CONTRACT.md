@@ -1,6 +1,6 @@
 # the substrate Contract — the verified integration surface
 
-> `<prefix>` in variable names below is the runtime's environment-variable prefix, recorded in `vendor/runtime/<pin>/pin.json` as `substrate.env_prefix`.
+> `<prefix>` in variable names below is the runtime's environment-variable prefix: the upstream project name recorded in `vendor/runtime/<pin>/pin.json` (`license.upstream_repository`), upper-cased.
 
 > This document records what the substrate **actually does**, verified against
 > `backend/` source and against a live `the substrate 0.8.2` server on this machine.

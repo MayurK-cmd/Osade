@@ -15,7 +15,7 @@
     "by": "scripts/rebrand-source.mjs",
     "applied_at": "2026-09-13",
     "what": "The upstream project name, in every case and in file and directory names, becomes Osade. Where the project lives, and its release, install and update addresses, point at Osade’s repository, so this tree’s installers and self-updater look for Osade’s releases. The release manifests keep only the pinned release. The home and session environment variables take an OSADE_RUNTIME_ prefix instead, so a runtime built from this source cannot read the variables Osade itself sets.",
-    "kept": "Upstream history links, maintainer addresses, and other people’s repositories and registries — pointed at Osade, they would credit other people’s work to Osade — plus the plugin marketplace’s live API, the website’s deployment config, and the upstream organisation’s bare name.",
+    "kept": "The vendored patches’ provenance — the issue and pull-request links saying why each patch to a third-party library exists, and the author addresses in their headers — plus the plugin marketplace’s live API and the upstream organisation’s bare name and other repositories.",
     "line_numbers": "Unchanged. The rename never adds or removes a line, so citations into backend/ still hold."
   },
   "not_from_upstream": {

@@ -1,6 +1,6 @@
 # Osade — Product Requirements & Build Spec
 
-> `<prefix>` in variable names below is the runtime's environment-variable prefix, recorded in `vendor/runtime/<pin>/pin.json` as `substrate.env_prefix`.
+> `<prefix>` in variable names below is the runtime's environment-variable prefix: the upstream project name recorded in `vendor/runtime/<pin>/pin.json` (`license.upstream_repository`), upper-cased.
 
 > **Read this whole document before writing code.** It is written to be handed to a coding
 > agent. Sections marked **INVARIANT** are load-bearing; breaking one produces a class of bug

@@ -55,18 +55,20 @@ export function runtimeEnv(session = OSADE_SESSION): Record<string, string> {
 }
 
 /**
- * One of the runtime's own environment variables, named with the prefix its pin records.
+ * One of the runtime's own environment variables, prefixed with the upstream project name its pin
+ * records (the last segment of `license.upstream_repository`), upper-cased.
  *
  * The daemon gets the prefix through codegen; this process cannot import that, so it reads the
  * record itself — shipped beside the runtime in a packaged app, in `vendor/runtime/<pin>/` in a
  * checkout.
  */
 export function runtimeVariable(name: string): string {
-  return `${runtimePin().substrate.env_prefix}_${name}`;
+  const segments = new URL(runtimePin().license.upstream_repository).pathname.split('/').filter(Boolean);
+  return `${(segments[segments.length - 1] ?? '').toUpperCase()}_${name}`;
 }
 
 interface RuntimePin {
-  substrate: { env_prefix: string };
+  license: { upstream_repository: string };
 }
 
 let loadedPin: RuntimePin | null = null;

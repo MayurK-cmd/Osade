@@ -24,7 +24,7 @@ use serde::{Deserialize, Deserializer};
 
 const STABLE_UPDATE_MANIFEST_URL: &str = "https://raw.githubusercontent.com/OsadeOSS/Osade/main/backend/distribution/latest.json";
 const PREVIEW_UPDATE_MANIFEST_URL: &str = "https://raw.githubusercontent.com/OsadeOSS/Osade/main/backend/distribution/preview.json";
-const HOMEBREW_FORMULA_API_URL: &str = "https://formulae.brew.sh/api/formula/herdr.json";
+const HOMEBREW_FORMULA_API_URL: &str = "https://formulae.brew.sh/api/formula/osade.json";
 const OSADE_UPDATE_COMMAND: &str = "osade update";
 const HOMEBREW_UPDATE_COMMAND: &str = "brew update && brew upgrade osade";
 const MISE_UPDATE_COMMAND: &str = "mise upgrade osade";

@@ -28,9 +28,24 @@ const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '
 const PIN_DIR = join(ROOT, 'vendor', 'runtime', '0.8.2-p20');
 const pin = JSON.parse(readFileSync(join(PIN_DIR, 'pin.json'), 'utf8'));
 
+/**
+ * Release file names are recorded with `{project}` — the last segment of the upstream repository
+ * the pin names — so the project is named once, in `license.upstream_repository`.
+ */
+const PROJECT = new URL(pin.license.upstream_repository).pathname.split('/').filter(Boolean).pop();
+const named = (text) => text.replaceAll('{project}', PROJECT);
+pin.binary.assets = Object.fromEntries(
+  Object.entries(pin.binary.assets).map(([name, asset]) => [
+    named(name),
+    asset.contains
+      ? { ...asset, contains: Object.fromEntries(Object.entries(asset.contains).map(([inner, hash]) => [named(inner), hash])) }
+      : asset,
+  ]),
+);
+
 // pin.json is the provenance record, so the release URL and the asset names come from there
 // rather than being repeated here.
-const RELEASE = pin.binary.release.replace('/releases/tag/', '/releases/download/');
+const RELEASE = `${pin.license.upstream_repository}/releases/download/${pin.binary.release_tag}`;
 
 /** Rust target triples by Node platform and arch — the `target` of each asset in pin.json. */
 const TARGETS = {
