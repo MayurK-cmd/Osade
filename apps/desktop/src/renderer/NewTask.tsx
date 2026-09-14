@@ -85,14 +85,14 @@ export function NewTask({
         background: 'var(--field)',
       }}
     >
-      <h2 style={{ margin: '0 0 12px', fontSize: 'var(--t-m)', fontWeight: 600 }}>new task</h2>
+      <h2 style={{ margin: '0 0 12px', fontSize: 'var(--t-m)', fontWeight: 600 }}>New task</h2>
 
       <div style={{ marginBottom: 12 }}>
         <label
           htmlFor="new-task-repository"
           style={{ display: 'block', marginBottom: 4, color: 'var(--ink-soft)' }}
         >
-          repository
+          Repository
         </label>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
@@ -102,7 +102,7 @@ export function NewTask({
             value={repoPath}
             // Short on purpose: the sidebar is narrow, and the button beside it already says
             // "choose folder".
-            placeholder={canChoose ? 'or paste a path' : '/path/to/the/repository'}
+            placeholder={canChoose ? 'Or paste a path' : '/path/to/the/repository'}
             style={{ minWidth: 0 }}
             onChange={(event) => {
               setRepoPath(event.target.value);
@@ -120,7 +120,7 @@ export function NewTask({
               onClick={chooseRepository}
               onKeyDown={(event) => event.key === 'Escape' && onClose()}
             >
-              {choosing ? 'opening…' : 'choose folder…'}
+              {choosing ? 'Opening…' : 'Choose folder…'}
             </button>
           )}
         </div>
@@ -147,7 +147,7 @@ export function NewTask({
 
       <label style={{ display: 'block', marginBottom: 14 }}>
         <span style={{ display: 'block', marginBottom: 4, color: 'var(--ink-soft)' }}>
-          what should the agent do?
+          What should the agent do?
         </span>
         <textarea
           rows={3}
@@ -182,9 +182,9 @@ export function NewTask({
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button className="primary" disabled={!ready || busy} onClick={create}>
-          {busy ? 'creating…' : 'create task'}
+          {busy ? 'Creating…' : 'Create task'}
         </button>
-        <button onClick={onClose}>cancel</button>
+        <button onClick={onClose}>Cancel</button>
         <span style={{ color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
           Creates the task. You start the agent yourself.
         </span>

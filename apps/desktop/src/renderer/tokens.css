@@ -1,59 +1,45 @@
 /*
- * Design tokens — OSADE.md §19.2.
+ * Design tokens.
  *
- * Terminal, not application. Reversed 2026-09-11 from light-first at the owner's direction: Osade
- * sits beside a terminal all day and now dresses like one. Dark ground, one typeface and it is
- * monospaced, lowercase chrome, square corners, hairline rules, and a single blue that means
- * "this is the thing you are on" and nothing else.
- *
- * State colours are the one exception to the monochrome, and they appear ONLY as state — never as
- * decoration, never as branding. Zero shadows anywhere: depth is a thing applications have.
+ * Four ground steps plus a 0.5px hairline. No shadows. IBM Plex Sans for chrome,
+ * IBM Plex Mono only for machine-authored text. Sentence case everywhere.
+ * --focus is a focus ring, never a state colour.
  */
 
 :root {
-  /* Ground. The sidebar sits a shade above the main surface, as a terminal's chrome does. */
-  --paper: #0f1214;
-  --surface: #14181b;
-  --field: #1b2025;
+  --bg-0: #101210;
+  --bg-1: #151815;
+  --bg-2: #1b1f1c;
+  --bg-3: #232823;
+  --line: #2c332d;
+  --ink: #e6eae4;
+  --ink-2: #98a196;
+  --ink-3: #69726a;
 
-  --ink: #c9d1d9;
-  --ink-soft: #7d868e;
-  --rule: #21262c;
+  --st-needs: #e0a159;
+  --st-live: #63b98c;
+  --st-fail: #e0736e;
+  --st-rest: #7e887f;
+  --focus: #8fa8c4;
 
-  /*
-   * The accent carries selection and focus, nothing else. One blue, used sparingly, is what keeps
-   * it meaning "here" rather than "decorated".
-   */
-  --accent: #58a6ff;
-  --accent-ink: #0f1214;
+  /* Aliases for panels that still speak the old names. */
+  --paper: var(--bg-0);
+  --surface: var(--bg-1);
+  --field: var(--bg-2);
+  --rule: var(--line);
+  --ink-soft: var(--ink-2);
+  --accent: var(--focus);
 
-  /* State. Muted to sit on the dark ground without glowing. */
-  --st-needs: #d9903f;
-  --st-live: #57a773;
-  --st-fail: #cf6a67;
-  --st-rest: #6c757d;
-
-  /* A wash behind the needs-you set, so it reads as one block rather than coloured rows. */
-  --wash-needs: #1c1712;
-  --edge-needs: #6b4a1c;
-
-  /*
-   * One family. §19.2 chose IBM Plex because the product is a record of machine work; the mono
-   * cut is the whole of it now, which is what makes the screen read as a terminal rather than as
-   * an application imitating one.
-   */
+  --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
-  --sans: var(--mono);
 
-  /* Scale: 11 / 12.5 / 14 / 17 / 21. Tighter than before — a terminal is dense. */
   --t-xs: 11px;
-  --t-s: 12.5px;
-  --t-m: 14px;
-  --t-l: 17px;
-  --t-xl: 21px;
+  --t-s: 12px;
+  --t-m: 13px;
+  --t-l: 15px;
 
-  /* Square. A terminal has no rounded corners. */
-  --radius: 0px;
+  --radius: 5px;
+  --radius-panel: 6px;
 }
 
 * {
@@ -68,78 +54,66 @@ body,
 }
 
 body {
-  background: var(--paper);
+  background: var(--bg-0);
   color: var(--ink);
-  font-family: var(--mono);
-  font-size: var(--t-s);
-  line-height: 1.5;
-  /* Tabular numerals everywhere numbers align (§19.2). */
+  font-family: var(--sans);
+  font-size: var(--t-m);
+  line-height: 1.45;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
 
 code,
-.mono {
+.mono,
+kbd {
   font-family: var(--mono);
 }
 
-/*
- * Focus is visible, always. An interface that hides where the keyboard is has decided only mice
- * matter.
- */
 :focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 1px;
+  outline: 1px solid var(--focus);
+  outline-offset: 2px;
 }
 
 button {
   font: inherit;
   color: var(--ink);
-  background: transparent;
-  border: 1px solid var(--rule);
+  background: var(--bg-2);
+  border: 0.5px solid var(--line);
   border-radius: var(--radius);
   padding: 4px 11px;
   cursor: pointer;
 }
 
 button:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--bg-3);
 }
 
 button:disabled {
-  color: var(--st-rest);
+  color: var(--ink-3);
   cursor: not-allowed;
 }
 
-/*
- * The one emphatic control on the screen: the action a person came here to take. Exactly one per
- * view, which is what keeps it meaning anything.
- */
 button.primary {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: var(--accent);
+  background: var(--bg-3);
+  color: var(--ink);
+  border-color: var(--line);
 }
 
 button.primary:hover:not(:disabled) {
-  background: var(--accent);
-  color: var(--accent-ink);
-  opacity: 0.85;
+  background: var(--bg-3);
 }
 
 button.primary:disabled {
-  background: transparent;
-  border-color: var(--rule);
-  color: var(--st-rest);
+  background: var(--bg-2);
+  color: var(--ink-3);
 }
 
 input,
 textarea {
   font: inherit;
   color: var(--ink);
-  background: var(--paper);
-  border: 1px solid var(--rule);
+  background: var(--bg-0);
+  border: 0.5px solid var(--line);
   border-radius: var(--radius);
   padding: 5px 8px;
   width: 100%;
@@ -147,14 +121,22 @@ textarea {
 
 input:focus,
 textarea:focus {
-  outline: none;
-  border-color: var(--accent);
+  outline: 1px solid var(--focus);
+  outline-offset: 1px;
+  border-color: var(--line);
 }
 
-/* Disclosure triangles read as terminal affordances, not as OS widgets. */
+kbd {
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+  border: 0.5px solid var(--line);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
 summary {
   list-style: none;
-  color: var(--ink-soft);
+  color: var(--ink-2);
 }
 
 summary::-webkit-details-marker {
@@ -163,7 +145,7 @@ summary::-webkit-details-marker {
 
 summary::before {
   content: '› ';
-  color: var(--ink-soft);
+  color: var(--ink-3);
 }
 
 details[open] > summary::before {
@@ -173,6 +155,15 @@ details[open] > summary::before {
 textarea {
   resize: vertical;
   line-height: 1.45;
+}
+
+.ledger-row:hover {
+  background: var(--bg-3);
+}
+
+.ledger-row[aria-pressed='true'],
+.ledger-row[aria-pressed='true']:hover {
+  background: var(--bg-2);
 }
 
 @media (prefers-reduced-motion: reduce) {

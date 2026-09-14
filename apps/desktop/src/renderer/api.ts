@@ -159,4 +159,12 @@ export const api = {
       revision: number;
       truncated: boolean;
     }>,
+
+  /** Sends a prompt into the task's agent lane. State arrives through useLedger. */
+  taskSend: (taskId: string, text: string, wait?: boolean) =>
+    call('mutation', 'taskSend', { taskId, text, wait }) as Promise<{ ok: true }>,
+
+  /** Hides the task from the ledger. Does not kill the agent process. */
+  taskArchive: (taskId: string) =>
+    call('mutation', 'taskArchive', { taskId }) as Promise<{ ok: true }>,
 };

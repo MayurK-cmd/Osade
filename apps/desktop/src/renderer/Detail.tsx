@@ -1,83 +1,99 @@
-import { useState, type JSX, type ReactNode } from 'react';
+import { useState, type JSX } from 'react';
 
-import type { TaskView } from '@osade/contract';
+import type { TaskView, VerifyRun } from '@osade/contract';
 
 import { api } from './api.js';
+import { Composer } from './Composer.js';
 import { Conventions } from './Conventions.js';
 import { GateCard } from './GateCard.js';
 import { PrOpen } from './PrOpen.js';
 import { STATUS, TONE_COLOUR, ago } from './status.js';
+import { Transcript } from './Transcript.js';
 import { VerifyPlanReview } from './VerifyPlanReview.js';
 
+export type Lane = 'transcript' | 'checks' | 'diff' | 'rules';
+
+const LANES: { id: Lane; label: string; chord: string }[] = [
+  { id: 'transcript', label: 'Transcript', chord: '1' },
+  { id: 'checks', label: 'Checks', chord: '2' },
+  { id: 'diff', label: 'Diff', chord: '3' },
+  { id: 'rules', label: 'Rules', chord: '4' },
+];
+
 /**
- * One task, answering the questions in the order a person asks them — OSADE.md §19.4.
- *
- *   1. what is this, and what is happening to it
- *   2. **what do you need from me**
- *   3. how is it going
- *   4. (only if you go looking) which branch, which worktree, which pane
- *
- * The old version answered 4 first: branch, base, worktree, workspace id, pane id, agent state,
- * last event. All true, all the daemon's vocabulary, and none of it any help in deciding whether
- * to approve a pull request. Identifiers are now behind a disclosure, where they belong — useful
- * when something is wrong, noise the rest of the time.
- *
- * Panels appear when they are relevant. A task that has not started has nothing to say about
- * pull requests, and showing an empty one teaches people to ignore the panel.
+ * One task: header, gate banner, lane tabs, composer.
+ * Existing panels keep their behaviour; only their parent changes.
  */
-
-export function Detail({ task }: { task: TaskView }): JSX.Element {
+export function Detail({
+  task,
+  lane,
+  onLane,
+}: {
+  task: TaskView;
+  lane: Lane;
+  onLane: (lane: Lane) => void;
+}): JSX.Element {
   const copy = STATUS[task.status];
+  const colour = TONE_COLOUR[copy.tone];
   const openGates = task.openGates.filter((gate) => gate.decided_at == null);
-
-  // §10.2 — verification is the gate on review, so it earns a place once work exists. Before
-  // that it is a question nobody has asked yet.
-  const started = task.status !== 'queued';
-  const showPr = ['awaiting_review', 'pr_open', 'ci_failed', 'review_changes_requested'].includes(
-    task.status,
-  );
+  const sha = task.task.base_sha.slice(0, 12);
 
   return (
-    <div>
-      <header style={{ padding: '14px 18px 12px', borderBottom: '1px solid var(--rule)' }}>
-        <h1
-          style={{
-            fontSize: 'var(--t-l)',
-            fontWeight: 600,
-            lineHeight: 1.3,
-            margin: '0 0 6px',
-          }}
-        >
-          {task.task.title}
-        </h1>
-
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'baseline',
-            gap: 8,
-            color: TONE_COLOUR[copy.tone],
-            fontWeight: 600,
-          }}
-        >
-          {copy.label}
-          <span style={{ color: 'var(--st-rest)', fontWeight: 400, fontSize: 'var(--t-xs)' }}>
-            {ago(task.agent?.last_event_at ?? task.task.created_at)}
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        background: 'var(--bg-0)',
+      }}
+    >
+      <header style={{ padding: '14px 16px 12px', borderBottom: '0.5px solid var(--line)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <h1
+            style={{
+              fontSize: 'var(--t-l)',
+              fontWeight: 600,
+              lineHeight: 1.3,
+              margin: 0,
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
+            {task.task.title}
+          </h1>
+          <span
+            style={{
+              flexShrink: 0,
+              fontSize: 'var(--t-xs)',
+              color: colour,
+              border: '0.5px solid var(--line)',
+              background: 'var(--bg-2)',
+              borderRadius: 'var(--radius)',
+              padding: '2px 8px',
+            }}
+          >
+            {copy.label}
           </span>
         </div>
-
-        <p style={{ margin: '6px 0 0', color: 'var(--ink-soft)', lineHeight: 1.55 }}>
+        <div
+          className="mono"
+          style={{ marginTop: 6, fontSize: 'var(--t-s)', color: 'var(--ink-2)' }}
+        >
+          {task.task.branch}
+          {sha ? ` · ${sha}` : ''}
+          {task.scm?.pr_number != null ? ` · PR #${task.scm.pr_number}` : ''}
+        </div>
+        <p style={{ margin: '6px 0 0', color: 'var(--ink-2)', fontSize: 'var(--t-s)' }}>
           {copy.meaning}
         </p>
       </header>
 
-      {/* 2. What the task needs from you — the reason this window exists. */}
       {openGates.length > 0 ? (
         <section
           style={{
-            background: 'var(--wash-needs)',
-            borderBottom: '1px solid var(--edge-needs)',
-            borderLeft: '3px solid var(--st-needs)',
+            background: 'var(--bg-1)',
+            borderBottom: '0.5px solid var(--line)',
+            borderLeft: '2px solid var(--st-needs)',
             padding: '12px 16px',
           }}
         >
@@ -89,9 +105,10 @@ export function Detail({ task }: { task: TaskView }): JSX.Element {
         copy.next && (
           <section
             style={{
-              padding: '10px 18px',
-              borderBottom: '1px solid var(--rule)',
-              color: 'var(--ink-soft)',
+              padding: '10px 16px',
+              borderBottom: '0.5px solid var(--line)',
+              color: 'var(--ink-2)',
+              fontSize: 'var(--t-s)',
             }}
           >
             {copy.next}
@@ -101,35 +118,62 @@ export function Detail({ task }: { task: TaskView }): JSX.Element {
 
       {task.status === 'queued' && <StartTask taskId={task.task.id} />}
 
-      {/* 3. How it is going. */}
-      {started && (
-        <Panel title="checks" hint="what this project runs before work is reviewable">
-          <VerifyPlanReview taskId={task.task.id} />
-        </Panel>
-      )}
+      <nav
+        style={{
+          display: 'flex',
+          gap: 2,
+          padding: '8px 12px 0',
+          borderBottom: '0.5px solid var(--line)',
+        }}
+      >
+        {LANES.map((item) => {
+          const selected = lane === item.id;
+          return (
+            <button
+              key={item.id}
+              data-lane={item.id}
+              onClick={() => onLane(item.id)}
+              style={{
+                background: selected ? 'var(--bg-2)' : 'transparent',
+                border: '0.5px solid',
+                borderColor: selected ? 'var(--line)' : 'transparent',
+                borderBottom: selected ? '0.5px solid var(--bg-2)' : '0.5px solid transparent',
+                borderRadius: 'var(--radius) var(--radius) 0 0',
+                marginBottom: -1,
+                color: selected ? 'var(--ink)' : 'var(--ink-2)',
+              }}
+            >
+              {item.label} <kbd>{item.chord}</kbd>
+            </button>
+          );
+        })}
+      </nav>
 
-      {showPr && (
-        <Panel title="pull request" hint="nothing is published until you approve it">
-          <PrOpen task={task} />
-        </Panel>
-      )}
+      <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
+        {lane === 'transcript' && (
+          <Transcript
+            taskId={task.task.id}
+            active
+            refreshKey={task.agent?.last_event_at ?? null}
+          />
+        )}
+        {lane === 'checks' && (
+          <>
+            <VerifyPlanReview taskId={task.task.id} />
+            <VerifyRuns runs={task.latestVerifyRuns} />
+          </>
+        )}
+        {lane === 'diff' && (
+          <>
+            <PrOpen task={task} />
+            <ScmFacts task={task} />
+            <TechnicalDetails task={task} />
+          </>
+        )}
+        {lane === 'rules' && <Conventions repoId={task.task.repo_id} />}
+      </div>
 
-      {/*
-        * Repo-level, not task-level — the same rules appear on every task of the repository. It
-        * is collapsed so it stops competing with the task's own gate for "needs you" attention,
-        * and left open enough to notice: the summary carries the counts.
-        */}
-      <section style={{ padding: '12px 18px', borderBottom: '1px solid var(--rule)' }}>
-        <details>
-          <summary style={{ cursor: 'default' }}>what this project expects of contributors</summary>
-          <div style={{ marginTop: 6 }}>
-            <Conventions repoId={task.task.repo_id} />
-          </div>
-        </details>
-      </section>
-
-      {/* 4. The identifiers, for when something has gone wrong. */}
-      <TechnicalDetails task={task} />
+      <Composer task={task} />
     </div>
   );
 }
@@ -139,7 +183,7 @@ function StartTask({ taskId }: { taskId: string }): JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <section style={{ padding: '12px 18px', borderBottom: '1px solid var(--rule)' }}>
+    <section style={{ padding: '12px 16px', borderBottom: '0.5px solid var(--line)' }}>
       <button
         className="primary"
         disabled={busy}
@@ -152,9 +196,9 @@ function StartTask({ taskId }: { taskId: string }): JSX.Element {
             .finally(() => setBusy(false));
         }}
       >
-        {busy ? 'starting…' : 'start the agent'}
+        {busy ? 'Starting…' : 'Start the agent'}
       </button>
-      <p style={{ margin: '8px 0 0', color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
+      <p style={{ margin: '8px 0 0', color: 'var(--ink-2)', fontSize: 'var(--t-xs)' }}>
         Creates a worktree and launches the agent inside it. Your own checkout is not touched.
       </p>
       {error && (
@@ -166,55 +210,79 @@ function StartTask({ taskId }: { taskId: string }): JSX.Element {
   );
 }
 
-function Panel({
-  title,
-  hint,
-  children,
-}: {
-  title: string | null;
-  hint?: string;
-  children: ReactNode;
-}): JSX.Element {
+function VerifyRuns({ runs }: { runs: VerifyRun[] }): JSX.Element | null {
+  if (runs.length === 0) return null;
   return (
-    <section style={{ padding: '12px 18px', borderBottom: '1px solid var(--rule)' }}>
-      {title && (
-        <h2 style={{ margin: 0, fontSize: 'var(--t-s)', fontWeight: 600 }}>{title}</h2>
-      )}
-      {hint && (
-        <p style={{ margin: '2px 0 0', color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
-          {hint}
-        </p>
-      )}
-      {children}
-    </section>
+    <div style={{ marginTop: 16 }}>
+      <h2 style={{ margin: '0 0 8px', fontSize: 'var(--t-s)', fontWeight: 600 }}>Latest runs</h2>
+      {runs.map((run) => (
+        <div
+          key={run.id}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr auto',
+            gap: 8,
+            padding: '6px 0',
+            borderBottom: '0.5px solid var(--line)',
+            fontSize: 'var(--t-s)',
+          }}
+        >
+          <code className="mono" style={{ fontSize: 'var(--t-xs)' }}>
+            {run.cmd}
+          </code>
+          <span className="mono" style={{ color: 'var(--ink-2)', fontSize: 'var(--t-xs)' }}>
+            {run.exit_code == null
+              ? 'Running'
+              : run.exit_code === 0
+                ? 'Passed'
+                : `Exit ${run.exit_code}`}
+            {run.finished_at ? ` · ${ago(run.finished_at)}` : ''}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
-/**
- * Where the daemon's vocabulary is allowed to appear.
- *
- * Closed by default. These are the things you want the moment something is wrong and never
- * otherwise, which is exactly what a disclosure is for.
- */
+function ScmFacts({ task }: { task: TaskView }): JSX.Element | null {
+  const scm = task.scm;
+  if (!scm) return null;
+  return (
+    <div style={{ marginTop: 16 }}>
+      {scm.pr_url && <Field label="Pull request" value={scm.pr_url} mono />}
+      {scm.checks_state && <Field label="Checks" value={scm.checks_state} />}
+      {scm.review_state && <Field label="Review" value={scm.review_state} />}
+      {scm.mergeable && <Field label="Mergeable" value={scm.mergeable} />}
+    </div>
+  );
+}
+
 function TechnicalDetails({ task }: { task: TaskView }): JSX.Element {
   const probeFailures = task.agent?.probe_failures ?? 0;
 
   return (
-    <section style={{ padding: '12px 18px 24px' }}>
+    <section style={{ marginTop: 16 }}>
       <details>
-        <summary style={{ cursor: 'default', color: 'var(--ink-soft)' }}>
-          where this is running
+        <summary style={{ cursor: 'default', color: 'var(--ink-2)' }}>
+          Where this is running
         </summary>
 
         <div style={{ marginTop: 10 }}>
           <Field label="Branch" value={task.task.branch} mono />
-          <Field label="Based on" value={`${task.task.base_sha.slice(0, 12)} on ${task.task.base_ref}`} mono />
+          <Field
+            label="Based on"
+            value={`${task.task.base_sha.slice(0, 12)} on ${task.task.base_ref}`}
+            mono
+          />
           <Field label="Worktree" value={task.task.worktree_path} mono />
-          <Field label="Workspace" value={task.task.substrate_workspace_id ?? 'not created yet'} mono />
-          <Field label="Pane" value={task.agent?.substrate_pane_id ?? 'no agent running'} mono />
+          <Field
+            label="Workspace"
+            value={task.task.substrate_workspace_id ?? 'Not created yet'}
+            mono
+          />
+          <Field label="Pane" value={task.agent?.substrate_pane_id ?? 'No agent running'} mono />
           {task.scm?.pr_url && <Field label="Pull request" value={task.scm.pr_url} mono />}
 
-          {/* §5.2 — a failed probe is a note about confidence, never a state change. */}
           {probeFailures > 0 && (
             <p style={{ color: 'var(--st-rest)', fontSize: 'var(--t-xs)', marginTop: 8 }}>
               {probeFailures} failed {probeFailures === 1 ? 'probe' : 'probes'} — the status above
@@ -225,8 +293,8 @@ function TechnicalDetails({ task }: { task: TaskView }): JSX.Element {
       </details>
 
       <div style={{ marginTop: 14 }}>
-        <button onClick={() => void window.osade?.openInSubstrate()}>open the terminal</button>
-        <p style={{ margin: '8px 0 0', color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
+        <button onClick={() => void window.osade?.openInSubstrate()}>Open the terminal</button>
+        <p style={{ margin: '8px 0 0', color: 'var(--ink-2)', fontSize: 'var(--t-xs)' }}>
           Watch the agent work, or talk to it directly. Osade does not embed a terminal
           (ADR 0001); this opens a real one on the same session.
         </p>
@@ -235,10 +303,18 @@ function TechnicalDetails({ task }: { task: TaskView }): JSX.Element {
   );
 }
 
-function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }): JSX.Element {
+function Field({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}): JSX.Element {
   return (
     <div style={{ display: 'flex', gap: 12, padding: '3px 0', alignItems: 'baseline' }}>
-      <span style={{ width: 92, flexShrink: 0, color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
+      <span style={{ width: 92, flexShrink: 0, color: 'var(--ink-2)', fontSize: 'var(--t-xs)' }}>
         {label}
       </span>
       <span

@@ -3,6 +3,7 @@ import { useState, type JSX } from 'react';
 import type { GateRequest, TaskView } from '@osade/contract';
 
 import { api } from './api.js';
+import { chord } from './chords.js';
 
 /**
  * The gate card — OSADE.md §14.2.
@@ -63,7 +64,7 @@ export function GateCard({
     // No box of its own: whatever renders this already frames it (the detail pane puts it on a
     // tinted band with an amber edge). A card inside a highlighted region is two frames saying
     // the same thing.
-    <section style={{ marginBottom: 12 }}>
+    <section style={{ marginBottom: 12 }} data-gate-id={gate.id}>
       <header style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
         <span className="mono" style={{ color: 'var(--st-needs)' }}>
           ⚑
@@ -122,10 +123,10 @@ export function GateCard({
               disabled={busy}
               onClick={() => void run(() => api.gateEditAndApprove(gate.id, parse(draft)))}
             >
-              approve edited
+              Approve edited
             </button>
             <button disabled={busy} onClick={() => setEditing(false)}>
-              cancel
+              Cancel
             </button>
           </>
         ) : (
@@ -136,13 +137,13 @@ export function GateCard({
               disabled={busy}
               onClick={() => void run(() => api.gateDecide(gate.id, 'approve'))}
             >
-              {approveLabel(gate.gate)}
+              {approveLabel(gate.gate)} <kbd>{chord('enter')}</kbd>
             </button>
             <button disabled={busy} onClick={() => void run(() => api.gateDecide(gate.id, 'deny'))}>
-              deny
+              Deny <kbd>{chord('backspace')}</kbd>
             </button>
             <button disabled={busy} onClick={() => setEditing(true)}>
-              edit
+              Edit
             </button>
           </>
         )}
@@ -159,23 +160,23 @@ export function GateCard({
 function approveLabel(gate: string): string {
   switch (gate) {
     case 'gate.pr_open':
-      return 'open pull request';
+      return 'Open pull request';
     case 'gate.push':
-      return 'push';
+      return 'Push';
     case 'gate.pr_comment':
     case 'gate.issue_comment':
-      return 'post comment';
+      return 'Post comment';
     case 'gate.review_submit':
-      return 'submit review';
+      return 'Submit review';
     case 'gate.undo_turn':
-      return 'undo turn';
+      return 'Undo turn';
     default:
-      return 'approve';
+      return 'Approve';
   }
 }
 
 function describe(gate: string): string {
-  return approveLabel(gate) === 'approve' ? gate.replace('gate.', '') : approveLabel(gate);
+  return approveLabel(gate) === 'Approve' ? gate.replace('gate.', '') : approveLabel(gate);
 }
 
 /**

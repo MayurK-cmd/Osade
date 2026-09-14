@@ -68,7 +68,7 @@ file cannot drift the way the one it replaced did.
 
 ## Assets
 
-`assets/logo.jpg` and `assets/readme-logo.png` are Osade's own, covered by `LICENSE`.
+`assets/osade.png`, `assets/logo.jpg` and `assets/readme-logo.png` are Osade's own, covered by `LICENSE`.
 
 IBM Plex Sans and IBM Plex Mono (`docs/OSADE.md` §19.2) are licensed under the SIL Open Font
 License 1.1. Add the OFL text here when the fonts are actually bundled; if they are loaded

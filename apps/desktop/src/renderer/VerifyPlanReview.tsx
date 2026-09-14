@@ -15,9 +15,9 @@ import { api, type PlanStep } from './api.js';
 
 const SOURCE_LABEL: Record<PlanStep['source'], string> = {
   ci: 'CI config',
-  manifest: 'manifest',
-  doc: 'contributing docs',
-  user: 'you',
+  manifest: 'Manifest',
+  doc: 'Contributing docs',
+  user: 'You',
 };
 
 export function VerifyPlanReview({ taskId }: { taskId: string }): JSX.Element {
@@ -79,7 +79,7 @@ export function VerifyPlanReview({ taskId }: { taskId: string }): JSX.Element {
           }
           style={buttonStyle}
         >
-          derive a verification plan
+          Derive a verification plan
         </button>
         {error && <Err message={error} />}
       </div>
@@ -118,7 +118,7 @@ export function VerifyPlanReview({ taskId }: { taskId: string }): JSX.Element {
               {step.cmd}
             </code>
             <div style={{ color: 'var(--ink-soft)', fontSize: 'var(--t-xs)' }}>
-              from {SOURCE_LABEL[step.source]} · {step.evidence}
+              From {SOURCE_LABEL[step.source]} · {step.evidence}
             </div>
           </div>
           <label
@@ -140,7 +140,7 @@ export function VerifyPlanReview({ taskId }: { taskId: string }): JSX.Element {
                 setNeedsReview(true);
               }}
             />
-            required
+            Required
           </label>
         </div>
       ))}
@@ -163,7 +163,7 @@ export function VerifyPlanReview({ taskId }: { taskId: string }): JSX.Element {
             )
           }
         >
-          {needsReview ? 'confirm plan' : 'save changes'}
+          {needsReview ? 'Confirm plan' : 'Save changes'}
         </button>
         <button
           disabled={busy || needsReview}
@@ -176,7 +176,7 @@ export function VerifyPlanReview({ taskId }: { taskId: string }): JSX.Element {
             )
           }
         >
-          run verification
+          Run verification
         </button>
       </div>
     </div>

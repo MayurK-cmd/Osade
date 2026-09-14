@@ -37,8 +37,6 @@ import {
   substrateBinary,
 } from './supervisor/substrate.js';
 
-const isDev = !app.isPackaged;
-
 /**
  * The app's own log — `~/.osade/logs/app.log`.
  *
@@ -150,6 +148,17 @@ function daemonEntry(): string {
   return existsSync(built) ? built : join(repo, 'packages/daemon/src/cli.ts');
 }
 
+function windowIcon(): string | undefined {
+  const fromRepo = join(__dirname, '../../../..', 'assets', 'osade.png');
+  if (existsSync(fromRepo)) return fromRepo;
+  const resources = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  if (resources) {
+    const packaged = join(resources, 'osade.png');
+    if (existsSync(packaged)) return packaged;
+  }
+  return undefined;
+}
+
 function createWindow(): void {
   // §19.2 ships light and dark as peers, which is only true if both get looked at. A smoke run
   // can pin one; left alone, the app follows the machine.
@@ -160,8 +169,9 @@ function createWindow(): void {
     width: 1440,
     height: 900,
     minWidth: 900,
-    // §19.2 — light-first, --paper. Set here too so the frame does not flash white-then-dark.
-    backgroundColor: '#F6F7F4',
+    // Match --bg-0 so the frame does not flash light before the page paints.
+    backgroundColor: '#101210',
+    icon: windowIcon(),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -183,8 +193,6 @@ function createWindow(): void {
   } else {
     void window.loadFile(join(__dirname, '../renderer/index.html'));
   }
-
-  if (isDev && !smokeShotPath()) window.webContents.openDevTools({ mode: 'detach' });
 
   // Why the window went away, in the log. Without these, a renderer that dies takes the app with
   // it through `window-all-closed` and leaves an app.log whose last line is "creating the window"

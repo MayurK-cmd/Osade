@@ -18,21 +18,21 @@ import { api } from './api.js';
  */
 
 const CATEGORY_LABEL: Record<ConventionView['category'], string> = {
-  review_process: 'review process',
-  scope_limits: 'scope',
-  commit_style: 'commits',
-  test_requirements: 'tests',
-  file_ownership: 'ownership',
-  communication: 'communication',
+  review_process: 'Review process',
+  scope_limits: 'Scope',
+  commit_style: 'Commits',
+  test_requirements: 'Tests',
+  file_ownership: 'Ownership',
+  communication: 'Communication',
   ci_gates: 'CI',
 };
 
 const EVIDENCE_LABEL: Record<ConventionView['evidence'][number]['kind'], string> = {
-  rejected_pr: 'rejected',
-  merged_pr: 'merged',
-  review_comment: 'review',
+  rejected_pr: 'Rejected',
+  merged_pr: 'Merged',
+  review_comment: 'Review',
   ci_config: 'CI config',
-  doc: 'stated',
+  doc: 'Stated',
 };
 
 export function Conventions({ repoId }: { repoId: string }): JSX.Element {
@@ -110,7 +110,7 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
           style={buttonStyle}
           onClick={() => void run(() => api.mineRepo(repoId))}
         >
-          {status?.running ? 'mining…' : status?.lastRun ? 'mine again' : 'mine this repository'}
+          {status?.running ? 'Mining…' : status?.lastRun ? 'Mine again' : 'Mine this repository'}
         </button>
         {status?.running && <Progress run={status.lastRun} />}
         {status && !status.available && !status.running && (
@@ -118,7 +118,7 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
         )}
         {!status?.running && status?.lastRun?.error && (
           <span style={{ color: 'var(--st-fail)', fontSize: 'var(--t-xs)' }}>
-            last run failed: {status.lastRun.error}
+            Last run failed: {status.lastRun.error}
           </span>
         )}
       </div>
@@ -138,7 +138,7 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
       )}
 
       {candidates.length > 0 && (
-        <Group title="not in use yet" hint="Confirm one and every agent you launch is told about it.">
+        <Group title="Not in use yet" hint="Confirm one and every agent you launch is told about it.">
           {candidates.map((rule) => (
             <Rule
               key={rule.id}
@@ -155,7 +155,7 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
 
       {active.length > 0 && (
         <Group
-          title="in use"
+          title="In use"
           hint="Written into every agent's context, most confident and most recent first."
         >
           {active.map((rule) => (
@@ -170,7 +170,7 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
       )}
 
       {dismissed.length > 0 && (
-        <Group title="set aside" hint="Kept with their evidence, so the same rule is not re-mined blindly.">
+        <Group title="Set aside" hint="Kept with their evidence, so the same rule is not re-mined blindly.">
           {dismissed.map((rule) => (
             <Rule key={rule.id} rule={rule} busy={busy} />
           ))}
@@ -201,7 +201,7 @@ export function Conventions({ repoId }: { repoId: string }): JSX.Element {
           })
         }
       >
-        did this help?
+        Did this help?
       </button>
     </section>
   );
@@ -218,11 +218,11 @@ function Progress({ run }: { run: MineStatus['lastRun'] }): JSX.Element | null {
   if (!run?.phase) return null;
 
   const label: Record<NonNullable<MineStatus['lastRun']>['phase'] & string, string> = {
-    fetching: 'reading the review record from GitHub',
-    extracting: 'reading pull requests',
-    clustering: 'grouping what it found',
-    verifying: 'testing each rule against merged pull requests',
-    interrupted: 'interrupted',
+    fetching: 'Reading the review record from GitHub',
+    extracting: 'Reading pull requests',
+    clustering: 'Grouping what it found',
+    verifying: 'Testing each rule against merged pull requests',
+    interrupted: 'Interrupted',
   };
 
   const counted = run.progressTotal > 0 ? ` ${run.progressDone}/${run.progressTotal}` : '';
@@ -302,12 +302,12 @@ function Rule({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {onConfirm && (
           <button disabled={busy} style={buttonStyle} onClick={onConfirm}>
-            use it
+            Use it
           </button>
         )}
         {onReject && (
           <button disabled={busy} style={buttonStyle} onClick={onReject}>
-            {rule.lifecycle === 'active' ? 'turn off' : 'not a rule'}
+            {rule.lifecycle === 'active' ? 'Turn off' : 'Not a rule'}
           </button>
         )}
       </div>
