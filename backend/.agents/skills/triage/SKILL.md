@@ -13,9 +13,9 @@ Use this table shape:
 
 | Light | Recommendation | Issue | Age | Reactions | Why |
 |---|---|---|---:|---:|---|
-| 🔴 | fix now | [#123](https://github.com/herdrdev/herdr/issues/123) | 18d | 5 | user-visible regression |
-| 🟡 | queue | [#124](https://github.com/herdrdev/herdr/issues/124) | 42d | 2 | useful but not blocking |
-| 🔵 | defer | [#125](https://github.com/herdrdev/herdr/issues/125) | 7d | 0 | cosmetic polish |
+| 🔴 | fix now | [#123](https://github.com/OsadeOSS/Osade/issues/123) | 18d | 5 | user-visible regression |
+| 🟡 | queue | [#124](https://github.com/OsadeOSS/Osade/issues/124) | 42d | 2 | useful but not blocking |
+| 🔵 | defer | [#125](https://github.com/OsadeOSS/Osade/issues/125) | 7d | 0 | cosmetic polish |
 
 Keep issue numbers as Markdown links. Use days since issue creation for `Age`. Use total reactions for `Reactions`; include a compact breakdown only when it changes interpretation, such as `7 (5 👍, 2 👀)`.
 

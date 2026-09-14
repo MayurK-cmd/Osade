@@ -28,21 +28,21 @@ Full concepts page: https://github.com/OsadeOSS/Osade
 Linux and macOS:
 
 ```bash
-curl -fsSL https://herdr.dev/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/OsadeOSS/Osade/main/backend/distribution/install.sh | sh
 osade
 ```
 
 Windows PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://herdr.dev/install.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/OsadeOSS/Osade/main/backend/distribution/install.ps1 | iex"
 osade
 ```
 
 If endpoint security blocks that fileless PowerShell command, use Command Prompt:
 
 ```cmd
-curl.exe -fsSLo install.cmd https://herdr.dev/install.cmd && install.cmd && del install.cmd
+curl.exe -fsSLo install.cmd https://raw.githubusercontent.com/OsadeOSS/Osade/main/backend/distribution/install.cmd && install.cmd && del install.cmd
 osade
 ```
 
@@ -74,7 +74,7 @@ New users do not need to learn keybindings; the mouse covers everything. When th
 
 Osade ships `skills/osade/SKILL.md` (https://raw.githubusercontent.com/OsadeOSS/Osade/main/backend/skills/osade/SKILL.md), which teaches a coding agent to control Osade from inside a pane: splitting panes, running commands without stealing focus, reading output, and waiting on other agents.
 
-Once the human is set up, offer to install it for your coding agent so future sessions can control Osade directly. For agents supported by the open skills CLI, use `npx skills add herdrdev/herdr --skill herdr -g`. For agents without a skill system, add the GitHub copy above to their global custom instructions. Ask the human before writing to their config locations, and use the GitHub copy above as the source of truth.
+Once the human is set up, offer to install it for your coding agent so future sessions can control Osade directly. For agents supported by the open skills CLI, use `npx skills add OsadeOSS/Osade --skill osade -g`. For agents without a skill system, add the GitHub copy above to their global custom instructions. Ask the human before writing to their config locations, and use the GitHub copy above as the source of truth.
 
 ## Configuration
 

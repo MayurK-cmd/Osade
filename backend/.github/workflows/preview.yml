@@ -128,19 +128,19 @@ jobs:
         include:
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
-            name: herdr-linux-x86_64
+            name: osade-linux-x86_64
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
-            name: herdr-linux-aarch64
+            name: osade-linux-aarch64
           - target: x86_64-apple-darwin
             os: macos-latest
-            name: herdr-macos-x86_64
+            name: osade-macos-x86_64
           - target: aarch64-apple-darwin
             os: macos-latest
-            name: herdr-macos-aarch64
+            name: osade-macos-aarch64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            name: herdr-windows-x86_64.zip
+            name: osade-windows-x86_64.zip
     runs-on: ${{ matrix.os }}
     env:
       LIBGHOSTTY_VT_OPTIMIZE: ReleaseFast
@@ -261,7 +261,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $package = Join-Path $env:RUNNER_TEMP "Microsoft.Windows.Console.ConPTY.nupkg"
-          $stage = Join-Path $env:RUNNER_TEMP "herdr-windows-x86_64"
+          $stage = Join-Path $env:RUNNER_TEMP "osade-windows-x86_64"
           .\scripts\package_windows_conpty.ps1 `
             -OsadeExe target\${{ matrix.target }}\release\osade.exe `
             -PackagePath $package `
@@ -335,7 +335,7 @@ jobs:
           result = {}
           for path in pathlib.Path('artifacts').glob('osade-*/*.sha256'):
               digest, name = path.read_text().split()[:2]
-              target = name.removeprefix('herdr-').removesuffix('.exe').removesuffix('.zip')
+              target = name.removeprefix('osade-').removesuffix('.exe').removesuffix('.zip')
               result[target] = digest
           pathlib.Path('preview-sha256.json').write_text(json.dumps(result, indent=2) + '\n')
           PY
@@ -367,11 +367,11 @@ jobs:
             exit 1
           fi
           expected_assets="$(jq -S '{
-            "herdr-linux-x86_64": .["linux-x86_64"],
-            "herdr-linux-aarch64": .["linux-aarch64"],
-            "herdr-macos-x86_64": .["macos-x86_64"],
-            "herdr-macos-aarch64": .["macos-aarch64"],
-            "herdr-windows-x86_64.zip": .["windows-x86_64"]
+            "osade-linux-x86_64": .["linux-x86_64"],
+            "osade-linux-aarch64": .["linux-aarch64"],
+            "osade-macos-x86_64": .["macos-x86_64"],
+            "osade-macos-aarch64": .["macos-aarch64"],
+            "osade-windows-x86_64.zip": .["windows-x86_64"]
           }' preview-sha256.json)"
           actual_assets="$(jq -S '[
             .assets[] | select(.digest | type == "string") |
@@ -397,11 +397,11 @@ jobs:
           overwrite_files: true
           target_commitish: ${{ needs.preflight.outputs.commit }}
           files: |
-            artifacts/herdr-linux-x86_64/herdr-linux-x86_64
-            artifacts/herdr-linux-aarch64/herdr-linux-aarch64
-            artifacts/herdr-macos-x86_64/herdr-macos-x86_64
-            artifacts/herdr-macos-aarch64/herdr-macos-aarch64
-            artifacts/herdr-windows-x86_64.zip/herdr-windows-x86_64.zip
+            artifacts/osade-linux-x86_64/osade-linux-x86_64
+            artifacts/osade-linux-aarch64/osade-linux-aarch64
+            artifacts/osade-macos-x86_64/osade-macos-x86_64
+            artifacts/osade-macos-aarch64/osade-macos-aarch64
+            artifacts/osade-windows-x86_64.zip/osade-windows-x86_64.zip
 
       - name: Publish preview prerelease
         if: steps.existing-preview.outputs.already_published != 'true'

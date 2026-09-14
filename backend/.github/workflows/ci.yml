@@ -221,20 +221,20 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $package = Join-Path $env:RUNNER_TEMP "Microsoft.Windows.Console.ConPTY.nupkg"
-          $stage = Join-Path $env:RUNNER_TEMP "herdr-windows-x86_64"
+          $stage = Join-Path $env:RUNNER_TEMP "osade-windows-x86_64"
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           .\scripts\package_windows_conpty.ps1 `
             -OsadeExe target\x86_64-pc-windows-msvc\debug\osade.exe `
             -PackagePath $package `
             -StageDir $stage `
-            -OutputPath artifacts\herdr-windows-x86_64.zip
+            -OutputPath artifacts\osade-windows-x86_64.zip
           "OSADE_CONPTY_PACKAGE_DIR=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Probe enhanced pane input with bundled ConPTY
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $exe = Join-Path $env:OSADE_CONPTY_PACKAGE_DIR "herdr.exe"
+          $exe = Join-Path $env:OSADE_CONPTY_PACKAGE_DIR "osade.exe"
           $consoleHost = Join-Path $env:OSADE_CONPTY_PACKAGE_DIR "conpty\x64\OpenConsole.exe"
           .\scripts\windows_conpty_enhanced_input_probe.ps1 `
             -ExePath $exe `
@@ -246,7 +246,7 @@ jobs:
         run: |
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
             .\scripts\windows_install_conpty_package_test.ps1 `
-            -ArchivePath artifacts\herdr-windows-x86_64.zip
+            -ArchivePath artifacts\osade-windows-x86_64.zip
           if ($LASTEXITCODE -ne 0) {
             throw "Windows PowerShell installer test failed with exit code $LASTEXITCODE"
           }

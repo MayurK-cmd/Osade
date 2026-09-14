@@ -32,9 +32,9 @@ if ($installerExitCode -ne 0) {
     throw "The installer failed on Windows ARM64 with exit code $installerExitCode."
 }
 
-$installedOsade = Join-Path $env:OSADE_INSTALL_DIR "herdr.exe"
+$installedOsade = Join-Path $env:OSADE_INSTALL_DIR "osade.exe"
 if (-not (Test-Path -LiteralPath $installedOsade -PathType Leaf)) {
-    throw "The installer exited successfully without activating herdr.exe."
+    throw "The installer exited successfully without activating osade.exe."
 }
 & $installedOsade --version
 if ($LASTEXITCODE -ne 0) {

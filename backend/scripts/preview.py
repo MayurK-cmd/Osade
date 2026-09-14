@@ -16,8 +16,8 @@ ASSET_TARGETS = (
     "windows-x86_64",
 )
 EXPECTED_ASSET_NAMES = {
-    **{target: f"herdr-{target}" for target in ASSET_TARGETS},
-    "windows-x86_64": "herdr-windows-x86_64.zip",
+    **{target: f"osade-{target}" for target in ASSET_TARGETS},
+    "windows-x86_64": "osade-windows-x86_64.zip",
 }
 HIDDEN_SUBJECTS = (
     "docs: publish release distribution",
@@ -316,13 +316,13 @@ def main() -> int:
     notes.add_argument("--commit", required=True)
     notes.add_argument("--build-id", required=True)
     notes.add_argument("--base-version", required=True)
-    notes.add_argument("--repo", default="herdrdev/herdr")
+    notes.add_argument("--repo", default="OsadeOSS/Osade")
     notes.add_argument("--output", required=True)
     notes.set_defaults(func=cmd_notes)
 
     manifest = sub.add_parser("manifest")
     manifest.add_argument("--output", default="distribution/preview.json")
-    manifest.add_argument("--repo", default="herdrdev/herdr")
+    manifest.add_argument("--repo", default="OsadeOSS/Osade")
     manifest.add_argument("--tag", required=True)
     manifest.add_argument("--build-id", required=True)
     manifest.add_argument("--commit", required=True)

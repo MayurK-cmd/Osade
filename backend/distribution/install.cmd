@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "INSTALLER_URL=https://herdr.dev/install.ps1"
+set "INSTALLER_URL=https://raw.githubusercontent.com/OsadeOSS/Osade/main/backend/distribution/install.ps1"
 set "CURL_PROTOCOL=--proto =https --tlsv1.2"
 if defined OSADE_INSTALLER_URL (
     set "INSTALLER_URL=%OSADE_INSTALLER_URL%"

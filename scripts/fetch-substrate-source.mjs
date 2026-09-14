@@ -42,6 +42,9 @@ function upstreamRepository() {
   return new URL(pin.license.upstream_repository).pathname.replace(/^\/|\/$/g, '');
 }
 
+/** Where the upstream repository is recorded, rather than repeating it in backend/OSADE-PIN.json. */
+const UPSTREAM_RECORD = 'vendor/runtime/<pin>/pin.json (license.upstream_repository)';
+
 /** The substrate Osade reads. Bump alongside `vendor/runtime/<version>-p<protocol>/`. */
 const PIN = {
   repository: upstreamRepository(),
@@ -97,7 +100,7 @@ function main() {
   // A marker, so anyone looking at a checkout can tell what they have without re-deriving it.
   writeFileSync(
     join(BACKEND, 'OSADE-PIN.json'),
-    `${JSON.stringify({ ...PIN, fetched_at: new Date().toISOString().slice(0, 10), modified_by: 'scripts/rebrand-source.mjs' }, null, 2)}\n`,
+    `${JSON.stringify({ upstream: UPSTREAM_RECORD, commit: PIN.commit, committed_at: PIN.committedAt, fetched_at: new Date().toISOString().slice(0, 10), modified_by: 'scripts/rebrand-source.mjs' }, null, 2)}\n`,
   );
 
   log(`backend/ is ${PIN.repository}@${PIN.commit.slice(0, 12)} (${PIN.committedAt}).`);

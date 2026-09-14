@@ -120,10 +120,10 @@ const DEFAULT_CONFIG: &str = r##"# osade configuration
 # so existing preview installs stay there until explicitly switched.
 # channel = "stable"
 
-# Check herdr.dev for new Osade versions in the background.
+# Check github.com/OsadeOSS/Osade for new Osade versions in the background.
 # version_check = true
 
-# Check herdr.dev for remote agent-detection manifest updates in the background.
+# Check github.com/OsadeOSS/Osade for remote agent-detection manifest updates in the background.
 # manifest_check = true
 
 [keys]

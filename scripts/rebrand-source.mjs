@@ -17,22 +17,26 @@ import { basename, dirname, join, relative } from 'node:path';
  * Every name it works with is read from its record rather than written here: the upstream
  * repository and website from the runtime's pin.json, Osade's repository from package.json.
  *
- * What changes:
+ * What changes — the tree becomes a self-consistent Osade fork:
  *   - The upstream project name, in every case, in text and in file and directory names. A word
  *     swap of equal length keeps every line where it was, so `backend/…:line` citations hold.
- *   - Links to where the project lives — the repository, its issue tracker and discussions, files
- *     in it, the website's home and documentation pages — point at Osade's repository. The agent
- *     guide the CLI tells agents to fetch points at the raw file in Osade's repository.
+ *   - Where the project lives — the repository, issue tracker, discussions, files in it, workflow
+ *     repository guards, the website's home and documentation — points at Osade's repository.
+ *   - Its release, install and update addresses are Osade's too: release links and release file
+ *     names name Osade's GitHub releases, and a website address serving a file this tree has
+ *     (the release manifests, the install scripts, the agent guide) becomes that file's raw copy
+ *     in Osade's repository. This tree's installers and self-updater therefore look for Osade's
+ *     releases. Osade itself does not use them: it ships its own pinned, checksummed runtime
+ *     (vendor/runtime/<pin>/pin.json), which is untouched.
  *   - The release manifests keep only the pinned release.
  *
- * What does not, because changing it breaks something:
- *   - Release, download and update endpoints, and the release file names they serve. The code
- *     downloads real files at those addresses; renamed, the updater, installers and release
- *     tooling fail against them — found by running the tooling's tests before and after.
- *   - Upstream history links (pull requests, issues, commits), maintainer addresses and
- *     third-party repositories. Pointed at Osade, they would credit other people's work to Osade.
- *   - The repository the release tooling reads published releases from, which pairs with the
- *     kept release URLs, and the skills command that installs the upstream skill.
+ * What does not:
+ *   - Upstream history links (pull requests, issues, commits), maintainer addresses, and other
+ *     people's repositories and registries. Pointed at Osade, they would credit other people's
+ *     work to Osade.
+ *   - The plugin marketplace's live API and the website's own deployment config, which have no
+ *     Osade equivalent. The upstream organisation's bare name, which renamed would invent an
+ *     organisation someone else could register.
  *   - Two environment variables that would collide: HOME and SESSION would take names Osade
  *     itself sets, so a runtime built from this source would read Osade's own home directory as
  *     its own. They take an OSADE_RUNTIME_ prefix instead.
@@ -85,6 +89,11 @@ function swap(text) {
   return text.split(UPPER).join('OSADE').split(TITLE).join('Osade').split(LOWER).join('osade');
 }
 
+/** Does this tree have the file, under either name? Contents are rewritten before paths are renamed. */
+function treeHas(relativePath) {
+  return existsSync(join(target, relativePath)) || existsSync(join(target, swap(relativePath)));
+}
+
 // ---- addresses ------------------------------------------------------------------------------
 
 const URL_PATTERN = /https?:\/\/[^\s"'`<>)\]]+/g;
@@ -112,33 +121,41 @@ function mapUrl(url) {
     if (!repo) return url;
     const rest = repo[1];
     if (rest === '' || rest === '/' || rest === '.git') return OSADE_REPO;
+    // Releases are Osade's: the links and the file names they serve.
+    if (/^\/releases\b/i.test(rest)) return OSADE_REPO + swap(rest);
+    // The release manifests are Osade's release notes now, so their compare links follow. They
+    // name commit ranges, not people.
+    if (currentFile.startsWith('distribution/') && /^\/compare\//i.test(rest)) return OSADE_REPO + rest;
+    // The repository's own agent tooling uses issue links as examples of an output format, not as
+    // history — they describe how to triage *this* repository.
+    if (currentFile.startsWith('.agents/') && /^\/(?:issues|pull)\/\d+/i.test(rest)) return OSADE_REPO + rest;
     if (/^\/(?:issues|discussions|security)\/?$/i.test(rest) || /^\/issues\/new\b/i.test(rest)) {
       return OSADE_REPO + rest;
     }
     const file = rest.match(/^\/(blob|tree)\/[^/]+\/(.+)$/);
     if (file) return `${OSADE_REPO}/${file[1]}/main/${IN_OSADE}/${swap(file[2])}`;
+    // History: pull requests, issues and commits are other people's work, and stay theirs.
     return url;
   }
 
-  // A raw file from the repository: if this tree has that file, it is Osade's file now and the
-  // link follows it. Otherwise it is a genuine upstream download, and kept.
+  // A raw file from the repository: if this tree has that file, it is Osade's file now.
   if (host === 'raw.githubusercontent.com') {
     const raw = path.match(new RegExp(`^/${SLUG}/[^/]+/(.+)$`, 'i'));
-    // Either name: file contents are rewritten before paths are renamed, so on a first run the
-    // file still has its upstream name, and on every later run it has Osade's.
-    const present = raw && (existsSync(join(target, raw[1])) || existsSync(join(target, swap(raw[1]))));
-    if (present) return `${OSADE_RAW}/${IN_OSADE}/${swap(raw[1])}`;
+    if (raw && treeHas(raw[1])) return `${OSADE_RAW}/${IN_OSADE}/${swap(raw[1])}`;
     return url;
   }
 
   if (host === WEBSITE_HOST || host.endsWith(`.${WEBSITE_HOST}`)) {
-    // Deployment config for the website's own infrastructure (CORS origins and the like) names the
-    // site as an origin; a repository page is not one.
-    if (currentFile.startsWith('workers/')) return url;
-    if (/^\/(?:latest|preview)\.json\b|^\/install\.(?:sh|ps1|cmd)\b|^\/api\/|^\/agent-detection\//i.test(path)) {
-      return url;
+    // Deployment config for the website's own infrastructure names the site as an origin, and the
+    // plugin marketplace is a live service; neither has an Osade equivalent, and pointed at a
+    // repository page the marketplace client would fetch HTML.
+    if (currentFile.startsWith('workers/') || /^\/api\//i.test(path)) return url;
+    // The website serves files this tree has — release manifests, install scripts, the agent
+    // guide. Those addresses become the files' raw copies in Osade's repository.
+    const served = path.replace(/^\//, '').split(/[?#]/)[0];
+    if (/\.\w+$/.test(served) && treeHas(join('distribution', served))) {
+      return `${OSADE_RAW}/${IN_OSADE}/distribution/${swap(served)}`;
     }
-    if (/^\/agent-guide\.md\b/i.test(path)) return `${OSADE_RAW}/${IN_OSADE}/distribution/agent-guide.md`;
     return OSADE_REPO;
   }
 
@@ -147,29 +164,20 @@ function mapUrl(url) {
 
 // ---- text -----------------------------------------------------------------------------------
 
-/** Tokens held verbatim, first match wins. */
+/** Held verbatim, first match wins: maintainer addresses and other people's repositories. */
 const KEPT = [
-  // Release file names — the files the kept release URLs serve.
-  new RegExp(`\\b${W}-(?:linux|macos|windows)-(?:x86_64|aarch64|arm64)(?:\\.zip|\\.exe)?(?![\\w-])`, 'g'),
-  new RegExp(`\\b${W}-(?=\\{target\\})`, 'g'),
-  new RegExp(`removeprefix\\('${W}-'\\)`, 'g'),
-  // The executable inside the published Windows zip, and the name the installer and self-updater
-  // give it on disk. Not cargo's own output, which follows the package name and is renamed.
-  new RegExp(`(?<![\\\\/](?:release|debug)[\\\\/])\\b${W}\\.exe\\b`, 'g'),
-  // Installs the upstream skill from the upstream repository.
-  new RegExp(`skills add ${SLUG} --skill ${W}\\b`, 'g'),
-  // Maintainer addresses, the domain in prose, third-party repositories.
   new RegExp(`[\\w.+-]+@(?:[\\w-]+\\.)*${escape(WEBSITE_HOST)}\\b`, 'gi'),
-  new RegExp(`\\b(?:[a-z0-9-]+\\.)*${escape(WEBSITE_HOST)}\\b`, 'gi'),
   new RegExp(`\\b[\\w.-]+\\/${W}-plugin-examples\\b`, 'gi'),
 ];
 
-/** Slugs naming where the project lives become Osade's; any other slug is the release source. */
-const RELINKED_SLUGS = [
-  [new RegExp(`github\\.repository == '${SLUG}'`, 'g'), `github.repository == '${OSADE_SLUG}'`],
-  [new RegExp(`issues for \`${SLUG}\``, 'g'), `issues for \`${OSADE_SLUG}\``],
+/** The website and repository named without a URL: Osade's repository. */
+const RELINKED = [
+  [new RegExp(`\\b(?:[a-z0-9-]+\\.)*${escape(WEBSITE_HOST)}\\b`, 'gi'), `github.com/${OSADE_SLUG}`],
+  [new RegExp(`\\b${SLUG}\\b`, 'gi'), OSADE_SLUG],
 ];
-const KEPT_SLUG = new RegExp(`\\b${escape(OWNER)}\\b(?:\\/[\\w.-]+)?`, 'gi');
+
+/** The organisation's bare name. Renamed, it would invent one someone else could register. */
+const KEPT_OWNER = new RegExp(`\\b${escape(OWNER)}\\b`, 'gi');
 
 const COLLIDING = [
   [new RegExp(`\\b${UPPER}_HOME\\b`, 'g'), 'OSADE_RUNTIME_HOME'],
@@ -201,13 +209,13 @@ function rebrandText(text) {
       return hold(match);
     });
   }
-  for (const [pattern, replacement] of RELINKED_SLUGS) {
+  for (const [pattern, replacement] of RELINKED) {
     out = out.replace(pattern, () => {
       stats.relinked += 1;
       return hold(replacement);
     });
   }
-  out = out.replace(KEPT_SLUG, (match) => {
+  out = out.replace(KEPT_OWNER, (match) => {
     stats.kept += 1;
     return hold(match);
   });

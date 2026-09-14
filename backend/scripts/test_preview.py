@@ -31,7 +31,7 @@ class PreviewNotesTests(unittest.TestCase):
             notes = "Preview notes\n"
             content = preview.build_manifest(
                 output=output,
-                repo="herdrdev/herdr",
+                repo="OsadeOSS/Osade",
                 tag="preview-2026-06-02-abcdef123456",
                 build_id="2026-06-02-abcdef123456",
                 commit="abcdef1234567890",
@@ -58,7 +58,7 @@ class PreviewNotesTests(unittest.TestCase):
             )
             self.assertEqual(
                 data["assets"]["windows-x86_64"]["url"],
-                "https://github.com/herdrdev/herdr/releases/download/preview-2026-06-02-abcdef123456/herdr-windows-x86_64.zip",
+                "https://github.com/OsadeOSS/Osade/releases/download/preview-2026-06-02-abcdef123456/osade-windows-x86_64.zip",
             )
             self.assertEqual(
                 data["assets"]["windows-x86_64"]["sha256"],
@@ -76,7 +76,7 @@ class PreviewNotesTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "windows-x86_64 requires"):
                 preview.build_manifest(
                     output=Path(tmp) / "preview.json",
-                    repo="herdrdev/herdr",
+                    repo="OsadeOSS/Osade",
                     tag="preview-test",
                     build_id="test",
                     commit="abcdef",

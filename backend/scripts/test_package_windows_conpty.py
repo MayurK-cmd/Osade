@@ -110,7 +110,7 @@ class WindowsConptyPackageTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            osade = root / "input-herdr.exe"
+            osade = root / "input-osade.exe"
             osade.write_bytes(b"osade")
             stage = root / "stage"
             package.stage_bundle(metadata_path, "x86_64", nupkg, osade, stage)

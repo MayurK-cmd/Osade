@@ -2,14 +2,14 @@
 set -eu
 
 BIN="osade"
-MANIFEST_URL="https://herdr.dev/latest.json"
+MANIFEST_URL="https://raw.githubusercontent.com/OsadeOSS/Osade/main/backend/distribution/latest.json"
 INSTALL_DIR="${OSADE_INSTALL_DIR:-$HOME/.local/bin}"
 
 main() {
     echo ""
     echo "      ,ww"
     echo "     wWWWWWWW_)  osade installer"
-    echo "     \`WWWWWW'    herdr.dev"
+    echo "     \`WWWWWW'    github.com/OsadeOSS/Osade"
     echo "      II  II"
     echo ""
 
@@ -39,7 +39,7 @@ main() {
     TARGET="${os}-${arch}"
     log "fetching latest release manifest..."
     MANIFEST="$(curl -fsSL --retry 3 --connect-timeout 10 --max-time 20 "$MANIFEST_URL")" \
-        || err "can't reach ${MANIFEST_URL}. Please try again later; herdr.dev might be down. Who let the sheeps out? baaa."
+        || err "can't reach ${MANIFEST_URL}. Please try again later; github.com/OsadeOSS/Osade might be down. Who let the sheeps out? baaa."
     URL="$(printf '%s\n' "$MANIFEST" | awk -v target="\"${TARGET}\"" '
         /^[[:space:]]*"assets"[[:space:]]*:/ { in_assets = 1; next }
         in_assets && /^[[:space:]]*}/ { exit }

@@ -98,7 +98,7 @@ $webRoot = Join-Path $root "web"
 $osadeHome = Join-Path $root "home"
 $installDir = Join-Path $root "bin"
 New-Item -ItemType Directory -Force -Path $webRoot | Out-Null
-Copy-Item -LiteralPath $archive -Destination (Join-Path $webRoot "herdr-windows-x86_64.zip")
+Copy-Item -LiteralPath $archive -Destination (Join-Path $webRoot "osade-windows-x86_64.zip")
 Copy-Item -LiteralPath $installerPath -Destination (Join-Path $webRoot "install.ps1")
 $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
 
@@ -112,7 +112,7 @@ $previewManifest = @{
     build_id = "installer-test"
     assets = @{
         "windows-x86_64" = @{
-            url = "http://127.0.0.1:$port/herdr-windows-x86_64.zip"
+            url = "http://127.0.0.1:$port/osade-windows-x86_64.zip"
             sha256 = $hash
             format = "zip"
         }
@@ -125,7 +125,7 @@ $legacyStableManifest = @{
 $stableManifest = @{
     version = "0.0.1"
     assets = @{
-        "windows-x86_64" = "http://127.0.0.1:$port/herdr-windows-x86_64.zip"
+        "windows-x86_64" = "http://127.0.0.1:$port/osade-windows-x86_64.zip"
     }
     sha256 = @{
         "windows-x86_64" = $hash
@@ -229,13 +229,13 @@ try {
         -LocalPackageFormat "zip" `
         -LocalPackageIdentity "0.0.0-preview.local-package" `
         -LocalPackageSha256 $hash
-    if (-not (Test-Path -LiteralPath (Join-Path $localInstallDir "herdr.exe") -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $localInstallDir "osade.exe") -PathType Leaf)) {
         throw "installer did not activate the verified local package"
     }
     $env:OSADE_RUNTIME_HOME = $osadeHome
 
     $required = @(
-        "herdr.exe",
+        "osade.exe",
         "conpty\osade-conpty.json",
         "conpty\conpty.dll",
         "conpty\x64\OpenConsole.exe",
@@ -277,7 +277,7 @@ try {
     if (-not $downloadFailed) {
         throw "installer repair unexpectedly accepted a missing archive"
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $releaseDir.FullName "herdr.exe") -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $releaseDir.FullName "osade.exe") -PathType Leaf)) {
         throw "failed repair removed the existing release"
     }
 
@@ -371,14 +371,14 @@ try {
         if (-not $swapFailed) {
             throw "installer unexpectedly activated a release with a locked staged file"
         }
-        if (-not (Test-Path -LiteralPath (Join-Path $releaseDir.FullName "herdr.exe") -PathType Leaf)) {
+        if (-not (Test-Path -LiteralPath (Join-Path $releaseDir.FullName "osade.exe") -PathType Leaf)) {
             throw "failed activation did not restore the prior release"
         }
         if (@(Get-ChildItem -LiteralPath $releasesDir -Force -Directory -Filter ".backup.$($releaseDir.Name).*").Count -ne 0) {
             throw "failed activation stranded a release backup"
         }
         foreach ($junction in @($installDir, (Join-Path $osadeHome "packages\standalone\current"))) {
-            if (-not (Test-Path -LiteralPath (Join-Path $junction "herdr.exe") -PathType Leaf)) {
+            if (-not (Test-Path -LiteralPath (Join-Path $junction "osade.exe") -PathType Leaf)) {
                 throw "failed activation left an invalid installer junction at $junction"
             }
         }

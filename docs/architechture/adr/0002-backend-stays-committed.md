@@ -94,9 +94,10 @@ that is forgotten, and assert a git-level dependency Osade does not have: Osade 
 
 `backend/` changes in exactly one way. `scripts/rebrand-source.mjs` renames the upstream project
 name to Osade's throughout, deterministically and rerunnably, and `backend/OSADE-PIN.json` records
-that it ran. Links to where the project lives point at Osade's repository; release, download and
-history addresses are kept, because rewritten they would point at files and domains Osade does not
-own, or credit other people's work to Osade. Nothing else is edited, and the
+that it ran. Links to where the project lives, and its release, install and update addresses,
+point at Osade's repository, so the tree's own installers and updater look for Osade's releases.
+Upstream history links, maintainer addresses and third-party repositories are kept, because
+rewritten they would credit other people's work to Osade. Nothing else is edited, and the
 rename never adds or removes a line, so every `backend/…:line` citation still holds.
 
 *Amended 2026-09-13. Before this, the rule was that `backend/` is never edited at all; renaming it

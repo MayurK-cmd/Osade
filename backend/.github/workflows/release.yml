@@ -45,27 +45,27 @@ jobs:
         include:
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
-            name: herdr-linux-x86_64
+            name: osade-linux-x86_64
             libghostty_vt_optimize: ReleaseFast
             libghostty_vt_simd: 'true'
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
-            name: herdr-linux-aarch64
+            name: osade-linux-aarch64
             libghostty_vt_optimize: ReleaseFast
             libghostty_vt_simd: 'true'
           - target: x86_64-apple-darwin
             os: macos-latest
-            name: herdr-macos-x86_64
+            name: osade-macos-x86_64
             libghostty_vt_optimize: ReleaseFast
             libghostty_vt_simd: 'true'
           - target: aarch64-apple-darwin
             os: macos-latest
-            name: herdr-macos-aarch64
+            name: osade-macos-aarch64
             libghostty_vt_optimize: ReleaseFast
             libghostty_vt_simd: 'true'
           - target: x86_64-pc-windows-msvc
             os: windows-2022
-            name: herdr-windows-x86_64.zip
+            name: osade-windows-x86_64.zip
             libghostty_vt_optimize: ReleaseFast
             libghostty_vt_simd: 'true'
 
@@ -164,13 +164,13 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $package = Join-Path $env:RUNNER_TEMP "Microsoft.Windows.Console.ConPTY.nupkg"
-          $stage = Join-Path $env:RUNNER_TEMP "herdr-windows-x86_64"
+          $stage = Join-Path $env:RUNNER_TEMP "osade-windows-x86_64"
           .\scripts\package_windows_conpty.ps1 `
             -OsadeExe target\${{ matrix.target }}\release\osade.exe `
             -PackagePath $package `
             -StageDir $stage `
             -OutputPath ${{ matrix.name }}
-          $version = (& (Join-Path $stage "herdr.exe") --version | Out-String).Trim()
+          $version = (& (Join-Path $stage "osade.exe") --version | Out-String).Trim()
           $tagVersion = $env:GITHUB_REF_NAME -replace '^v', ''
           if ($version -notmatch [regex]::Escape($tagVersion) -or $version -match "preview") {
             throw "Packaged Windows binary has unexpected version identity: $version"
@@ -232,11 +232,11 @@ jobs:
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
         with:
           files: |
-            herdr-linux-x86_64/herdr-linux-x86_64
-            herdr-linux-aarch64/herdr-linux-aarch64
-            herdr-macos-x86_64/herdr-macos-x86_64
-            herdr-macos-aarch64/herdr-macos-aarch64
-            herdr-windows-x86_64.zip/herdr-windows-x86_64.zip
+            osade-linux-x86_64/osade-linux-x86_64
+            osade-linux-aarch64/osade-linux-aarch64
+            osade-macos-x86_64/osade-macos-x86_64
+            osade-macos-aarch64/osade-macos-aarch64
+            osade-windows-x86_64.zip/osade-windows-x86_64.zip
           body_path: RELEASE_NOTES.md
 
   close-released-issues:

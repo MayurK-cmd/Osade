@@ -1,6 +1,6 @@
 //! Self-update mechanism.
 //!
-//! Checks the hosted herdr.dev update manifest for newer versions.
+//! Checks the hosted github.com/OsadeOSS/Osade update manifest for newer versions.
 //! Manual `osade update` downloads and installs the binary.
 //! Background checks only surface availability and release notes.
 //! Uses `curl` as a subprocess for HTTP — no additional Rust HTTP dependencies.
@@ -22,8 +22,8 @@ use std::time::{Duration, Instant};
 use interprocess::local_socket::traits::Stream as _;
 use serde::{Deserialize, Deserializer};
 
-const STABLE_UPDATE_MANIFEST_URL: &str = "https://herdr.dev/latest.json";
-const PREVIEW_UPDATE_MANIFEST_URL: &str = "https://herdr.dev/preview.json";
+const STABLE_UPDATE_MANIFEST_URL: &str = "https://raw.githubusercontent.com/OsadeOSS/Osade/main/backend/distribution/latest.json";
+const PREVIEW_UPDATE_MANIFEST_URL: &str = "https://raw.githubusercontent.com/OsadeOSS/Osade/main/backend/distribution/preview.json";
 const HOMEBREW_FORMULA_API_URL: &str = "https://formulae.brew.sh/api/formula/herdr.json";
 const OSADE_UPDATE_COMMAND: &str = "osade update";
 const HOMEBREW_UPDATE_COMMAND: &str = "brew update && brew upgrade osade";
@@ -788,7 +788,7 @@ fn install_windows_update_with_installer(
 #[cfg(windows)]
 fn windows_installed_osade_exe_path() -> Result<PathBuf, String> {
     if let Some(install_dir) = env::var_os("OSADE_INSTALL_DIR").filter(|value| !value.is_empty()) {
-        return Ok(PathBuf::from(install_dir).join("herdr.exe"));
+        return Ok(PathBuf::from(install_dir).join("osade.exe"));
     }
 
     let local_app_data = env::var_os("LOCALAPPDATA")
@@ -797,7 +797,7 @@ fn windows_installed_osade_exe_path() -> Result<PathBuf, String> {
         .join("Programs")
         .join("Osade")
         .join("bin")
-        .join("herdr.exe"))
+        .join("osade.exe"))
 }
 
 // ---------------------------------------------------------------------------
@@ -2739,7 +2739,7 @@ mod tests {
                 "protocol": 10,
                 "notes": "### Fixed\n- Brew notes",
                 "assets": {
-                    "linux-x86_64": "https://example.com/herdr-linux-x86_64"
+                    "linux-x86_64": "https://example.com/osade-linux-x86_64"
                 }
             }"####,
         )
@@ -3420,8 +3420,8 @@ mod tests {
                 \"body\": \"### Heads up\\n- Defaults changed\"\n\
             },\n\
             \"assets\": {\n\
-                \"linux-x86_64\": \"https://example.com/herdr-linux-x86_64\",\n\
-                \"macos-aarch64\": \"https://example.com/herdr-macos-aarch64\"\n\
+                \"linux-x86_64\": \"https://example.com/osade-linux-x86_64\",\n\
+                \"macos-aarch64\": \"https://example.com/osade-macos-aarch64\"\n\
             }\n\
         }";
         let manifest: UpdateManifest = serde_json::from_str(json).unwrap();
@@ -3446,7 +3446,7 @@ mod tests {
         );
         assert_eq!(
             manifest.download_url_for("linux", "x86_64").as_deref(),
-            Some("https://example.com/herdr-linux-x86_64")
+            Some("https://example.com/osade-linux-x86_64")
         );
     }
 
@@ -3553,7 +3553,7 @@ mod tests {
         let json = r#"{
             "version": "0.2.0",
             "assets": {
-                "linux-x86_64": "https://example.com/herdr-linux-x86_64"
+                "linux-x86_64": "https://example.com/osade-linux-x86_64"
             }
         }"#;
 
@@ -3644,7 +3644,7 @@ mod tests {
                 "notes": "### Fixed\n- One",
                 "assets": {{
                     "{asset_key}": {{
-                        "url": "https://example.com/herdr-linux-x86_64",
+                        "url": "https://example.com/osade-linux-x86_64",
                         "sha256": "deadbeef"
                     }}
                 }},
@@ -3699,7 +3699,7 @@ mod tests {
         ));
 
         let with_windows: UpdateManifest = serde_json::from_str(
-            r#"{"version":"9.9.9","notes":"notes","assets":{"windows-x86_64":"https://example.com/herdr-windows-x86_64.zip"},"announcement":null}"#,
+            r#"{"version":"9.9.9","notes":"notes","assets":{"windows-x86_64":"https://example.com/osade-windows-x86_64.zip"},"announcement":null}"#,
         )
         .unwrap();
         assert!(!first_windows_stable_is_pending(&with_windows, true, true));
@@ -3753,13 +3753,13 @@ mod tests {
                 "unexpected release URL for {target}: {url}"
             );
             assert!(
-                url.ends_with(&format!("herdr-{target}")),
+                url.ends_with(&format!("osade-{target}")),
                 "unexpected asset name for {target}: {url}"
             );
         }
 
         if let Some(windows) = manifest.assets.get("windows-x86_64") {
-            assert!(windows.url.ends_with("/herdr-windows-x86_64.zip"));
+            assert!(windows.url.ends_with("/osade-windows-x86_64.zip"));
             assert_eq!(
                 manifest.sha256.get("windows-x86_64").map(String::len),
                 Some(64),
@@ -3790,14 +3790,14 @@ mod tests {
                     "unexpected release URL for {version} {target}: {url}"
                 );
                 assert!(
-                    url.ends_with(&format!("herdr-{target}")),
+                    url.ends_with(&format!("osade-{target}")),
                     "unexpected asset name for {version} {target}: {url}"
                 );
             }
             if let Some(windows) = assets.get("windows-x86_64") {
                 let windows: AssetRef = serde_json::from_value(windows.clone())
                     .unwrap_or_else(|_| panic!("invalid Windows asset for release {version}"));
-                assert!(windows.url.ends_with("/herdr-windows-x86_64.zip"));
+                assert!(windows.url.ends_with("/osade-windows-x86_64.zip"));
                 let checksums = release
                     .get("sha256")
                     .and_then(serde_json::Value::as_object)

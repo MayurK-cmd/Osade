@@ -105,7 +105,7 @@ exec {sha256sum} "$@"
         manifest: dict[str, object] = {
             "version": "9.9.9",
             "assets": {
-                "linux-x86_64": "https://example.invalid/herdr-linux-x86_64"
+                "linux-x86_64": "https://example.invalid/osade-linux-x86_64"
             },
         }
         if checksum is not None:

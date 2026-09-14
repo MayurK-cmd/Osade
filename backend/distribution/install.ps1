@@ -342,7 +342,7 @@ function Test-OsadeReleaseComplete {
     if (-not (Test-RegularDirectory -Path $ReleaseDir)) {
         return $false
     }
-    $osadeExe = Join-Path $ReleaseDir "herdr.exe"
+    $osadeExe = Join-Path $ReleaseDir "osade.exe"
     if (-not (Test-RegularFile -Path $osadeExe)) {
         return $false
     }
@@ -579,7 +579,7 @@ function Move-LegacyOsadeBinDirectory {
         return $false
     }
 
-    if (($entries | Where-Object { $_.Name -ieq "herdr.exe" } | Select-Object -First 1) -eq $null) {
+    if (($entries | Where-Object { $_.Name -ieq "osade.exe" } | Select-Object -First 1) -eq $null) {
         return $false
     }
 
@@ -734,9 +734,9 @@ if ($useLocalPackage) {
 
     if ([string]::IsNullOrWhiteSpace($ManifestUrl)) {
         $ManifestUrl = if ($Channel -eq "preview") {
-            "https://herdr.dev/preview.json"
+            "https://raw.githubusercontent.com/OsadeOSS/Osade/main/backend/distribution/preview.json"
         } else {
-            "https://herdr.dev/latest.json"
+            "https://raw.githubusercontent.com/OsadeOSS/Osade/main/backend/distribution/latest.json"
         }
     }
 
@@ -797,12 +797,12 @@ try {
                 Expand-Archive -LiteralPath $downloadPath -DestinationPath $stagingDir
             } else {
                 New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
-                Copy-Item -LiteralPath $downloadPath -Destination (Join-Path $stagingDir "herdr.exe")
+                Copy-Item -LiteralPath $downloadPath -Destination (Join-Path $stagingDir "osade.exe")
             }
             if (-not (Test-OsadeReleaseComplete -ReleaseDir $stagingDir -Format $asset.Format)) {
                 throw "Downloaded Osade package is incomplete or failed ConPTY verification."
             }
-            $stagedOsade = Join-Path $stagingDir "herdr.exe"
+            $stagedOsade = Join-Path $stagingDir "osade.exe"
             & $stagedOsade --version *> $null
             if ($LASTEXITCODE -ne 0) {
                 throw "Downloaded Osade command failed verification: $stagedOsade --version"
@@ -823,7 +823,7 @@ try {
             }
         }
 
-        $releaseOsade = Join-Path $releaseDir "herdr.exe"
+        $releaseOsade = Join-Path $releaseDir "osade.exe"
         & $releaseOsade --version *> $null
         if ($LASTEXITCODE -ne 0) {
             throw "Installed Osade command failed verification: $releaseOsade --version"

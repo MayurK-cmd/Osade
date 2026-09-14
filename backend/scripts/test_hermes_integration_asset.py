@@ -54,7 +54,7 @@ class HermesIntegrationAssetTests(unittest.TestCase):
         environment = {
             "OSADE_ENV": "1",
             "OSADE_PANE_ID": "w1:p2",
-            "OSADE_BIN_PATH": "C:/bin/herdr.exe",
+            "OSADE_BIN_PATH": "C:/bin/osade.exe",
         }
         with mock.patch.dict(module.os.environ, environment, clear=True):
             with mock.patch.object(module.subprocess, "run") as run:
@@ -63,7 +63,7 @@ class HermesIntegrationAssetTests(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertEqual(
             command[:4],
-            ["C:/bin/herdr.exe", "pane", "report-agent-session", "w1:p2"],
+            ["C:/bin/osade.exe", "pane", "report-agent-session", "w1:p2"],
         )
         self.assertIn("session-1", command)
         self.assertIn("resume", command)
