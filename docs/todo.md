@@ -17,5 +17,11 @@ photographs the window.
       not shipped.** Nothing in the test suite can answer this one.
 
 
-1) File view mode
+1) File view mode - terax
 2) Kanban mode
+3) agent orchestration sort
+
+
+4) I would not auto-checkout main for you. If you opened the repo on feat/foo, attaching there is the honest default. Silent git checkout main is the failure we added gate.branch_switch to prevent.
+
+Want me to retitle that control and the empty-state lines to this wording?
