@@ -1,7 +1,5 @@
 import type { TaskView } from '@osade/contract';
 
-import { STATUS } from './status.js';
-
 export interface ChatLine {
   id: string;
   role: 'user' | 'agent';
@@ -179,7 +177,9 @@ function peelBoxes(text: string): string {
 
 function cleanReply(text: string, users: readonly string[]): string {
   const skipUser = new Set(users.map((u) => compactChars(u)).filter((u) => u.length > 0));
-  const lines = text.split(/\r?\n/u).map((line) => line.replace(/^\s*[>|❯]\s?/u, ''));
+  const lines = text.split(/\r?\n/u).map((line) =>
+    line.replace(/^\s*[>|❯]\s?/u, '').replace(/^[●•✶✻✓✔⚠⏺]\s+/u, ''),
+  );
   const kept: string[] = [];
   for (const line of lines) {
     const trimmed = line.trim();
@@ -187,16 +187,34 @@ function cleanReply(text: string, users: readonly string[]): string {
       kept.push('');
       continue;
     }
-    if (/^esc to interrupt/iu.test(trimmed)) continue;
-    if (/^to interrupt/iu.test(trimmed)) continue;
-    if (/ctrl\s*[+c-]/iu.test(trimmed) && trimmed.length < 48) continue;
-    if (/^first read .+, then:/iu.test(trimmed)) continue;
-    if (/^claude(?:\s+code)?$/iu.test(trimmed)) continue;
-    if (/^ready for you to look$/iu.test(trimmed)) continue;
+    if (isChromeLine(trimmed)) continue;
     if (skipUser.has(compactChars(trimmed))) continue;
     kept.push(line.replace(/\s+$/u, ''));
   }
   return kept.join('\n').replace(/\n{3,}/gu, '\n\n').trim();
+}
+
+const TOOL_CALL =
+  /^(Read|Write|Edit|Bash|Glob|Grep|Task|TodoWrite|WebFetch|WebSearch|Agent|NotebookEdit|Skill)\(/u;
+
+function isChromeLine(trimmed: string): boolean {
+  if (/^esc to interrupt/iu.test(trimmed)) return true;
+  if (/^to interrupt/iu.test(trimmed)) return true;
+  if (/ctrl\s*[+c-]/iu.test(trimmed) && trimmed.length < 48) return true;
+  if (/^first read .+, then:/iu.test(trimmed)) return true;
+  if (/^claude(?:\s+code)?$/iu.test(trimmed)) return true;
+  if (/^welcome to claude/iu.test(trimmed)) return true;
+  if (/^ready for you to look$/iu.test(trimmed)) return true;
+  if (/^tips for getting started/iu.test(trimmed)) return true;
+  if (/^\? for shortcuts/iu.test(trimmed)) return true;
+  if (/shift\+tab/iu.test(trimmed) && trimmed.length < 64) return true;
+  if (/\d+\s*%\s*context/iu.test(trimmed)) return true;
+  if (/context left/iu.test(trimmed)) return true;
+  if (/^(thinking|running|compacting)…?$/iu.test(trimmed)) return true;
+  if (/^do you want to/iu.test(trimmed)) return true;
+  if (/^\d+\.\s/.test(trimmed) && /yes|no|always|don't ask/iu.test(trimmed)) return true;
+  if (TOOL_CALL.test(trimmed)) return true;
+  return false;
 }
 
 function agentLine(task: TaskView): { text: string; live: boolean } | null {
@@ -204,19 +222,25 @@ function agentLine(task: TaskView): { text: string; live: boolean } | null {
   const final = fact?.final_message?.trim();
   if (final) return { text: final, live: false };
 
-  const activity = fact?.activity_text?.trim() ?? '';
-  const tool = fact?.tool_name?.trim();
   const working = task.status === 'implementing' || task.status === 'verifying';
-
   if (working) {
-    const parts = [activity || '…', tool ? `Using ${tool}` : ''].filter(Boolean);
+    const tool = fact?.tool_name?.trim();
+    const activity = workingLabel(fact?.activity_text ?? '', task.agentId);
+    const parts = [activity, tool ? `Using ${tool}` : ''].filter(Boolean);
     return { text: parts.join('\n'), live: true };
   }
   if (task.status === 'queued') return { text: 'Starting…', live: true };
-  if (task.status === 'needs_input') return { text: activity || 'Waiting for you.', live: false };
-  if (activity) return { text: activity, live: false };
-  if (task.status === 'awaiting_review' || task.status === 'awaiting_approval') {
-    return { text: STATUS[task.status].label, live: false };
+  if (task.status === 'needs_input') {
+    return { text: workingLabel(fact?.activity_text ?? '', task.agentId) || 'Waiting for you.', live: false };
   }
+  // Header already shows awaiting_review / approval. A status label is not a reply.
   return null;
+}
+
+function workingLabel(activity: string, agentId: string): string {
+  const t = activity.trim();
+  if (!t) return '…';
+  if (t.toLowerCase() === (agentId || 'claude').toLowerCase()) return '…';
+  if (/^claude(?:\s+code)?$/iu.test(t)) return '…';
+  return t;
 }

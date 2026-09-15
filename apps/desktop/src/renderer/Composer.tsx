@@ -40,6 +40,13 @@ export function Composer({
     setHint(0);
   }, [prefix]);
 
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 38), 128)}px`;
+  }, [text]);
+
   function send(): void {
     if (!ready) return;
     const payload = text.trim();
@@ -64,7 +71,7 @@ export function Composer({
     <div
       style={{
         borderTop: '0.5px solid var(--line)',
-        padding: '10px 16px 12px',
+        padding: '8px 16px 10px',
         background: 'var(--bg-1)',
       }}
     >
@@ -90,7 +97,7 @@ export function Composer({
       <div style={{ position: 'relative' }}>
         <textarea
           ref={ref}
-          rows={3}
+          rows={1}
           disabled={disabled || busy}
           value={text}
           placeholder={placeholder}
@@ -123,7 +130,7 @@ export function Composer({
               send();
             }
           }}
-          style={{ fontSize: 'var(--t-m)' }}
+          style={{ fontSize: 'var(--t-m)', minHeight: 38, overflow: 'hidden' }}
         />
         {suggestions.length > 0 && (
           <ul
@@ -177,7 +184,6 @@ export function Composer({
         <button className="primary" disabled={!ready} onClick={send}>
           {busy ? 'Sending…' : 'Send'}
         </button>
-        <kbd>Enter</kbd>
         {error && (
           <span className="mono" style={{ color: 'var(--st-fail)', fontSize: 'var(--t-xs)' }}>
             {error}

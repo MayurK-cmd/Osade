@@ -6,11 +6,14 @@ import { agentColor } from './agent-color.js';
 import { api } from './api.js';
 import { chatLines, type ChatLine } from './chat.js';
 
+/** Survives Chat ↔ Files remounts for this window. */
+const followUpsByTask = new Map<string, string[]>();
+
 /**
- * Chat for one or more lanes: your text, then Claude's reply, repeating.
+ * Chat for one or more lanes: your text, then the agent's reply, repeating.
  *
  * User bubbles are the prompts Osade sent. Replies are sliced out of on-demand `pane.read`
- * (§4.4.1) at ≤1 Hz — Claude/codex never write `final_message`.
+ * (§4.4.1) — only while the agent is live, never as a TUI dump.
  */
 export function Transcript({
   tasks,
@@ -23,39 +26,20 @@ export function Transcript({
   followTaskId?: string;
   isolatedNotice?: string;
 }): JSX.Element {
-  const [followUps, setFollowUps] = useState<string[]>([]);
+  const [, bump] = useState(0);
   const panes = usePaneTranscripts(tasks);
 
   useEffect(() => {
     const text = extraUser?.trim();
-    if (!text) return;
-    setFollowUps((prev) => (prev.includes(text) ? prev : [...prev, text]));
-  }, [extraUser]);
+    const id = followTaskId;
+    if (!text || !id) return;
+    const prev = followUpsByTask.get(id) ?? [];
+    if (prev.includes(text)) return;
+    followUpsByTask.set(id, [...prev, text]);
+    bump((n) => n + 1);
+  }, [extraUser, followTaskId]);
 
-  const lines =
-    tasks.length === 0
-      ? extraUser
-        ? [
-            {
-              id: 'draft',
-              role: 'user' as const,
-              agentId: 'claude',
-              text: extraUser,
-              live: false,
-            },
-          ]
-        : []
-      : tasks.flatMap((task) =>
-          chatLines(
-            task,
-            followTaskId == null || task.task.id === followTaskId || tasks.length === 1
-              ? followUps
-              : [],
-            panes[task.task.id],
-          ),
-        );
-
-  if (lines.length === 0) {
+  if (tasks.length === 0 && !extraUser) {
     return (
       <div>
         {isolatedNotice && (
@@ -70,23 +54,68 @@ export function Transcript({
     );
   }
 
+  const lanes =
+    tasks.length === 0
+      ? [
+          {
+            id: 'draft',
+            agentId: 'claude',
+            lines: extraUser
+              ? [
+                  {
+                    id: 'draft',
+                    role: 'user' as const,
+                    agentId: 'claude',
+                    text: extraUser,
+                    live: false,
+                  },
+                ]
+              : [],
+          },
+        ]
+      : tasks.map((task) => ({
+          id: task.task.id,
+          agentId: task.agentId,
+          lines: chatLines(task, followUpsByTask.get(task.task.id) ?? [], panes[task.task.id]),
+        }));
+
+  const token = lanes.flatMap((l) => l.lines).map((l) => `${l.id}:${l.text.length}`).join('|');
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: '42em' }}>
-      {lines.map((line) => (
-        <Bubble key={line.id} line={line} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: '38em' }}>
+      {isolatedNotice && (
+        <p style={{ margin: 0, color: 'var(--ink-2)', fontSize: 'var(--t-s)' }}>{isolatedNotice}</p>
+      )}
+      {lanes.map((lane) => (
+        <section key={lane.id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {lanes.length > 1 && lane.agentId && (
+            <div
+              className="mono"
+              style={{ fontSize: 'var(--t-xs)', color: agentColor(lane.agentId), paddingLeft: 2 }}
+            >
+              {lane.agentId}
+            </div>
+          )}
+          {lane.lines.map((line) => (
+            <Bubble key={line.id} line={line} />
+          ))}
+        </section>
       ))}
-      <ScrollAnchor token={lines.map((l) => l.id + l.text.length).join('|')} />
+      <ScrollAnchor token={token} />
     </div>
   );
 }
 
-/** §4.4.1 — one pane.read per live lane per second, skipped when revision is unchanged. */
+/** §4.4.1 — pane.read while the agent is live; one shot once it settles. */
 function usePaneTranscripts(tasks: TaskView[]): Record<string, string> {
   const [texts, setTexts] = useState<Record<string, string>>({});
   const revisions = useRef<Record<string, number>>({});
   const lastErrorLog = useRef(0);
   const tasksRef = useRef(tasks);
   tasksRef.current = tasks;
+  const live = tasks.some(
+    (t) => t.status === 'implementing' || t.status === 'verifying' || t.status === 'queued',
+  );
   const stamp = tasks
     .map((t) => `${t.task.id}:${t.agent?.substrate_pane_id ?? ''}:${t.agent?.last_event_at ?? 0}:${t.status}`)
     .join('|');
@@ -118,12 +147,15 @@ function usePaneTranscripts(tasks: TaskView[]): Record<string, string> {
     }
 
     void pull();
-    const tick = window.setInterval(() => void pull(), 1_000);
+    if (!live) return () => {
+      cancelled = true;
+    };
+    const tick = window.setInterval(() => void pull(), 800);
     return () => {
       cancelled = true;
       window.clearInterval(tick);
     };
-  }, [stamp]);
+  }, [stamp, live]);
 
   return texts;
 }
@@ -131,7 +163,14 @@ function usePaneTranscripts(tasks: TaskView[]): Record<string, string> {
 function ScrollAnchor({ token }: { token: string }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    ref.current?.scrollIntoView({ block: 'end' });
+    const node = ref.current;
+    const scroller = node?.closest('[data-chat-scroll]') as HTMLElement | null;
+    if (!scroller) {
+      node?.scrollIntoView({ block: 'end' });
+      return;
+    }
+    const gap = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    if (gap < 96) scroller.scrollTop = scroller.scrollHeight;
   }, [token]);
   return <div ref={ref} />;
 }
@@ -145,7 +184,7 @@ function Bubble({ line }: { line: ChatLine }): JSX.Element {
         display: 'flex',
         flexDirection: 'column',
         alignItems: mine ? 'flex-end' : 'flex-start',
-        gap: 4,
+        gap: 3,
       }}
     >
       <span className="mono" style={{ fontSize: 'var(--t-xs)', color: mine ? 'var(--ink-3)' : colour }}>
@@ -155,10 +194,12 @@ function Bubble({ line }: { line: ChatLine }): JSX.Element {
       <div
         style={{
           ...bodyStyle,
-          background: mine ? 'var(--bg-2)' : 'transparent',
-          borderLeft: mine ? undefined : `2px solid ${colour}`,
-          padding: mine ? '8px 12px' : '2px 0 2px 12px',
-          borderRadius: mine ? 'var(--radius)' : 0,
+          background: mine ? 'var(--bg-2)' : 'var(--bg-1)',
+          border: '0.5px solid var(--line)',
+          borderLeft: mine ? '0.5px solid var(--line)' : `2px solid ${colour}`,
+          padding: '8px 12px',
+          borderRadius: 'var(--radius)',
+          maxWidth: 'min(100%, 32em)',
         }}
       >
         {line.text}
@@ -173,5 +214,4 @@ const bodyStyle: CSSProperties = {
   color: 'var(--ink)',
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
-  maxWidth: '100%',
 };

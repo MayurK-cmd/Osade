@@ -7,10 +7,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   fileChanges,
   listDir,
+  listWorkingChanges,
+  parseNameStatus,
   parseNumstat,
   parsePorcelain,
   readFile,
   safeResolve,
+  writeFile,
 } from '../../src/domain/files.js';
 
 describe('files path guard', () => {
@@ -69,6 +72,10 @@ describe('listDir overlay', () => {
     expect(edited?.flag).toBe('M');
     expect(added?.flag).toBe('?');
     expect(listDir(dir, '', changes).find((e) => e.name === 'clean.ts')?.flag).toBeNull();
+
+    const working = await listWorkingChanges(dir);
+    expect(working.files.some((f) => f.path === 'src/a.ts' && f.flag === 'M')).toBe(true);
+    expect(working.outgoing).toBeNull();
   });
 
   it('refuses to read outside cwd', () => {
@@ -76,6 +83,23 @@ describe('listDir overlay', () => {
     writeFileSync(join(dir, 'ok.ts'), 'hi\n');
     expect(() => readFile(dir, '../nope.ts')).toThrow(/escapes/);
     expect(readFile(dir, 'ok.ts').text).toContain('hi');
+  });
+
+  it('writes a file inside cwd and refuses to escape', () => {
+    dir = mkdtempSync(join(tmpdir(), 'osade-files-'));
+    const saved = writeFile(dir, 'src/edit.ts', 'const n = 1;\n');
+    expect(saved.path).toBe('src/edit.ts');
+    expect(readFile(dir, 'src/edit.ts').text).toBe('const n = 1;\n');
+    expect(() => writeFile(dir, '../escape.ts', 'nope')).toThrow(/escapes/);
+  });
+});
+
+describe('outgoing name-status', () => {
+  it('maps added and renamed paths', () => {
+    const stats = parseNumstat('4\t0\tnew.ts\n1\t1\tsrc/b.ts\n');
+    const files = parseNameStatus('A\tnew.ts\nR100\told.ts\tsrc/b.ts\n', stats);
+    expect(files.find((f) => f.path === 'new.ts')?.flag).toBe('A');
+    expect(files.find((f) => f.path === 'src/b.ts')?.flag).toBe('M');
   });
 });
 

@@ -39,6 +39,17 @@ describe('splitPaneReplies', () => {
     expect(replies[0]).toContain('README.md');
     expect(replies[0]).not.toMatch(/╭|│/);
   });
+
+  it('strips Claude Code tool-call chrome from a reply', () => {
+    const pane = [
+      'list files',
+      'Read(src/index.ts)',
+      'Thinking…',
+      'Here are the files:',
+      'README.md',
+    ].join('\n');
+    expect(splitPaneReplies(pane, ['list files'])).toEqual(['Here are the files:\nREADME.md']);
+  });
 });
 
 describe('chatLines', () => {
@@ -70,6 +81,12 @@ describe('chatLines', () => {
       view({ intent: 'ping', status: 'awaiting_review', final: 'PONG' }),
     );
     expect(lines.at(-1)).toMatchObject({ role: 'agent', text: 'PONG', live: false });
+  });
+
+  it('does not invent a status-label reply when the agent is done', () => {
+    const lines = chatLines(view({ intent: 'list the files', status: 'awaiting_review' }));
+    expect(lines.map((l) => l.role)).toEqual(['user']);
+    expect(lines[0]!.text).toBe('list the files');
   });
 
   it('is user, reply, user, reply — not all users then a CLI dump', () => {

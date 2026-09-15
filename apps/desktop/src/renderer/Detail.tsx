@@ -1,16 +1,16 @@
 import { useEffect, useState, type JSX } from 'react';
 
-import type { TaskView, VerifyRun } from '@osade/contract';
+import type { VerifyRun } from '@osade/contract';
 
 import { agentColor } from './agent-color.js';
 import { api } from './api.js';
 import { BranchControl } from './BranchControl.js';
+import { Changes } from './Changes.js';
 import { Composer } from './Composer.js';
 import { Conventions } from './Conventions.js';
 import { Files } from './Files.js';
 import { GateCard } from './GateCard.js';
 import type { ChatGroup } from './lanes.js';
-import { PrOpen } from './PrOpen.js';
 import type { CatalogAgent } from './RepoSettings.js';
 import { GLYPH, STATUS, TONE_COLOUR, ago, statusCopyFor } from './status.js';
 import { Transcript } from './Transcript.js';
@@ -251,11 +251,12 @@ export function Detail({
       </nav>
 
       <div
+        data-chat-scroll={lane === 'transcript' ? '' : undefined}
         style={{
           flex: 1,
           minHeight: 0,
-          overflow: lane === 'files' ? 'hidden' : 'auto',
-          padding: lane === 'files' ? 0 : '14px 16px',
+          overflow: lane === 'files' || lane === 'diff' ? 'hidden' : 'auto',
+          padding: lane === 'files' || lane === 'diff' ? 0 : '14px 16px',
         }}
       >
         {lane === 'transcript' && (
@@ -289,23 +290,19 @@ export function Detail({
             <VerifyRuns runs={focused.latestVerifyRuns} />
           </>
         )}
-        {lane === 'diff' && (
-          <>
-            <PrOpen task={focused} lanes={chat.lanes} />
-            <ScmFacts task={focused} />
-            <TechnicalDetails task={focused} />
-          </>
-        )}
+        {lane === 'diff' && <Changes key={focused.task.id} task={focused} lanes={chat.lanes} />}
         {lane === 'rules' && <Conventions repoId={focused.task.repo_id} />}
       </div>
 
-      <Composer
-        key={chat.chatId}
-        autoFocus
-        catalog={catalog}
-        placeholder="Write to the agent. /branch to isolate. @name at the start of a line to pick a lane."
-        onSend={handleSend}
-      />
+      {lane !== 'files' && lane !== 'diff' && (
+        <Composer
+          key={chat.chatId}
+          autoFocus
+          catalog={catalog}
+          placeholder="Message. Enter to send, Shift+Enter for a new line. @name to pick a lane."
+          onSend={handleSend}
+        />
+      )}
     </div>
   );
 }
@@ -453,93 +450,6 @@ function VerifyRuns({ runs }: { runs: VerifyRun[] }): JSX.Element | null {
           </span>
         </div>
       ))}
-    </div>
-  );
-}
-
-function ScmFacts({ task }: { task: TaskView }): JSX.Element | null {
-  const scm = task.scm;
-  if (!scm) return null;
-  return (
-    <div style={{ marginTop: 16 }}>
-      {scm.pr_url && <Field label="Pull request" value={scm.pr_url} mono />}
-      {scm.checks_state && <Field label="Checks" value={scm.checks_state} />}
-      {scm.review_state && <Field label="Review" value={scm.review_state} />}
-      {scm.mergeable && <Field label="Mergeable" value={scm.mergeable} />}
-    </div>
-  );
-}
-
-function TechnicalDetails({ task }: { task: TaskView }): JSX.Element {
-  const probeFailures = task.agent?.probe_failures ?? 0;
-
-  return (
-    <section style={{ marginTop: 16 }}>
-      <details>
-        <summary style={{ cursor: 'default', color: 'var(--ink-2)' }}>Where this is running</summary>
-        <div style={{ marginTop: 10 }}>
-          <Field label="Agent" value={task.agentId} />
-          <Field label="Branch" value={task.branch} mono />
-          <Field
-            label="Based on"
-            value={`${task.task.base_sha.slice(0, 12)} on ${task.task.base_ref}`}
-            mono
-          />
-          <Field
-            label="Cwd"
-            value={task.cwd}
-            mono
-          />
-          <Field
-            label="Attachment"
-            value={task.attachment === 'repo' ? 'Repository checkout' : 'Isolated worktree'}
-          />
-          <Field
-            label="Workspace"
-            value={task.task.substrate_workspace_id ?? 'Not created yet'}
-            mono
-          />
-          <Field label="Pane" value={task.agent?.substrate_pane_id ?? 'No agent running'} mono />
-          {task.scm?.pr_url && <Field label="Pull request" value={task.scm.pr_url} mono />}
-          {probeFailures > 0 && (
-            <p style={{ color: 'var(--st-rest)', fontSize: 'var(--t-xs)', marginTop: 8 }}>
-              {probeFailures} failed {probeFailures === 1 ? 'probe' : 'probes'} — the status above
-              may be behind what is really happening.
-            </p>
-          )}
-        </div>
-      </details>
-      <div style={{ marginTop: 14 }}>
-        <button onClick={() => void window.osade?.openInSubstrate()}>Open the terminal</button>
-        <p style={{ margin: '8px 0 0', color: 'var(--ink-2)', fontSize: 'var(--t-xs)' }}>
-          Watch the agent work, or talk to it directly. Osade does not embed a terminal
-          (ADR 0001); this opens a real one on the same session.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-function Field({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}): JSX.Element {
-  return (
-    <div style={{ display: 'flex', gap: 12, padding: '3px 0', alignItems: 'baseline' }}>
-      <span style={{ width: 92, flexShrink: 0, color: 'var(--ink-2)', fontSize: 'var(--t-xs)' }}>
-        {label}
-      </span>
-      <span
-        className={mono ? 'mono' : undefined}
-        style={{ fontSize: 'var(--t-xs)', wordBreak: 'break-all' }}
-      >
-        {value}
-      </span>
     </div>
   );
 }

@@ -1,8 +1,16 @@
-import { useEffect, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type JSX,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 
 import type { TaskView } from '@osade/contract';
 
 import { api } from './api.js';
+import { flagColour, highlight } from './highlight.js';
 
 const TREE_KEY = 'osade.files-tree-width';
 const TREE_DEFAULT = 200;
@@ -19,11 +27,10 @@ export interface FsEntry {
 }
 
 /**
- * Files lane — tree of this chat's cwd, contents in Plex Mono, dirty files marked.
+ * Files lane — tree of this chat's cwd, editable contents with Dark+ colouring, dirty files marked.
  *
  * Refresh is tied to agent facts (CDC already pushed those) plus a 2s tick while this lane is
- * open, so an attached checkout does not sit stale between events. No websocket of its own:
- * §5.4 still has one event path.
+ * open. Open-file contents are not overwritten while the buffer is dirty.
  */
 export function Files({ task }: { task: TaskView }): JSX.Element {
   const [width, setWidth] = useState(() => loadWidth());
@@ -36,9 +43,14 @@ export function Files({ task }: { task: TaskView }): JSX.Element {
     binary: boolean;
     truncated: boolean;
   } | null>(null);
+  const [text, setText] = useState('');
+  const [saved, setSaved] = useState('');
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const drag = useRef<{ start: number; width: number } | null>(null);
+  const dirty = file != null && !file.binary && !file.truncated && text !== saved;
   const stamp = `${task.task.id}:${task.cwd}:${task.agent?.last_event_at ?? 0}:${task.status}`;
+  const drafts = useRef(new Map<string, string>());
 
   useEffect(() => {
     let cancelled = false;
@@ -69,13 +81,20 @@ export function Files({ task }: { task: TaskView }): JSX.Element {
   useEffect(() => {
     if (selected == null) {
       setFile(null);
+      setText('');
+      setSaved('');
       return;
     }
     let cancelled = false;
     void api
       .taskFsRead(task.task.id, selected)
       .then((next) => {
-        if (!cancelled) setFile(next);
+        if (cancelled) return;
+        setFile(next);
+        const disk = next.text ?? '';
+        const draft = drafts.current.get(selected);
+        setText(draft ?? disk);
+        setSaved(disk);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -84,6 +103,32 @@ export function Files({ task }: { task: TaskView }): JSX.Element {
       cancelled = true;
     };
   }, [selected, stamp, task.task.id]);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent): void {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        void save();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  async function save(): Promise<void> {
+    if (selected == null || file == null || file.binary || file.truncated || text === saved) return;
+    setSaving(true);
+    try {
+      await api.taskFsWrite(task.task.id, selected, text);
+      drafts.current.delete(selected);
+      setSaved(text);
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function toggleDir(path: string): void {
     setExpanded((current) => {
@@ -152,8 +197,22 @@ export function Files({ task }: { task: TaskView }): JSX.Element {
           background: 'transparent',
         }}
       />
-      <div style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: '12px 16px' }}>
-        <FileBody file={file} selected={selected} />
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <FileBody
+          file={file}
+          selected={selected}
+          text={text}
+          dirty={dirty}
+          saving={saving}
+          onChange={(next) => {
+            if (selected) {
+              if (next === saved) drafts.current.delete(selected);
+              else drafts.current.set(selected, next);
+            }
+            setText(next);
+          }}
+          onSave={() => void save()}
+        />
       </div>
     </div>
   );
@@ -239,7 +298,7 @@ function Diffstat({ entry }: { entry: FsEntry }): JSX.Element | null {
   if (entry.flag === '?') {
     return (
       <span className="mono" style={{ fontSize: 'var(--t-xs)', color: 'var(--st-live)', flexShrink: 0 }}>
-        ?
+        U
       </span>
     );
   }
@@ -256,44 +315,143 @@ function Diffstat({ entry }: { entry: FsEntry }): JSX.Element | null {
 function FileBody({
   file,
   selected,
+  text,
+  dirty,
+  saving,
+  onChange,
+  onSave,
 }: {
   file: { path: string; text: string | null; binary: boolean; truncated: boolean } | null;
   selected: string | null;
+  text: string;
+  dirty: boolean;
+  saving: boolean;
+  onChange: (next: string) => void;
+  onSave: () => void;
 }): JSX.Element {
   if (selected == null) {
-    return <p style={{ margin: 0, color: 'var(--ink-2)' }}>Select a file</p>;
+    return (
+      <p style={{ margin: 0, padding: '12px 16px', color: 'var(--ink-2)' }}>Select a file</p>
+    );
   }
   if (file == null) {
-    return <p style={{ margin: 0, color: 'var(--ink-2)' }}>Opening {selected}…</p>;
+    return (
+      <p style={{ margin: 0, padding: '12px 16px', color: 'var(--ink-2)' }}>Opening {selected}…</p>
+    );
   }
   if (file.binary) {
-    return <p style={{ margin: 0, color: 'var(--ink-2)' }}>{file.path} is binary</p>;
+    return (
+      <p style={{ margin: 0, padding: '12px 16px', color: 'var(--ink-2)' }}>{file.path} is binary</p>
+    );
+  }
+  if (file.truncated) {
+    return (
+      <div style={{ padding: '12px 16px' }}>
+        <div className="mono" style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-2)', marginBottom: 8 }}>
+          {file.path} · too large to edit here
+        </div>
+        <pre className="mono" style={{ margin: 0, fontSize: 'var(--t-s)', whiteSpace: 'pre-wrap' }}>
+          {file.text ?? ''}
+        </pre>
+      </div>
+    );
   }
   return (
-    <div>
-      <div className="mono" style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-2)', marginBottom: 8 }}>
-        {file.path}
-        {file.truncated ? ' · truncated' : ''}
-      </div>
-      <pre
-        className="mono"
+    <>
+      <div
         style={{
-          margin: 0,
-          fontSize: 'var(--t-s)',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '6px 12px',
+          borderBottom: '0.5px solid var(--line)',
+          flexShrink: 0,
         }}
       >
-        {file.text ?? ''}
-      </pre>
-    </div>
+        <span className="mono" style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-2)', flex: 1, minWidth: 0 }}>
+          {file.path}
+          {dirty ? ' · unsaved' : ''}
+        </span>
+        <button type="button" disabled={!dirty || saving} onClick={onSave} style={{ fontSize: 'var(--t-xs)' }}>
+          {saving ? 'Saving' : 'Save'}
+        </button>
+      </div>
+      <CodeEditor path={file.path} value={text} onChange={onChange} />
+    </>
   );
 }
 
-function flagColour(flag: Flag | null): string | undefined {
-  if (flag === 'D') return 'var(--st-fail)';
-  if (flag === 'A' || flag === '?' || flag === 'M') return 'var(--st-live)';
-  return undefined;
+function CodeEditor({
+  path,
+  value,
+  onChange,
+}: {
+  path: string;
+  value: string;
+  onChange: (next: string) => void;
+}): JSX.Element {
+  const preRef = useRef<HTMLPreElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const tokens = highlight(value, path);
+
+  function syncScroll(): void {
+    const pre = preRef.current;
+    const ta = taRef.current;
+    if (!pre || !ta) return;
+    pre.scrollTop = ta.scrollTop;
+    pre.scrollLeft = ta.scrollLeft;
+  }
+
+  function onKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.key !== 'Tab') return;
+    event.preventDefault();
+    const ta = event.currentTarget;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const next = `${value.slice(0, start)}  ${value.slice(end)}`;
+    onChange(next);
+    requestAnimationFrame(() => {
+      ta.selectionStart = ta.selectionEnd = start + 2;
+    });
+  }
+
+  return (
+    <div className="code-editor" style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+      <pre
+        ref={preRef}
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          margin: 0,
+          padding: '12px 16px',
+          overflow: 'hidden',
+          pointerEvents: 'none',
+          background: 'var(--bg-0)',
+        }}
+      >
+        {tokens.map((tok, i) => (
+          <span key={i} className={`tok-${tok.kind}`}>
+            {tok.text}
+          </span>
+        ))}
+        {value.endsWith('\n') ? '\n' : null}
+      </pre>
+      <textarea
+        ref={taRef}
+        spellCheck={false}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onScroll={syncScroll}
+        onKeyDown={onKeyDown}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          overflow: 'auto',
+        }}
+      />
+    </div>
+  );
 }
 
 function loadWidth(): number {

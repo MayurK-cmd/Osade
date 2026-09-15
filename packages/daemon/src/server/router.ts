@@ -27,7 +27,14 @@ import { repoRoot, checkoutBranch, listLocalBranches, repoWorkingStatus } from '
 import { toTaskView } from '../domain/task-view.js';
 import { deriveVerifyPlan, type VerifyStep } from '../domain/verify-plan.js';
 import { isAttached, taskCwd } from '../domain/cwd.js';
-import { fileChanges, listDir, readFile as readTaskFile } from '../domain/files.js';
+import {
+  fileChanges,
+  listDir,
+  listWorkingChanges,
+  readChangeDiff,
+  readFile as readTaskFile,
+  writeFile as writeTaskFile,
+} from '../domain/files.js';
 import type { Triage, TriageKind } from '../domain/triage.js';
 import type { VerifyRunner } from '../domain/verify-run.js';
 import type { Knowledge } from '../knowledge/service.js';
@@ -232,6 +239,79 @@ export const appRouter = t.router({
       const located = locateTaskCwd(ctx, input.taskId);
       try {
         return readTaskFile(located.cwd, input.path);
+      } catch (err) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
+      }
+    }),
+
+  taskFsWrite: t.procedure
+    .input(z.object({ taskId: TaskId, path: z.string().min(1), text: z.string() }))
+    .output(z.object({ path: z.string(), bytes: z.number().int() }))
+    .mutation(({ ctx, input }) => {
+      const located = locateTaskCwd(ctx, input.taskId);
+      try {
+        return writeTaskFile(located.cwd, input.path, input.text);
+      } catch (err) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
+      }
+    }),
+
+  taskChangesList: t.procedure
+    .input(z.object({ taskId: TaskId }))
+    .output(
+      z.object({
+        files: z.array(
+          z.object({
+            path: z.string(),
+            flag: z.enum(['M', 'A', 'D', '?']),
+            insertions: z.number().int(),
+            deletions: z.number().int(),
+          }),
+        ),
+        outgoing: z
+          .object({
+            ahead: z.number().int(),
+            commits: z.array(z.object({ sha: z.string(), subject: z.string() })),
+            files: z.array(
+              z.object({
+                path: z.string(),
+                flag: z.enum(['M', 'A', 'D', '?']),
+                insertions: z.number().int(),
+                deletions: z.number().int(),
+              }),
+            ),
+          })
+          .nullable(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const located = locateTaskCwd(ctx, input.taskId);
+      try {
+        return await listWorkingChanges(located.cwd);
+      } catch (err) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
+      }
+    }),
+
+  taskChangesDiff: t.procedure
+    .input(
+      z.object({
+        taskId: TaskId,
+        path: z.string().min(1),
+        vs: z.enum(['working', 'outgoing']),
+      }),
+    )
+    .output(
+      z.object({
+        path: z.string(),
+        flag: z.enum(['M', 'A', 'D', '?']).nullable(),
+        diff: z.string(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const located = locateTaskCwd(ctx, input.taskId);
+      try {
+        return await readChangeDiff(located.cwd, input.path, input.vs);
       } catch (err) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
       }

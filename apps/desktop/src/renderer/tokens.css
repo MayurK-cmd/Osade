@@ -185,6 +185,83 @@ textarea {
   background: var(--bg-2);
 }
 
+/* Dark+ token colours, used only in the Files editor overlay. */
+.tok-kw {
+  color: #569cd6;
+}
+.tok-type {
+  color: #4ec9b0;
+}
+.tok-str {
+  color: #ce9178;
+}
+.tok-com {
+  color: #6a9955;
+}
+.tok-num {
+  color: #b5cea8;
+}
+.tok-fn {
+  color: #dcdcaa;
+}
+.tok-plain {
+  color: #d4d4d4;
+}
+
+.code-editor,
+.code-editor textarea,
+.code-editor pre {
+  font-family: var(--mono);
+  font-size: var(--t-s);
+  line-height: 1.5;
+  tab-size: 2;
+  white-space: pre;
+  word-wrap: normal;
+  overflow-wrap: normal;
+}
+
+.code-editor textarea {
+  resize: none;
+  border: none;
+  border-radius: 0;
+  padding: 12px 16px;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--ink);
+  outline: none;
+}
+
+.code-editor textarea:focus {
+  outline: none;
+  border: none;
+}
+
+.code-editor textarea::selection {
+  background: rgba(143, 168, 196, 0.35);
+  color: transparent;
+}
+
+.diff-add {
+  background: #1a2a1e;
+  color: #b7d9c3;
+}
+.diff-del {
+  background: #2a1a1a;
+  color: #e0a8a6;
+}
+.diff-hunk {
+  background: var(--bg-1);
+  color: #8fa8c4;
+}
+.diff-meta {
+  color: var(--ink-3);
+}
+.diff-ctx {
+  color: var(--ink);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;

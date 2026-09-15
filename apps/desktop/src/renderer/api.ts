@@ -241,6 +241,36 @@ export const api = {
       truncated: boolean;
     }>,
 
+  taskFsWrite: (taskId: string, path: string, text: string) =>
+    call('mutation', 'taskFsWrite', { taskId, path, text }) as Promise<{ path: string; bytes: number }>,
+
+  taskChangesList: (taskId: string) =>
+    call('query', 'taskChangesList', { taskId }) as Promise<{
+      files: {
+        path: string;
+        flag: 'M' | 'A' | 'D' | '?';
+        insertions: number;
+        deletions: number;
+      }[];
+      outgoing: {
+        ahead: number;
+        commits: { sha: string; subject: string }[];
+        files: {
+          path: string;
+          flag: 'M' | 'A' | 'D' | '?';
+          insertions: number;
+          deletions: number;
+        }[];
+      } | null;
+    }>,
+
+  taskChangesDiff: (taskId: string, path: string, vs: 'working' | 'outgoing') =>
+    call('query', 'taskChangesDiff', { taskId, path, vs }) as Promise<{
+      path: string;
+      flag: 'M' | 'A' | 'D' | '?' | null;
+      diff: string;
+    }>,
+
   /** Hides the task from the ledger. Does not kill the agent process. */
   taskArchive: (taskId: string) =>
     call('mutation', 'taskArchive', { taskId }) as Promise<{ ok: true }>,

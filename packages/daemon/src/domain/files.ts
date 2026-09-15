@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { mkdirSync, readdirSync, readFileSync, statSync, existsSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 
 import { git } from './git.js';
 
@@ -140,6 +140,111 @@ export function readFile(cwd: string, relativePath: string): {
     binary: false,
     truncated,
   };
+}
+
+export function writeFile(
+  cwd: string,
+  relativePath: string,
+  text: string,
+): { path: string; bytes: number } {
+  if (Buffer.byteLength(text) > MAX_READ) throw new Error('file is too large to save here');
+  const abs = safeResolve(cwd, relativePath);
+  if (existsSync(abs) && statSync(abs).isDirectory()) throw new Error('that path is a folder');
+  mkdirSync(dirname(abs), { recursive: true });
+  writeFileSync(abs, text, 'utf8');
+  return { path: toPosix(relativePath), bytes: Buffer.byteLength(text) };
+}
+
+export interface WorkingChange {
+  path: string;
+  flag: FileFlag;
+  insertions: number;
+  deletions: number;
+}
+
+export interface OutgoingCommit {
+  sha: string;
+  subject: string;
+}
+
+export async function listWorkingChanges(cwd: string): Promise<{
+  files: WorkingChange[];
+  outgoing: { ahead: number; commits: OutgoingCommit[]; files: WorkingChange[] } | null;
+}> {
+  const changes = await fileChanges(cwd, 'HEAD');
+  const files = [...changes.entries()]
+    .map(([path, hit]) => ({ path, flag: hit.flag, insertions: hit.insertions, deletions: hit.deletions }))
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  let outgoing: { ahead: number; commits: OutgoingCommit[]; files: WorkingChange[] } | null = null;
+  try {
+    const ahead = Number((await git(cwd, ['rev-list', '--count', '@{upstream}..HEAD'])).trim()) || 0;
+    const log = ahead > 0 ? await git(cwd, ['log', '--format=%h\t%s', '@{upstream}..HEAD']) : '';
+    const commits = log
+      .trim()
+      .split('\n')
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const tab = line.indexOf('\t');
+        return { sha: line.slice(0, tab), subject: line.slice(tab + 1) };
+      });
+    const outgoingFiles =
+      ahead > 0
+        ? parseNameStatus(
+            await git(cwd, ['diff', '--name-status', '@{upstream}...HEAD']),
+            parseNumstat(await git(cwd, ['diff', '--numstat', '@{upstream}...HEAD'])),
+          )
+        : [];
+    outgoing = { ahead, commits, files: outgoingFiles };
+  } catch {
+    outgoing = null;
+  }
+  return { files, outgoing };
+}
+
+export function parseNameStatus(
+  text: string,
+  stats: Map<string, { insertions: number; deletions: number }>,
+): WorkingChange[] {
+  const files: WorkingChange[] = [];
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    const parts = line.split('\t');
+    const code = parts[0] ?? '';
+    const path = toPosix(parts.length >= 3 ? (parts[parts.length - 1] ?? '') : (parts[1] ?? ''));
+    if (!path) continue;
+    const flag: FileFlag = code.startsWith('D') ? 'D' : code.startsWith('A') ? 'A' : 'M';
+    const hit = stats.get(path) ?? { insertions: 0, deletions: 0 };
+    files.push({ path, flag, insertions: hit.insertions, deletions: hit.deletions });
+  }
+  return files.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+export async function readChangeDiff(
+  cwd: string,
+  relativePath: string,
+  vs: 'working' | 'outgoing',
+): Promise<{ path: string; flag: FileFlag | null; diff: string }> {
+  const path = toPosix(relativePath);
+  if (vs === 'outgoing') {
+    const diff = await git(cwd, ['diff', '@{upstream}...HEAD', '--', path]).catch(() => '');
+    return { path, flag: 'M', diff };
+  }
+  const changes = await fileChanges(cwd, 'HEAD');
+  const flag = changes.get(path)?.flag ?? null;
+  if (flag === '?') {
+    const body = readFile(cwd, path);
+    const lines = (body.text ?? '').split('\n');
+    const diff = [
+      `--- /dev/null`,
+      `+++ b/${path}`,
+      `@@ -0,0 +1,${Math.max(lines.length, 1)} @@`,
+      ...lines.map((line) => `+${line}`),
+    ].join('\n');
+    return { path, flag, diff };
+  }
+  const diff = await git(cwd, ['diff', 'HEAD', '--', path]).catch(() => '');
+  return { path, flag, diff };
 }
 
 function overlayFor(
