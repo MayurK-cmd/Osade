@@ -85,7 +85,14 @@ module.exports = {
       rfc3161TimeStampServer: 'http://timestamp.digicert.com',
     },
   },
-  nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true },
+  nsis: {
+    oneClick: false,
+    perMachine: false,
+    allowToChangeInstallationDirectory: true,
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true,
+    shortcutName: 'Osade',
+  },
 
   mac: {
     icon: 'build/icon.png',
