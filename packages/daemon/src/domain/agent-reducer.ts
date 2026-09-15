@@ -1,5 +1,7 @@
 import type { AgentEvent, AgentFact, SubstrateAgentStatus } from '@osade/contract';
 
+import { classifyExternalBlock } from './external-block.js';
+
 /**
  * OSADE.md §6.1 — the narrow event vocabulary, and §5.4.1 — the monotonic fact gate.
  *
@@ -107,20 +109,26 @@ export function reduceAgentInput(current: AgentFact | null, input: AgentInput): 
   switch (input.kind) {
     case 'status': {
       const event = eventForStatus(input.status);
+      const block = classifyExternalBlock(input.activityText);
       const patch: AgentFactPatch = {
         ...base,
         substrate_state: input.status,
         pane_alive: true,
-        // An agent reporting status is alive; a prior probe failure is no longer interesting.
         probe_failures: 0,
       };
+      patch.external_block = block;
+      if (block) {
+        patch.last_event = 'activity';
+        patch.last_event_at = input.at;
+        if (input.activityText !== undefined) patch.activity_text = input.activityText;
+        return { patch };
+      }
       if (event != null) {
         patch.last_event = event;
         patch.last_event_at = input.at;
       }
       if (input.activityText !== undefined) {
         patch.activity_text = input.activityText;
-        // §6.1 — `activity` is never a transition; it only updates the display string.
         if (event == null) {
           patch.last_event = 'activity';
           patch.last_event_at = input.at;
@@ -161,6 +169,7 @@ export function emptyAgentFact(taskId: string): AgentFact {
     last_probe_at: null,
     probe_failures: 0,
     terminated: false,
+    external_block: null,
     state_change_seq: 0,
     controller_generation: 0,
   };

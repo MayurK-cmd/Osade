@@ -31,6 +31,10 @@ export function groupChats(tasks: TaskView[]): ChatGroup[] {
   });
 }
 
+export function showPinnedNeedsYou(needsCount: number, visibleCount: number): boolean {
+  return needsCount > 0 && needsCount !== visibleCount;
+}
+
 export function primaryLane(chat: ChatGroup): TaskView {
   return chat.lanes[0]!;
 }

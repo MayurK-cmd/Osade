@@ -16,3 +16,6 @@ photographs the window.
       the same repo. **If the number does not move, the feature is wrong and should be redesigned,
       not shipped.** Nothing in the test suite can answer this one.
 
+
+1) File view mode
+2) Kanban mode

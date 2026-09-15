@@ -170,6 +170,10 @@ function approveLabel(gate: string): string {
       return 'Submit review';
     case 'gate.undo_turn':
       return 'Undo turn';
+    case 'gate.branch_switch':
+      return 'Switch branch';
+    case 'gate.commit':
+      return 'Commit';
     default:
       return 'Approve';
   }

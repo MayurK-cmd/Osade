@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AgentFact, GateRequest, ScmFact, Task, TaskFacts, VerifyRun } from '@osade/contract';
-import { TaskStatus } from '@osade/contract';
+import { NEEDS_YOU, TaskStatus } from '@osade/contract';
 
 import { deriveStatus } from '../../src/domain/derive-status.js';
 import {
@@ -190,6 +190,55 @@ describe('deriveStatus — the §6 table, row by row', () => {
         NOW,
       ),
     ).toBe('awaiting_review');
+  });
+
+  it('quota/auth is blocked_external, not awaiting_review', () => {
+    expect(
+      deriveStatus(
+        facts({
+          agent: agent({
+            last_event: 'to_review',
+            pane_alive: true,
+            external_block: 'Usage limit reached. Resets Sunday 3pm.',
+          }),
+        }),
+        NOW,
+      ),
+    ).toBe('blocked_external');
+    expect(NEEDS_YOU.has('blocked_external')).toBe(false);
+  });
+
+  it('quota text on done is activity, not to_review', () => {
+    const { patch } = reduceAgentInput(emptyAgentFact('t1'), {
+      kind: 'status',
+      status: 'done',
+      seq: 1,
+      at: NOW,
+      activityText: 'Session limit reached. Resets Sunday 3pm.',
+    });
+    expect(patch?.last_event).toBe('activity');
+    expect(patch?.external_block).toMatch(/Usage limit reached/i);
+    expect(patch?.external_block).toMatch(/Sunday 3pm/i);
+    expect(
+      deriveStatus(facts({ agent: { ...emptyAgentFact('t1'), ...patch } }), NOW),
+    ).toBe('blocked_external');
+  });
+
+  it('working after a quota exit clears blocked_external', () => {
+    const blocked = {
+      ...emptyAgentFact('t1'),
+      last_event: 'activity' as const,
+      external_block: 'Usage limit reached.',
+      state_change_seq: 1,
+    };
+    const { patch } = reduceAgentInput(blocked, {
+      kind: 'status',
+      status: 'working',
+      seq: 2,
+      at: NOW,
+    });
+    expect(patch?.external_block).toBeNull();
+    expect(patch?.last_event).toBe('to_in_progress');
   });
 
   it('10. a newer to_in_progress supersedes to_review', () => {

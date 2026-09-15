@@ -154,14 +154,17 @@ describe.skipIf(!E2E)('M1 acceptance — the failure loop turns once, for real',
   let worktree: string;
 
   it('launches a task', async () => {
-    taskId = await launcher.createTask({
-      repoPath,
-      title: 'm1 acceptance',
-      intent:
-        'A test is failing in this worktree. When you are told what failed, fix it and say done.',
-    });
+    taskId = (
+      await launcher.createTask({
+        repoPath,
+        title: 'm1 acceptance',
+        intent:
+          'A test is failing in this worktree. When you are told what failed, fix it and say done.',
+        isolate: true,
+      })
+    ).taskId;
     const result = await launcher.launch(taskId);
-    worktree = result.worktreePath;
+    worktree = result.worktreePath!;
 
     // §8.2 step 8 — launch captures its own checkpoint. Exactly one, because there is one
     // implementation of checkpointing rather than two.

@@ -230,3 +230,29 @@ describe('§9.1 — undo_turn is conditional', () => {
     expect(new Set(GATES.map((g) => g.gate)).size).toBe(GATES.length);
   });
 });
+
+describe('attached-mode gate policy', () => {
+  it('gate.commit auto-decides on an isolated lane', () => {
+    const id = gates().request({ taskId: 't1', gate: 'gate.commit', payload: { m: 'x' } });
+    const row = db.prepare('SELECT decision FROM gate_request WHERE id = ?').get(id) as {
+      decision: string | null;
+    };
+    expect(row.decision).toBe('approve');
+  });
+
+  it('gate.commit is human on an attached lane', () => {
+    db.prepare("UPDATE task SET worktree_path = NULL WHERE id = 't1'").run();
+    const id = gates().request({ taskId: 't1', gate: 'gate.commit', payload: { m: 'x' } });
+    const row = db.prepare('SELECT decided_at, decision FROM gate_request WHERE id = ?').get(id) as {
+      decided_at: number | null;
+      decision: string | null;
+    };
+    expect(row.decided_at).toBeNull();
+    expect(row.decision).toBeNull();
+  });
+
+  it('gate.branch_switch is always human and not overridable', () => {
+    expect(gatePolicy('gate.branch_switch').def).toBe('human');
+    expect(gatePolicy('gate.branch_switch').overridable).toBe(false);
+  });
+});

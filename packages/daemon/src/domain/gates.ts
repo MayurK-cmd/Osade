@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { Db } from '../db/index.js';
+import { getTask } from '../db/task-repo.js';
+import { isAttached } from './cwd.js';
 
 /**
  * Approval gates — OSADE.md §14.
@@ -26,7 +28,8 @@ export type GateName =
   | 'gate.dep_add'
   | 'gate.file_write_outside_worktree'
   | 'gate.undo_turn'
-  | 'gate.network_egress';
+  | 'gate.network_egress'
+  | 'gate.branch_switch';
 
 export type GateDefault = 'auto' | 'human' | 'conditional';
 
@@ -40,7 +43,7 @@ export interface GatePolicy {
 
 /** §14.1 — the gate list, verbatim. */
 export const GATES: readonly GatePolicy[] = [
-  { gate: 'gate.commit', def: 'auto', overridable: true, note: 'local only, reversible via checkpoint' },
+  { gate: 'gate.commit', def: 'auto', overridable: true, note: 'local only, reversible via checkpoint; human when attached' },
   { gate: 'gate.push', def: 'human', overridable: true, note: 'first write that leaves the machine' },
   { gate: 'gate.pr_open', def: 'human', overridable: true, note: 'requires passing verification' },
   // §11.3 — "If the user has no fork, offer to create one behind a gate." Creating a
@@ -74,6 +77,12 @@ export const GATES: readonly GatePolicy[] = [
   },
   { gate: 'gate.undo_turn', def: 'conditional', overridable: true, note: 'human if diff > 20 files' },
   { gate: 'gate.network_egress', def: 'auto', overridable: true, note: 'v1 logs only' },
+  {
+    gate: 'gate.branch_switch',
+    def: 'human',
+    overridable: false,
+    note: 'changes the user\'s real checked-out branch',
+  },
 ];
 
 const GATE_INDEX = new Map(GATES.map((g) => [g.gate, g]));
@@ -150,9 +159,18 @@ export class Gates {
     const payloadHash = hashPayload(input.payload);
     const now = this.#now();
 
+    const attached =
+      input.gate === 'gate.commit' &&
+      (() => {
+        const task = getTask(this.#db, input.taskId);
+        return task != null && isAttached(task);
+      })();
+
     const policyName = this.#policies[input.gate];
     const autoDecided =
-      policy.overridable && (policy.def === 'auto' || policyName != null)
+      !attached &&
+      policy.overridable &&
+      (policy.def === 'auto' || policyName != null)
         ? (policyName ?? 'default')
         : null;
 

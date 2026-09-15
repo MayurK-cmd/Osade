@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { openDb, type Db } from '../../src/db/index.js';
 import { getTask } from '../../src/db/task-repo.js';
+import { isAttached, taskCwd } from '../../src/domain/cwd.js';
 import { LaunchTask } from '../../src/domain/launch-task.js';
 import type { SubstrateClient } from '../../src/substrate/client.js';
 import type { SubstrateEventSubscriber } from '../../src/substrate/event-subscriber.js';
@@ -22,7 +23,7 @@ function sh(cwd: string, args: string[]): string {
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'osade-lanes-'));
+  dir = mkdtempSync(join(tmpdir(), 'osade-attached-'));
   process.env.OSADE_HOME = join(dir, 'home');
   repo = join(dir, 'repo');
   sh(dir, ['init', '-q', '-b', 'main', 'repo']);
@@ -44,50 +45,45 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-describe('chat lanes — createTask', () => {
-  it('new chats are one-lane: chat_id equals the task id', async () => {
+describe('attached lanes', () => {
+  it('a new chat is attached: no worktree path, branch is the checkout', async () => {
+    const created = await launcher.createTask({
+      repoPath: repo,
+      title: 'New chat',
+      intent: 'hi',
+    });
+    const task = getTask(db, created.taskId)!;
+    expect(created.isolated).toBe(false);
+    expect(task.worktree_path).toBeNull();
+    expect(isAttached(task)).toBe(true);
+    expect(task.branch).toBe('main');
+    expect(taskCwd(task, repo)).toBe(repo);
+  });
+
+  it('a second chat in the same repo is forced isolated', async () => {
+    const first = await launcher.createTask({ repoPath: repo, title: 'One', intent: 'a' });
+    const second = await launcher.createTask({ repoPath: repo, title: 'Two', intent: 'b' });
+    expect(first.isolated).toBe(false);
+    expect(second.isolated).toBe(true);
+    expect(second.isolatedBecause?.title).toBe('One');
+    const a = getTask(db, first.taskId)!;
+    const b = getTask(db, second.taskId)!;
+    expect(a.worktree_path).toBeNull();
+    expect(b.worktree_path).toBeTruthy();
+    expect(b.branch).toMatch(/^osade\//);
+  });
+
+  it('isolate: true always creates a worktree even when the slot is free', async () => {
     const created = await launcher.createTask({
       repoPath: repo,
       title: 'Token refresh',
       intent: 'fix it',
+      isolate: true,
     });
     const task = getTask(db, created.taskId)!;
-    expect(task.chat_id).toBe(created.taskId);
-    expect(created.isolated).toBe(false);
-    expect(task.worktree_path).toBeNull();
-    expect(task.branch).toBe('main');
-  });
-
-  it('a second lane reuses chat_id, slug and base_ref', async () => {
-    const first = await launcher.createTask({
-      repoPath: repo,
-      title: 'Token refresh',
-      intent: 'fix it',
-      agentId: 'claude',
-    });
-    const second = await launcher.createTask({
-      repoPath: repo,
-      title: 'Token refresh',
-      intent: 'tests',
-      chatId: first.taskId,
-      agentId: 'codex',
-    });
-    const a = getTask(db, first.taskId)!;
-    const b = getTask(db, second.taskId)!;
-    expect(b.chat_id).toBe(a.chat_id);
-    expect(second.isolated).toBe(true);
-    expect(b.branch).toBe('osade/token-refresh/codex');
-    expect(b.agent_id).toBe('codex');
-  });
-
-  it('rejects an unknown agentId', async () => {
-    await expect(
-      launcher.createTask({
-        repoPath: repo,
-        title: 'x',
-        intent: 'x',
-        agentId: 'not-an-agent',
-      }),
-    ).rejects.toThrow(/unknown agent/i);
+    expect(created.isolated).toBe(true);
+    expect(created.isolatedBecause).toBeUndefined();
+    expect(task.worktree_path).toBeTruthy();
+    expect(task.branch).toBe('osade/token-refresh/claude');
   });
 });

@@ -104,11 +104,13 @@ export class Triage {
           issue.body.trim() || '(no description)',
         ].join('\n');
 
-    const taskId = await this.#launcher.createTask({
+    const created = await this.#launcher.createTask({
       repoPath,
       title: `#${issue.number} ${issue.title}`,
       intent,
+      isolate: true,
     });
+    const taskId = created.taskId;
 
     this.#db
       .prepare('UPDATE task SET origin_kind = ?, origin_ref = ? WHERE id = ?')

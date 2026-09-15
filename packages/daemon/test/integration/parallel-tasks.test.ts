@@ -133,11 +133,13 @@ describe('§21 M1 — four tasks in parallel on one repo', () => {
     const { subscriber } = fakeSubscriber();
     const launcher = new LaunchTask(db, substrate.client, subscriber, { now: () => NOW });
 
-    const ids = await Promise.all(
-      [1, 2, 3, 4].map((n) =>
-        launcher.createTask({ repoPath: repo, title: `task ${n}`, intent: `do ${n}` }),
-      ),
-    );
+    const ids = (
+      await Promise.all(
+        [1, 2, 3, 4].map((n) =>
+          launcher.createTask({ repoPath: repo, title: `task ${n}`, intent: `do ${n}`, isolate: true }),
+        ),
+      )
+    ).map((c) => c.taskId);
 
     await Promise.all(ids.map((id) => launcher.launch(id)));
 
@@ -151,11 +153,13 @@ describe('§21 M1 — four tasks in parallel on one repo', () => {
     const { subscriber } = fakeSubscriber();
     const launcher = new LaunchTask(db, substrate.client, subscriber, { now: () => NOW });
 
-    const ids = await Promise.all(
-      [1, 2, 3, 4].map((n) =>
-        launcher.createTask({ repoPath: repo, title: `task ${n}`, intent: `do ${n}` }),
-      ),
-    );
+    const ids = (
+      await Promise.all(
+        [1, 2, 3, 4].map((n) =>
+          launcher.createTask({ repoPath: repo, title: `task ${n}`, intent: `do ${n}`, isolate: true }),
+        ),
+      )
+    ).map((c) => c.taskId);
     await Promise.all(ids.map((id) => launcher.launch(id)));
 
     const facts = listTaskFacts(db);
@@ -175,7 +179,7 @@ describe('§21 M1 — four tasks in parallel on one repo', () => {
 
     await Promise.all(
       [1, 2, 3, 4].map((n) =>
-        launcher.createTask({ repoPath: repo, title: `task ${n}`, intent: `do ${n}` }),
+        launcher.createTask({ repoPath: repo, title: `task ${n}`, intent: `do ${n}`, isolate: true }),
       ),
     );
 
@@ -188,11 +192,13 @@ describe('§21 M1 — four tasks in parallel on one repo', () => {
     const { subscriber } = fakeSubscriber();
     const launcher = new LaunchTask(db, substrate.client, subscriber, { now: () => NOW });
 
-    const ids = await Promise.all(
-      [1, 2, 3, 4].map((n) =>
-        launcher.createTask({ repoPath: repo, title: `task ${n}`, intent: `do ${n}` }),
-      ),
-    );
+    const ids = (
+      await Promise.all(
+        [1, 2, 3, 4].map((n) =>
+          launcher.createTask({ repoPath: repo, title: `task ${n}`, intent: `do ${n}`, isolate: true }),
+        ),
+      )
+    ).map((c) => c.taskId);
     await Promise.all(ids.map((id) => launcher.launch(id)));
 
     // One task goes blocked; the other three must be unaffected.
@@ -217,13 +223,17 @@ describe('§21 M1 — four tasks in parallel on one repo', () => {
     const { subscriber } = fakeSubscriber();
     const launcher = new LaunchTask(db, substrate.client, subscriber, { now: () => NOW });
 
-    const ids = await Promise.all(
-      [1, 2, 3].map((n) =>
-        launcher.createTask({ repoPath: repo, title: `task ${n}`, intent: `do ${n}` }),
-      ),
-    );
+    const ids = (
+      await Promise.all(
+        [1, 2, 3].map((n) =>
+          launcher.createTask({ repoPath: repo, title: `task ${n}`, intent: `do ${n}`, isolate: true }),
+        ),
+      )
+    ).map((c) => c.taskId);
     // A task whose row was deleted underneath us — the launch must fail alone.
-    const doomed = await launcher.createTask({ repoPath: repo, title: 'doomed', intent: 'x' });
+    const doomed = (
+      await launcher.createTask({ repoPath: repo, title: 'doomed', intent: 'x', isolate: true })
+    ).taskId;
     db.prepare('DELETE FROM task WHERE id = ?').run(doomed);
 
     const results = await Promise.allSettled([
@@ -235,7 +245,9 @@ describe('§21 M1 — four tasks in parallel on one repo', () => {
     expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
 
     // …and the repo lock is not left held, so a later launch still works.
-    const later = await launcher.createTask({ repoPath: repo, title: 'later', intent: 'x' });
+    const later = (
+      await launcher.createTask({ repoPath: repo, title: 'later', intent: 'x', isolate: true })
+    ).taskId;
     await expect(launcher.launch(later)).resolves.toBeTruthy();
   });
 });

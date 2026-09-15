@@ -7,10 +7,11 @@ import { CommandPalette } from './CommandPalette.js';
 import { Detail, DraftPane, type Lane } from './Detail.js';
 import { api } from './api.js';
 import { chord } from './chords.js';
-import { groupChats, laneDigest, primaryLane, withDigest, type ChatGroup } from './lanes.js';
+import { groupChats, laneDigest, primaryLane, showPinnedNeedsYou, withDigest, type ChatGroup } from './lanes.js';
 import { composeLanePrompt, parseMentions } from './mentions.js';
 import { RepoSettings, useAgentCatalog } from './RepoSettings.js';
 import { GLYPH, STATUS, TONE_COLOUR, summarise } from './status.js';
+import { titleFrom } from './title.js';
 import { useLedger } from './useLedger.js';
 import { useRepo, type OpenRepo } from './useRepo.js';
 
@@ -25,10 +26,11 @@ type Tab =
       repoId: string | null;
       repoPath: string | null;
       defaultBranch: string | null;
+      isolate?: boolean;
       optimistic?: string;
       submitting?: boolean;
     }
-  | { kind: 'chat'; id: string; focusId?: string; optimistic?: string };
+  | { kind: 'chat'; id: string; focusId?: string; optimistic?: string; isolatedNotice?: string };
 
 export function App(): JSX.Element {
   const { tasks: allTasks, connection, error } = useLedger();
@@ -79,6 +81,18 @@ export function App(): JSX.Element {
   useEffect(() => {
     localStorage.setItem(NAMES_KEY, JSON.stringify(aliases));
   }, [aliases]);
+
+  useEffect(() => {
+    for (const group of groups) {
+      if (group.title !== 'New chat') continue;
+      const lane = primaryLane(group);
+      const activity = lane.agent?.activity_text ?? '';
+      const file = activity.match(/(?:Editing|Writing|Created|Modified)\s+(\S+)/u);
+      if (!file) continue;
+      const next = file[1]!.replace(/[\\/]/g, '/').split('/').pop() ?? file[1]!;
+      if (next.length > 0) void api.taskRetitle(lane.task.id, next);
+    }
+  }, [groups]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent): void {
@@ -187,7 +201,12 @@ export function App(): JSX.Element {
     }
   }
 
-  async function openDraftTab(from?: { repoId: string; path?: string; defaultBranch?: string }): Promise<void> {
+  async function openDraftTab(from?: {
+    repoId: string;
+    path?: string;
+    defaultBranch?: string;
+    isolate?: boolean;
+  }): Promise<void> {
     let repoId = from?.repoId ?? repo?.repoId ?? null;
     let repoPath = from?.path ?? repo?.path ?? null;
     let defaultBranch = from?.defaultBranch ?? repo?.defaultBranch ?? null;
@@ -204,7 +223,7 @@ export function App(): JSX.Element {
     const id = crypto.randomUUID();
     setTabs((current) => [
       ...current,
-      { kind: 'draft', id, repoId, repoPath, defaultBranch },
+      { kind: 'draft', id, repoId, repoPath, defaultBranch, isolate: from?.isolate },
     ]);
     setActiveId(id);
     setLane('transcript');
@@ -245,11 +264,22 @@ export function App(): JSX.Element {
         intent: composeLanePrompt(parsed.shared, first.text) || message,
         ...(first.agentId ? { agentId: first.agentId } : {}),
         ...(tab.defaultBranch ? { baseRef: tab.defaultBranch } : {}),
+        ...(tab.isolate ? { isolate: true } : {}),
       });
+      const notice =
+        created.isolatedBecause != null
+          ? `This chat is on its own branch because “${created.isolatedBecause.title}” is using the checkout.`
+          : undefined;
       setTabs((current) =>
         current.map((t) =>
           t.id === tab.id
-            ? { kind: 'chat', id: created.taskId, focusId: created.taskId, optimistic: message }
+            ? {
+                kind: 'chat',
+                id: created.taskId,
+                focusId: created.taskId,
+                optimistic: message,
+                isolatedNotice: notice,
+              }
             : t,
         ),
       );
@@ -265,6 +295,7 @@ export function App(): JSX.Element {
             chatId: created.taskId,
             agentId: extra.agentId,
             ...(tab.defaultBranch ? { baseRef: tab.defaultBranch } : {}),
+            isolate: true,
           });
           await launchAndSend(lane.taskId, composeLanePrompt(parsed.shared, extra.text));
         })();
@@ -286,6 +317,12 @@ export function App(): JSX.Element {
     const ids = catalog.map((a) => a.id);
     const parsed = parseMentions(message, ids);
     const primary = primaryLane(chat);
+    if (chat.title === 'New chat') {
+      const next = titleFrom(message);
+      if (next !== 'New chat') {
+        for (const lane of chat.lanes) void api.taskRetitle(lane.task.id, next);
+      }
+    }
     const targets =
       parsed.targets.length > 0
         ? parsed.targets
@@ -318,6 +355,7 @@ export function App(): JSX.Element {
         chatId: chat.chatId,
         agentId,
         baseRef: chat.lanes[0]?.task.base_ref,
+        isolate: true,
       });
       await launchAndSend(created.taskId, text);
       return;
@@ -378,7 +416,7 @@ export function App(): JSX.Element {
             <Empty connection={connection} repo={repo} onNew={() => void openDraftTab()} />
           ) : (
             <>
-              {needsYou.length > 0 && (
+              {showPinnedNeedsYou(needsYou.length, groups.length) && (
                 <section>
                   <h2 style={groupHeadStyle('var(--st-needs)')}>Needs you · {needsYou.length}</h2>
                   {needsYou.map((chat) => (
@@ -397,8 +435,8 @@ export function App(): JSX.Element {
 
               {byRepo.map((group) => {
                 const closed = collapsed.has(group.repoId);
-                const sample = group.chats[0]?.lanes[0]?.task.worktree_path ?? null;
-                const label = repoLabel(group.repoId, repo, sample, aliases);
+                const sample = group.chats[0]?.lanes[0];
+                const label = repoLabel(group.repoId, repo, sample?.cwd ?? null, aliases);
                 return (
                   <section key={group.repoId}>
                     <h2 style={groupHeadStyle('var(--ink-2)')}>
@@ -562,7 +600,18 @@ export function App(): JSX.Element {
               onLane={setLane}
               catalog={catalog}
               optimistic={activeTab?.kind === 'chat' ? activeTab.optimistic : undefined}
+              isolatedNotice={activeTab?.kind === 'chat' ? activeTab.isolatedNotice : undefined}
               onSend={(text) => sendOnChat(selectedChat, text)}
+              onNewIsolatedChat={() => {
+                const lane = primaryLane(selectedChat);
+                const repoPath = repoPaths[lane.task.repo_id] ?? repo?.path ?? undefined;
+                void openDraftTab({
+                  repoId: lane.task.repo_id,
+                  path: repoPath,
+                  defaultBranch: lane.branch,
+                  isolate: true,
+                });
+              }}
             />
           ) : (
             <NothingSelected hasChats={groups.length > 0} />
@@ -1071,14 +1120,6 @@ function folderFromWorktree(path: string): string | null {
   const last = parts[parts.length - 1] ?? '';
   if (last.startsWith('t_')) return parts[parts.length - 2] ?? null;
   return last;
-}
-
-function titleFrom(message: string): string {
-  const stripped = message.trim().replace(/[.,!?;:]+$/u, '');
-  const words = stripped.split(/\s+/u).filter(Boolean).slice(0, 6);
-  const joined = words.join(' ');
-  if (joined.length === 0) return 'New chat';
-  return joined.charAt(0).toUpperCase() + joined.slice(1);
 }
 
 function loadAliases(): Record<string, string> {

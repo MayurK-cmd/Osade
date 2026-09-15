@@ -22,10 +22,11 @@ import {
   UnknownAgentError,
 } from '../domain/agent-catalog.js';
 import type { Gates } from '../domain/gates.js';
-import type { LaunchTask } from '../domain/launch-task.js';
-import { repoRoot } from '../domain/git.js';
+import { AgentLiveError, LaneIsolatedError, type LaunchTask } from '../domain/launch-task.js';
+import { repoRoot, checkoutBranch, listLocalBranches, repoWorkingStatus } from '../domain/git.js';
 import { toTaskView } from '../domain/task-view.js';
 import { deriveVerifyPlan, type VerifyStep } from '../domain/verify-plan.js';
+import { isAttached, taskCwd } from '../domain/cwd.js';
 import type { Triage, TriageKind } from '../domain/triage.js';
 import type { VerifyRunner } from '../domain/verify-run.js';
 import type { Knowledge } from '../knowledge/service.js';
@@ -77,13 +78,14 @@ const SORT_RANK: Record<TaskStatus, number> = {
   implementing: 4,
   verifying: 5,
   verify_failed: 6,
-  ci_failed: 7,
-  pr_open: 8,
-  queued: 9,
-  idle: 10,
-  stopped: 11,
-  merged: 12,
-  archived: 13,
+  blocked_external: 7,
+  ci_failed: 8,
+  pr_open: 9,
+  queued: 10,
+  idle: 11,
+  stopped: 12,
+  merged: 13,
+  archived: 14,
 };
 
 export const appRouter = t.router({
@@ -120,14 +122,22 @@ export const appRouter = t.router({
         agentId: z.string().optional(),
         chatId: z.string().optional(),
         baseRef: z.string().optional(),
+        isolate: z.boolean().optional(),
       }),
     )
-    .output(z.object({ taskId: TaskId }))
+    .output(
+      z.object({
+        taskId: TaskId,
+        isolated: z.boolean(),
+        isolatedBecause: z
+          .object({ taskId: z.string(), chatId: z.string(), title: z.string() })
+          .optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       try {
         if (input.agentId) requireAgent(input.agentId);
-        const taskId = await ctx.launcher.createTask(input);
-        return { taskId };
+        return await ctx.launcher.createTask(input);
       } catch (err) {
         unknownAgent(err);
       }
@@ -167,6 +177,89 @@ export const appRouter = t.router({
     .mutation(({ ctx, input }) => {
       ctx.db.prepare('UPDATE task SET archived_at = ? WHERE id = ?').run(ctx.now(), input.taskId);
       return { ok: true as const };
+    }),
+
+  taskRetitle: t.procedure
+    .input(z.object({ taskId: TaskId, title: z.string().min(1) }))
+    .output(z.object({ ok: z.literal(true) }))
+    .mutation(({ ctx, input }) => {
+      const result = ctx.db
+        .prepare('UPDATE task SET title = ? WHERE id = ?')
+        .run(input.title, input.taskId);
+      if (result.changes === 0) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown task' });
+      return { ok: true as const };
+    }),
+
+  taskBranchOut: t.procedure
+    .input(
+      z.object({
+        taskId: TaskId,
+        branch: z.string().min(1).optional(),
+        carryChanges: z.boolean(),
+      }),
+    )
+    .output(z.object({ worktreePath: z.string(), branch: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await ctx.launcher.branchOut(input.taskId, {
+          branch: input.branch,
+          carryChanges: input.carryChanges,
+        });
+      } catch (err) {
+        if (err instanceof AgentLiveError || err instanceof LaneIsolatedError) {
+          throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message });
+        }
+        throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
+      }
+    }),
+
+  taskSwitchBranch: t.procedure
+    .input(z.object({ taskId: TaskId, branch: z.string().min(1) }))
+    .output(z.object({ gateId: z.string() }))
+    .mutation(({ ctx, input }) => {
+      const task = getTask(ctx.db, input.taskId);
+      if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown task' });
+      if (!isAttached(task)) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'only an attached lane can switch the checkout',
+        });
+      }
+      const gateId = ctx.gates.request({
+        taskId: input.taskId,
+        gate: 'gate.branch_switch',
+        payload: { branch: input.branch, repoId: task.repo_id },
+      });
+      return { gateId };
+    }),
+
+  repoStatus: t.procedure
+    .input(z.object({ repoId: z.string().min(1) }))
+    .output(
+      z.object({
+        branch: z.string(),
+        dirty: z.boolean(),
+        ahead: z.number().nullable(),
+        behind: z.number().nullable(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const repo = ctx.db.prepare('SELECT path FROM repo WHERE id = ?').get(input.repoId) as
+        | { path: string }
+        | undefined;
+      if (!repo) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown repo' });
+      return repoWorkingStatus(repo.path);
+    }),
+
+  repoBranchList: t.procedure
+    .input(z.object({ repoId: z.string().min(1) }))
+    .output(z.array(z.string()))
+    .query(async ({ ctx, input }) => {
+      const repo = ctx.db.prepare('SELECT path FROM repo WHERE id = ?').get(input.repoId) as
+        | { path: string }
+        | undefined;
+      if (!repo) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown repo' });
+      return listLocalBranches(repo.path);
     }),
 
   /**
@@ -391,11 +484,35 @@ export const appRouter = t.router({
   gateDecide: t.procedure
     .input(z.object({ gateId: z.string(), decision: z.enum(['approve', 'deny']) }))
     .output(z.object({ ok: z.literal(true) }))
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       try {
         ctx.gates.decide(input.gateId, input.decision);
       } catch (err) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
+      }
+      if (input.decision === 'approve') {
+        const row = ctx.db
+          .prepare('SELECT gate, payload_json, task_id FROM gate_request WHERE id = ?')
+          .get(input.gateId) as
+          | { gate: string; payload_json: string; task_id: string }
+          | undefined;
+        if (row?.gate === 'gate.branch_switch') {
+          const payload = JSON.parse(row.payload_json) as { branch: string };
+          const task = getTask(ctx.db, row.task_id);
+          if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown task' });
+          const repo = ctx.db.prepare('SELECT path FROM repo WHERE id = ?').get(task.repo_id) as
+            | { path: string }
+            | undefined;
+          if (!repo) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown repo' });
+          try {
+            await checkoutBranch(taskCwd(task, repo.path), payload.branch);
+            ctx.db.prepare('UPDATE task SET branch = ? WHERE id = ?').run(payload.branch, task.id);
+            ctx.gates.markExecuted(input.gateId);
+          } catch (err) {
+            ctx.gates.markExecuted(input.gateId, (err as Error).message);
+            throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
+          }
+        }
       }
       return { ok: true as const };
     }),

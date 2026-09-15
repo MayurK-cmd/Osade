@@ -86,7 +86,7 @@ export const api = {
       { id: string; displayName: string; installed: boolean }[]
     >,
 
-  /** §8.2 — creating a task prepares a worktree. It does not start an agent. */
+  /** §8.2 — creating a task. Default is attached (no worktree). */
   taskCreate: (input: {
     repoPath: string;
     title: string;
@@ -94,7 +94,13 @@ export const api = {
     agentId?: string;
     chatId?: string;
     baseRef?: string;
-  }) => call('mutation', 'taskCreate', input) as Promise<{ taskId: string }>,
+    isolate?: boolean;
+  }) =>
+    call('mutation', 'taskCreate', input) as Promise<{
+      taskId: string;
+      isolated: boolean;
+      isolatedBecause?: { taskId: string; chatId: string; title: string };
+    }>,
 
   /** §8.2 — the launch sequence. Long-running: worktree, lane, agent start. */
   taskLaunch: (taskId: string) =>
@@ -168,13 +174,6 @@ export const api = {
   scmRefresh: (taskId: string) =>
     call('mutation', 'scmRefresh', { taskId }) as Promise<{ refreshed: boolean }>,
 
-  taskTranscript: (taskId: string, lines = 200) =>
-    call('query', 'taskTranscript', { taskId, lines }) as Promise<{
-      text: string;
-      revision: number;
-      truncated: boolean;
-    }>,
-
   /** Sends a prompt into the task's agent lane. State arrives through useLedger. */
   taskSend: (taskId: string, text: string, wait?: boolean) =>
     call('mutation', 'taskSend', { taskId, text, wait }) as Promise<{ ok: true }>,
@@ -182,4 +181,28 @@ export const api = {
   /** Hides the task from the ledger. Does not kill the agent process. */
   taskArchive: (taskId: string) =>
     call('mutation', 'taskArchive', { taskId }) as Promise<{ ok: true }>,
+
+  taskRetitle: (taskId: string, title: string) =>
+    call('mutation', 'taskRetitle', { taskId, title }) as Promise<{ ok: true }>,
+
+  taskBranchOut: (input: { taskId: string; branch?: string; carryChanges: boolean }) =>
+    call('mutation', 'taskBranchOut', input) as Promise<{
+      worktreePath: string;
+      branch: string;
+      stashKept?: string;
+    }>,
+
+  taskSwitchBranch: (taskId: string, branch: string) =>
+    call('mutation', 'taskSwitchBranch', { taskId, branch }) as Promise<{ gateId: string }>,
+
+  repoStatus: (repoId: string) =>
+    call('query', 'repoStatus', { repoId }) as Promise<{
+      branch: string;
+      dirty: boolean;
+      ahead: number | null;
+      behind: number | null;
+    }>,
+
+  repoBranchList: (repoId: string) =>
+    call('query', 'repoBranchList', { repoId }) as Promise<string[]>,
 };

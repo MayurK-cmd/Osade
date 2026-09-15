@@ -50,6 +50,9 @@ export function deriveStatus(f: TaskFacts, now: number): TaskStatus {
   // 9. There is an open PR and nothing above needs attention.
   if (scm?.pr_state === 'open') return 'pr_open';
 
+  // Quota / auth is a fact, not a finished turn. Must not land in awaiting_review.
+  if (agent?.external_block) return 'blocked_external';
+
   // 10. The agent finished a turn and nothing has restarted it. the substrate's `done`, and only
   //     `done`, produces `to_review` — see §6.1 on why `idle` is inert.
   if (agent?.last_event === 'to_review') return 'awaiting_review';

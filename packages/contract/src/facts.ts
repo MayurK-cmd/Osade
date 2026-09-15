@@ -33,8 +33,9 @@ export const Task = z.object({
   base_ref: z.string(),
   base_sha: z.string(),
   branch: z.string(),
-  worktree_path: z.string(),
-  /** Null until substrate has adopted the worktree. */
+  /** Null when the lane is attached to the repository checkout. */
+  worktree_path: z.string().nullable(),
+  /** Null until substrate has adopted the workspace. */
   substrate_workspace_id: SubstrateWorkspaceId.nullable(),
   archived_at: Timestamp.nullable(),
   created_at: Timestamp,
@@ -65,6 +66,11 @@ export const AgentFact = z.object({
   probe_failures: z.number().int().nonnegative(),
   /** Set only by an explicit process exit or an explicit user action. Never inferred. */
   terminated: z.boolean(),
+  /**
+   * Quota / auth failure reported by the agent. Distinct from a finished turn — this is a fact,
+   * not a status column.
+   */
+  external_block: z.string().nullable(),
   /**
    * §5.4.1 — INVARIANT: the monotonic write gate. the substrate's event stream replays on connect and
    * can drop silently, and its envelopes carry no sequence number, so every write is gated on

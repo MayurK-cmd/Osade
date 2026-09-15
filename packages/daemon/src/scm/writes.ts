@@ -1,5 +1,6 @@
 import type { Db } from '../db/index.js';
 import { getTask } from '../db/task-repo.js';
+import { taskCwd } from '../domain/cwd.js';
 import { git } from '../domain/git.js';
 import { Gates, type GateName } from '../domain/gates.js';
 import { ScmClient, ScmError } from './client.js';
@@ -251,7 +252,7 @@ export class ScmWrites {
     }
 
     try {
-      await git(task.worktree_path, args, 120_000);
+      await git(cwdFor(this.#db, task), args, 120_000);
       this.#gates.markExecuted(gateId);
     } catch (err) {
       this.#gates.markExecuted(gateId, (err as Error).message);
@@ -342,4 +343,12 @@ export class ScmWrites {
       (this.#db.prepare('SELECT * FROM repo WHERE id = ?').get(task.repo_id) as RepoRow) ?? null
     );
   }
+}
+
+function cwdFor(db: Db, task: { repo_id: string; worktree_path: string | null }): string {
+  const repo = db.prepare('SELECT path FROM repo WHERE id = ?').get(task.repo_id) as
+    | { path: string }
+    | undefined;
+  if (!repo) throw new ScmError(`unknown repo ${task.repo_id}`, 0);
+  return taskCwd(task, repo.path);
 }

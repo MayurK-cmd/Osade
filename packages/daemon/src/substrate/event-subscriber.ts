@@ -3,6 +3,7 @@ import type { SubstrateAgentStatus } from '@osade/contract';
 import type { Db } from '../db/index.js';
 import { getAgentFact } from '../db/task-repo.js';
 import { reduceAgentInput, type AgentInput } from '../domain/agent-reducer.js';
+import { classifyExternalBlock } from '../domain/external-block.js';
 import type { SubstrateClient } from './client.js';
 import { SubstrateEventStream, type SubstrateEventEnvelope, type Subscription } from './event-stream.js';
 
@@ -233,6 +234,48 @@ export class SubstrateEventSubscriber {
       at: this.#now(),
       activityText: data.title ?? undefined,
     });
+
+    // Session-limit / auth copy lives in the pane dump, not the title. Classify after `done`
+    // so a quota exit cannot land in awaiting_review.
+    if (data.agent_status === 'done') {
+      void this.#enrichExternalBlock(taskId);
+    }
+  }
+
+  async #enrichExternalBlock(taskId: string): Promise<void> {
+    const paneId = this.#paneIdFor(taskId);
+    if (!paneId) return;
+    const dump = await this.#paneDump(paneId);
+    if (!classifyExternalBlock(dump)) return;
+    this.#apply(taskId, {
+      kind: 'status',
+      status: 'done',
+      seq: this.#nextSeqFor(taskId),
+      at: this.#now(),
+      activityText: dump,
+    });
+  }
+
+  async #paneDump(paneId: string): Promise<string> {
+    try {
+      const result = await this.#client.request(
+        'pane.read',
+        { pane_id: paneId, source: 'recent', lines: 80, format: 'text', strip_ansi: true },
+      );
+      return (result as { read?: { text?: string } }).read?.text ?? '';
+    } catch {
+      return '';
+    }
+  }
+
+  #paneIdFor(taskId: string): string | null {
+    for (const [paneId, binding] of this.#panes) {
+      if (binding.taskId === taskId) return paneId;
+    }
+    const row = this.#db
+      .prepare('SELECT substrate_pane_id FROM agent_fact WHERE task_id = ?')
+      .get(taskId) as { substrate_pane_id: string | null } | undefined;
+    return row?.substrate_pane_id ?? null;
   }
 
   /**

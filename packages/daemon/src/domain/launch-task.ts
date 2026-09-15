@@ -14,17 +14,24 @@ import {
 import type { SubstrateEventSubscriber } from '../substrate/event-subscriber.js';
 import { Conventions } from '../knowledge/conventions.js';
 import { renderContextFile } from '../knowledge/context-file.js';
-import { worktreePathFor } from '../paths.js';
+import { osadePaths, worktreePathFor } from '../paths.js';
 import { agentEntry, DAEMON_DEFAULT_AGENT, hasCapability, requireAgent } from './agent-catalog.js';
 import type { Checkpoints } from './checkpoints.js';
 import {
   DEFAULT_MIRROR_PATHS,
+  currentBranch,
   defaultBranch,
+  git,
   githubRemote,
   mirrorPaths,
   pruneWorktrees,
   resolveSha,
+  stashApply,
+  stashDrop,
+  stashPush,
+  stashRefByMessage,
 } from './git.js';
+import { isAttached, taskCwd } from './cwd.js';
 
 /**
  * The launch sequence — OSADE.md §8.2.
@@ -65,14 +72,36 @@ export interface CreateTaskInput {
   agentId?: string | undefined;
   chatId?: string | undefined;
   baseRef?: string | undefined;
+  /** Default false — attached to the checkout. Forced true if the repo already has an attached lane. */
+  isolate?: boolean | undefined;
+}
+
+export interface CreateTaskResult {
+  taskId: string;
+  isolated: boolean;
+  isolatedBecause?: { taskId: string; chatId: string; title: string };
+}
+
+export class AgentLiveError extends Error {
+  constructor(taskId: string) {
+    super(`stop the agent on ${taskId} before branching out`);
+    this.name = 'AgentLiveError';
+  }
+}
+
+export class LaneIsolatedError extends Error {
+  constructor(taskId: string) {
+    super(`${taskId} is already on a worktree`);
+    this.name = 'LaneIsolatedError';
+  }
 }
 
 export interface LaunchResult {
   workspaceId: string;
   tabId: string;
   paneId: string;
-  worktreePath: string;
-  /** `<worktree>/.osade/CONTEXT.md` — §8.2 step 5. */
+  worktreePath: string | null;
+  /** `<cwd>/.osade/CONTEXT.md` or `~/.osade/tasks/<id>/CONTEXT.md` when attached. */
   contextPath: string;
   /** False on platforms where substrate cannot pass args to agent.start. See #agentStartArgs. */
   argsSupported: boolean;
@@ -136,8 +165,8 @@ export class LaunchTask {
     this.#checkpoints = options.checkpoints ?? null;
   }
 
-  /** Registers a repo and a task row. No substrate calls, no worktree — that is `launch`. */
-  async createTask(input: CreateTaskInput): Promise<string> {
+  /** Registers a repo and a task row. No substrate calls — that is `launch`. */
+  async createTask(input: CreateTaskInput): Promise<CreateTaskResult> {
     if (input.agentId) requireAgent(input.agentId);
 
     const repoId = await this.ensureRepo(input.repoPath);
@@ -146,6 +175,21 @@ export class LaunchTask {
       default_branch: string;
       default_agent: string | null;
     };
+
+    const holder = this.#db
+      .prepare(
+        `SELECT id, chat_id, title FROM task
+          WHERE repo_id = ? AND worktree_path IS NULL AND archived_at IS NULL
+          LIMIT 1`,
+      )
+      .get(repoId) as { id: string; chat_id: string; title: string } | undefined;
+
+    const wantIsolate = input.isolate === true;
+    const isolated = wantIsolate || holder != null;
+    const isolatedBecause =
+      !wantIsolate && holder != null
+        ? { taskId: holder.id, chatId: holder.chat_id, title: holder.title }
+        : undefined;
 
     const sibling = input.chatId
       ? (this.#db
@@ -156,16 +200,27 @@ export class LaunchTask {
           .get(input.chatId) as { title: string; base_ref: string; base_sha: string } | undefined)
       : undefined;
 
-    const baseRef = input.baseRef ?? sibling?.base_ref ?? repo.default_branch;
-    const baseSha =
-      sibling && input.baseRef == null ? sibling.base_sha : await resolveSha(repo.path, baseRef);
-
     const taskId = `t_${randomUUID().slice(0, 8)}`;
     const chatId = input.chatId ?? taskId;
     const resolvedAgent = input.agentId ?? repo.default_agent ?? this.#defaultAgent;
-    const slug = slugify(sibling?.title ?? input.title);
-    const branch = `osade/${slug}/${resolvedAgent}`;
-    const worktreePath = worktreePathFor(basename(repo.path), taskId);
+
+    let baseRef: string;
+    let baseSha: string;
+    let branch: string;
+    let worktreePath: string | null;
+
+    if (isolated) {
+      baseRef = input.baseRef ?? sibling?.base_ref ?? repo.default_branch;
+      baseSha =
+        sibling && input.baseRef == null ? sibling.base_sha : await resolveSha(repo.path, baseRef);
+      branch = `osade/${isolatedSlug(sibling?.title ?? input.title, taskId)}/${resolvedAgent}`;
+      worktreePath = worktreePathFor(basename(repo.path), taskId);
+    } else {
+      branch = await currentBranch(repo.path);
+      baseRef = input.baseRef ?? branch;
+      baseSha = await resolveSha(repo.path, 'HEAD');
+      worktreePath = null;
+    }
 
     this.#db
       .prepare(
@@ -187,7 +242,9 @@ export class LaunchTask {
         this.#now(),
       );
 
-    return taskId;
+    return isolatedBecause
+      ? { taskId, isolated, isolatedBecause }
+      : { taskId, isolated };
   }
 
   /** The §8.2 sequence. Serialized per repo, because substrate has no cross-call lock. */
@@ -208,37 +265,45 @@ export class LaunchTask {
     if (!entry) throw new Error(`no catalog entry for agent ${agentId}`);
 
     return withRepoLock(repo.path, async () => {
-      // 2. prune → worktree → mirror, all before anything is spawned.
-      await pruneWorktrees(repo.path);
+      let workspaceId: string;
 
-      // 3. One call gives the git worktree AND its workspace. The root pane is the shell lane.
-      const created = await this.#substrate.request<
-        'worktree.create',
-        { workspace: { workspace_id: string }; root_pane: { pane_id: string } }
-      >(
-        'worktree.create',
-        {
-          cwd: repo.path,
-          branch: task.branch,
-          base: task.base_sha,
-          path: task.worktree_path,
-          label: task.title,
-          focus: false,
-        },
-        60_000,
-      );
+      if (isAttached(task)) {
+        const created = await this.#substrate.request<
+          'workspace.create',
+          { workspace: { workspace_id: string } }
+        >(
+          'workspace.create',
+          { cwd: repo.path, label: task.title, focus: false },
+          60_000,
+        );
+        workspaceId = created.workspace.workspace_id;
+      } else {
+        await pruneWorktrees(repo.path);
+        const created = await this.#substrate.request<
+          'worktree.create',
+          { workspace: { workspace_id: string }; root_pane: { pane_id: string } }
+        >(
+          'worktree.create',
+          {
+            cwd: repo.path,
+            branch: task.branch,
+            base: task.base_sha,
+            path: task.worktree_path!,
+            label: task.title,
+            focus: false,
+          },
+          60_000,
+        );
+        workspaceId = created.workspace.workspace_id;
+        const mirrored = await mirrorPaths(repo.path, task.worktree_path!, DEFAULT_MIRROR_PATHS);
+        if (mirrored.length > 0) {
+          this.#onWarning(`mirrored into worktree: ${mirrored.join(', ')}`);
+        }
+      }
 
-      const workspaceId = created.workspace.workspace_id;
       this.#db
         .prepare('UPDATE task SET substrate_workspace_id = ? WHERE id = ?')
         .run(workspaceId, taskId);
-
-      // §9 rule 5 — after the worktree exists, before the agent starts. Without this, half of
-      // real repos will not even boot in a worktree.
-      const mirrored = await mirrorPaths(repo.path, task.worktree_path, DEFAULT_MIRROR_PATHS);
-      if (mirrored.length > 0) {
-        this.#onWarning(`mirrored into worktree: ${mirrored.join(', ')}`);
-      }
 
       // 4. The agent lane. This is the ONLY opportunity to set environment (§8.2).
       const tab = await this.#substrate.request<
@@ -268,7 +333,10 @@ export class LaunchTask {
       const contextPath = await this.#writeContext(task, repo);
 
       // 7. Build args from the catalog. the substrate picks the executable itself (§8.1).
-      const args = this.#agentStartArgs(entry);
+      const args = this.#agentStartArgs(entry, {
+        contextPath,
+        attached: isAttached(task),
+      });
 
       // `agent.start` is not a reliable readiness signal in either direction, verified against
       // the substrate 0.8.2-p20:
@@ -330,8 +398,78 @@ export class LaunchTask {
   }
 
   /**
-   * Args for `agent.start`, or none on a platform where the substrate cannot pass them.
-   *
+   * Move an attached lane onto its own worktree. Refuses if already isolated or a pane is live.
+   */
+  async branchOut(
+    taskId: string,
+    options: { branch?: string; carryChanges: boolean },
+  ): Promise<{ worktreePath: string; branch: string; stashKept?: string }> {
+    const task = getTask(this.#db, taskId);
+    if (!task) throw new Error(`unknown task ${taskId}`);
+    if (!isAttached(task)) throw new LaneIsolatedError(taskId);
+
+    const fact = this.#db
+      .prepare('SELECT pane_alive, terminated FROM agent_fact WHERE task_id = ?')
+      .get(taskId) as { pane_alive: number; terminated: number } | undefined;
+    if (fact?.pane_alive === 1 && fact.terminated !== 1) throw new AgentLiveError(taskId);
+
+    const repo = this.#db.prepare('SELECT path FROM repo WHERE id = ?').get(task.repo_id) as {
+      path: string;
+    };
+    const cwd = taskCwd(task, repo.path);
+    const head = await resolveSha(cwd, 'HEAD');
+    const current = await currentBranch(cwd);
+    const agentId = task.agent_id ?? this.#defaultAgent;
+    const branch =
+      options.branch?.trim() || `osade/${isolatedSlug(task.title, taskId)}/${agentId}`;
+    const stashName = `osade-branch-out-${taskId}`;
+    let stashRef: string | null = null;
+
+    if (options.carryChanges) {
+      const dirty = (await git(cwd, ['status', '--porcelain', '--untracked-files=all'])).trim().length > 0;
+      if (dirty) {
+        await stashPush(cwd, stashName);
+        stashRef = await stashRefByMessage(cwd, stashName);
+      }
+    }
+
+    try {
+      if (task.substrate_workspace_id) await this.teardown(taskId, { force: true });
+
+      const worktreePath = worktreePathFor(basename(repo.path), taskId);
+      this.#db
+        .prepare(
+          `UPDATE task SET worktree_path = ?, branch = ?, base_ref = ?, base_sha = ?,
+                           substrate_workspace_id = NULL WHERE id = ?`,
+        )
+        .run(worktreePath, branch, current, head, taskId);
+
+      await this.launch(taskId);
+
+      if (stashRef) {
+        try {
+          await stashApply(worktreePath, stashRef);
+          await stashDrop(cwd, stashRef);
+          stashRef = null;
+        } catch (err) {
+          throw new Error(
+            `could not apply uncommitted work onto ${branch}. The stash is kept as ${stashRef}: ${(err as Error).message}`,
+          );
+        }
+      }
+
+      return { worktreePath, branch };
+    } catch (err) {
+      if (stashRef) {
+        throw new Error(
+          `${(err as Error).message} Uncommitted work is in git stash ${stashRef} (${stashName}).`,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
    * **Windows limitation, verified against the substrate 0.8.2-p20.** With no args, the substrate submits
    * `& claude` and the agent starts. With args it submits
    * `Start-Process -FilePath claude -ArgumentList '...' -NoNewWindow -Wait -PassThru`, and
@@ -340,21 +478,24 @@ export class LaunchTask {
    * Windows are npm shims, passing args there is a silent launch failure.
    *
    * So on Windows the agent starts bare and the launch context is delivered through
-   * `<worktree>/.osade/CONTEXT.md` (§13.5 already provides for agents with no system-prompt
+   * the context file (§13.5 already provides for agents with no system-prompt
    * flag). Mode args such as `--permission-mode` are lost, which is a real capability
    * reduction and is reported rather than hidden.
    */
-  #agentStartArgs(entry: ReturnType<typeof agentEntry> & object): string[] {
+  #agentStartArgs(
+    entry: ReturnType<typeof agentEntry> & object,
+    opts: { contextPath: string; attached: boolean },
+  ): string[] {
     if (!agentStartArgsSupported()) {
       this.#onWarning(
         `agent.start args are unsupported on this platform; starting ${entry.id} bare and ` +
-          `delivering context through .osade/CONTEXT.md (mode args are not applied)`,
+          `delivering context through ${opts.attached ? opts.contextPath : '.osade/CONTEXT.md'} (mode args are not applied)`,
       );
       return [];
     }
     const args = [...entry.autonomousArgs];
     if (entry.systemPromptFlag && hasCapability(entry, 'system-prompt-injection')) {
-      args.push(entry.systemPromptFlag, `@.osade/CONTEXT.md`);
+      args.push(entry.systemPromptFlag, opts.attached ? opts.contextPath : `@.osade/CONTEXT.md`);
     }
     return args;
   }
@@ -365,9 +506,14 @@ export class LaunchTask {
    * When system-prompt args could not be passed, the context file is referenced here instead,
    * which is exactly what §13.5 prescribes for agents without system-prompt injection.
    */
-  openingPrompt(intent: string, argsSupported: boolean): string {
+  openingPrompt(
+    intent: string,
+    argsSupported: boolean,
+    opts?: { contextPath: string; attached: boolean },
+  ): string {
     if (argsSupported) return intent;
-    return `First read .osade/CONTEXT.md in this worktree, then: ${intent}`;
+    const where = opts?.attached ? opts.contextPath : '.osade/CONTEXT.md in this worktree';
+    return `First read ${where}, then: ${intent}`;
   }
 
   /**
@@ -512,17 +658,20 @@ export class LaunchTask {
     // holds its working directory open, which on Windows makes the checkout undeletable and
     // surfaces as `Permission denied` from `worktree.remove` even with force. `cd ~` is valid
     // in both POSIX shells and PowerShell.
-    if (survivor) {
+    if (survivor && task.worktree_path) {
       await this.#substrate
         .request('pane.send_input', { pane_id: survivor.pane_id, text: 'cd ~\r' })
         .catch(() => {});
-      // Wait on the observed cwd rather than on a fixed delay: the shell processes the `cd`
-      // asynchronously, and a sleep that is long enough on an idle machine is not long enough
-      // on a busy one.
       await this.#waitForCwdOutside(survivor.pane_id, task.worktree_path, 10_000);
     }
 
-    await this.#removeWorktree(task.substrate_workspace_id, task.worktree_path, options.force ?? false);
+    if (task.worktree_path) {
+      await this.#removeWorktree(task.substrate_workspace_id, task.worktree_path, options.force ?? false);
+    } else if (task.substrate_workspace_id) {
+      await this.#substrate
+        .request('workspace.close', { workspace_id: task.substrate_workspace_id })
+        .catch(() => {});
+    }
 
     this.#db.prepare('UPDATE task SET substrate_workspace_id = NULL WHERE id = ?').run(taskId);
     this.#db
@@ -734,10 +883,12 @@ export class LaunchTask {
    * a separate, explicit action (§13.4), and launching must never block on it.
    */
   async #writeContext(
-    task: { id: string; worktree_path: string; intent: string; base_ref: string; base_sha: string },
+    task: { id: string; worktree_path: string | null; intent: string; base_ref: string; base_sha: string },
     repo: { id: string; path: string; gh_owner: string | null; gh_name: string | null },
   ): Promise<string> {
-    const dir = join(task.worktree_path, '.osade');
+    const dir = task.worktree_path
+      ? join(task.worktree_path, '.osade')
+      : join(osadePaths().root, 'tasks', task.id);
     const path = join(dir, 'CONTEXT.md');
 
     const { injected, overflow } = new Conventions(this.#db).forInjection(repo.id);
@@ -840,6 +991,12 @@ export class LaunchTask {
     };
     return row.id;
   }
+}
+
+function isolatedSlug(title: string, taskId: string): string {
+  if (!title || title === 'New chat') return taskId.replace(/^t_/, '');
+  const slug = slugify(title);
+  return slug === 'new-chat' || slug === 'task' ? taskId.replace(/^t_/, '') : slug;
 }
 
 function slugify(title: string): string {

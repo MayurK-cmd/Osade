@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import type { Db } from '../db/index.js';
 import { getTask } from '../db/task-repo.js';
 import { osadePaths } from '../paths.js';
+import { taskCwd } from './cwd.js';
 import { diffStat, git } from './git.js';
 import { undoTurnNeedsHuman } from './gates.js';
 
@@ -81,11 +82,12 @@ export class Checkpoints {
   async capture(taskId: string, trigger: CheckpointTrigger): Promise<Checkpoint | null> {
     const task = getTask(this.#db, taskId);
     if (!task) return null;
+    const cwd = this.#cwd(task);
 
     try {
       const n = this.list(taskId).length;
       const refName = `refs/osade/turns/${taskId}/${n}`;
-      const sha = await this.#commitWorktreeState(task.worktree_path, refName, taskId, trigger);
+      const sha = await this.#commitWorktreeState(cwd, refName, taskId, trigger);
 
       const checkpoint: Checkpoint = {
         id: `c_${randomUUID().slice(0, 8)}`,
@@ -177,7 +179,7 @@ export class Checkpoints {
 
     let filesChanged = 0;
     try {
-      filesChanged = (await diffStat(task.worktree_path, target.sha)).filesChanged;
+      filesChanged = (await diffStat(this.#cwd(task), target.sha)).filesChanged;
     } catch (err) {
       this.#onWarning(`could not diff ${taskId} against ${target.sha}: ${(err as Error).message}`);
     }
@@ -202,7 +204,7 @@ export class Checkpoints {
     try {
       // Label the pre-undo state so it can be recovered, then reset onto the checkpoint.
       const preUndo = `refs/osade/undone/${taskId}/${this.#now()}`;
-      await this.#commitWorktreeState(task.worktree_path, preUndo, taskId, 'manual');
+      await this.#commitWorktreeState(this.#cwd(task), preUndo, taskId, 'manual');
       stashRef = preUndo;
     } catch (err) {
       throw new CheckpointError(
@@ -211,11 +213,19 @@ export class Checkpoints {
       );
     }
 
-    await git(task.worktree_path, ['reset', '--hard', plan.target.sha]);
-    await git(task.worktree_path, ['clean', '-fd']);
+    await git(this.#cwd(task), ['reset', '--hard', plan.target.sha]);
+    await git(this.#cwd(task), ['clean', '-fd']);
 
     this.#onWarning(`undid ${taskId} to ${plan.target.sha.slice(0, 12)}; previous state at ${label}`);
     return { stashRef };
+  }
+
+  #cwd(task: { repo_id: string; worktree_path: string | null }): string {
+    const repo = this.#db.prepare('SELECT path FROM repo WHERE id = ?').get(task.repo_id) as
+      | { path: string }
+      | undefined;
+    if (!repo) throw new CheckpointError(`unknown repo for task`);
+    return taskCwd(task, repo.path);
   }
 }
 

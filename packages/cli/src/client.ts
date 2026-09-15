@@ -85,7 +85,13 @@ export const api = {
     agentId?: string;
     chatId?: string;
     baseRef?: string;
-  }) => call('mutation', 'taskCreate', input) as Promise<{ taskId: string }>,
+    isolate?: boolean;
+  }) =>
+    call('mutation', 'taskCreate', input) as Promise<{
+      taskId: string;
+      isolated: boolean;
+      isolatedBecause?: { taskId: string; chatId: string; title: string };
+    }>,
   taskLaunch: (taskId: string) =>
     call('mutation', 'taskLaunch', { taskId }) as Promise<{
       taskId: string;

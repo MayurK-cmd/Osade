@@ -116,11 +116,14 @@ describe.skipIf(!E2E)('M0 acceptance — one task end to end', () => {
   });
 
   it('creates a task with a pinned base commit', async () => {
-    taskId = await launcher.createTask({
-      repoPath,
-      title: 'e2e smoke',
-      intent: 'Reply with exactly PONG and nothing else. Do not use any tools.',
-    });
+    taskId = (
+      await launcher.createTask({
+        repoPath,
+        title: 'e2e smoke',
+        intent: 'Reply with exactly PONG and nothing else. Do not use any tools.',
+        isolate: true,
+      })
+    ).taskId;
 
     const facts = getTaskFacts(db, taskId)!;
     expect(facts.task.base_sha).toBe(baseSha);
@@ -133,11 +136,12 @@ describe.skipIf(!E2E)('M0 acceptance — one task end to end', () => {
 
     expect(result.workspaceId).toMatch(/^w\d+$/);
     expect(result.paneId).toMatch(/^w\d+:p\d+$/);
-    expect(existsSync(result.worktreePath)).toBe(true);
+    expect(result.worktreePath).toBeTruthy();
+    expect(existsSync(result.worktreePath!)).toBe(true);
 
     // §9 rule 4 — the worktree is on the new branch at exactly the pinned base.
-    expect(sh(result.worktreePath, 'git', ['rev-parse', 'HEAD'])).toBe(baseSha);
-    expect(sh(result.worktreePath, 'git', ['rev-parse', '--abbrev-ref', 'HEAD'])).toMatch(
+    expect(sh(result.worktreePath!, 'git', ['rev-parse', 'HEAD'])).toBe(baseSha);
+    expect(sh(result.worktreePath!, 'git', ['rev-parse', '--abbrev-ref', 'HEAD'])).toMatch(
       /^osade\//,
     );
 
@@ -187,7 +191,8 @@ describe.skipIf(!E2E)('M0 acceptance — one task end to end', () => {
     // the directory undeletable even with force.
     await launcher.teardown(taskId, { force: true });
 
-    expect(existsSync(before.worktree_path)).toBe(false);
+    expect(before.worktree_path).toBeTruthy();
+    expect(existsSync(before.worktree_path!)).toBe(false);
     const after = getTaskFacts(db, taskId)!;
     expect(after.task.substrate_workspace_id).toBe(null);
     expect(after.agent?.pane_alive).toBe(false);

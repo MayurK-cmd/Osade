@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ServerMessage } from '@osade/contract';
 
@@ -34,10 +34,16 @@ class FakeStream extends EventEmitter {
 let db: Db;
 let streams: FakeStream[];
 
-function fakeClient(snapshot: unknown = { agents: [] }): SubstrateClient {
+function fakeClient(
+  snapshot: unknown = { agents: [] },
+  paneText = '',
+): SubstrateClient {
   return {
     socketPath: '/fake/osade.sock',
-    request: async () => snapshot,
+    request: async (method: string) => {
+      if (method === 'pane.read') return { read: { text: paneText } };
+      return snapshot;
+    },
   } as unknown as SubstrateClient;
 }
 
@@ -259,6 +265,22 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
     expect(fact.substrate_state).toBe('done');
     expect(fact.last_event).toBe('to_review');
     expect(fact.state_change_seq).toBe(100);
+    s.stop();
+  });
+
+  it('a session-limit pane dump is blocked_external, not to_review', async () => {
+    seed();
+    const s = subscriber(
+      fakeClient({ agents: [] }, 'Session limit reached. Resets Sunday 3pm (America/New_York).'),
+    );
+    await s.start();
+    s.watchPane('t1', 'w3:p2');
+    const pane = streams[1]!;
+    pane.push('pane.agent_status_changed', { agent_status: 'done' });
+    await vi.waitFor(() => {
+      expect(getAgentFact(db, 't1')!.external_block).toMatch(/Usage limit reached/i);
+    });
+    expect(getAgentFact(db, 't1')!.last_event).toBe('activity');
     s.stop();
   });
 

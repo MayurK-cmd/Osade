@@ -136,6 +136,7 @@ function view(
             last_probe_at: null,
             probe_failures: 0,
             terminated: false,
+            external_block: null,
             state_change_seq: 1,
             controller_generation: 0,
           },
@@ -161,5 +162,8 @@ function view(
     needsYou: false,
     chatId: over.skipChatId ? (undefined as unknown as string) : 'c1',
     agentId: over.skipChatId ? (undefined as unknown as string) : agentId,
+    attachment: 'worktree',
+    branch: over.branch ?? `osade/token-refresh/${agentId}`,
+    cwd: '/wt',
   };
 }

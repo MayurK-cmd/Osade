@@ -53,9 +53,15 @@ export const STATUS: Record<TaskStatus, StatusCopy> = {
     next: 'Read the diff, then open a pull request when you are happy.',
     tone: 'needs',
   },
+  blocked_external: {
+    label: 'Blocked by the agent’s account',
+    meaning: 'Quota, login, or rate limit — not a finished turn.',
+    next: 'Fix the login or wait for the reset, then send another message.',
+    tone: 'fail',
+  },
   implementing: {
     label: 'Working',
-    meaning: 'Writing code in its own worktree. Your checkout is untouched.',
+    meaning: 'Writing code.',
     tone: 'live',
   },
   verifying: {
@@ -81,7 +87,7 @@ export const STATUS: Record<TaskStatus, StatusCopy> = {
   },
   queued: {
     label: 'Not started',
-    meaning: 'Created, with a worktree ready. No agent is running yet.',
+    meaning: 'Created. No agent is running yet.',
     next: 'Start it when you are ready.',
     tone: 'rest',
   },
@@ -92,7 +98,7 @@ export const STATUS: Record<TaskStatus, StatusCopy> = {
   },
   stopped: {
     label: 'Stopped',
-    meaning: 'The agent’s process ended. Its work is still in the worktree.',
+    meaning: 'The agent’s process ended.',
     tone: 'rest',
   },
   merged: {
@@ -111,6 +117,17 @@ export const STATUS: Record<TaskStatus, StatusCopy> = {
  * §19.3 — a fixed-width, fixed-position gutter, so the needs-you set scans peripherally without
  * being read. The flag is the only glyph that means "stop and look".
  */
+export function statusCopyFor(
+  status: TaskStatus,
+  externalBlock?: string | null,
+): StatusCopy {
+  const copy = STATUS[status];
+  if (status === 'blocked_external' && externalBlock) {
+    return { ...copy, meaning: externalBlock };
+  }
+  return copy;
+}
+
 export const GLYPH: Record<Tone, string> = {
   needs: '⚑',
   live: '●',
@@ -136,13 +153,14 @@ export const SORT_RANK: Record<TaskStatus, number> = {
   implementing: 4,
   verifying: 5,
   verify_failed: 6,
-  ci_failed: 7,
-  pr_open: 8,
-  queued: 9,
-  idle: 10,
-  stopped: 11,
-  merged: 12,
-  archived: 13,
+  blocked_external: 7,
+  ci_failed: 8,
+  pr_open: 9,
+  queued: 10,
+  idle: 11,
+  stopped: 12,
+  merged: 13,
+  archived: 14,
 };
 
 /**

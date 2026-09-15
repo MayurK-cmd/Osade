@@ -124,13 +124,14 @@ const RANK: Record<TaskView['status'], number> = {
   implementing: 4,
   verifying: 5,
   verify_failed: 6,
-  ci_failed: 7,
-  pr_open: 8,
-  queued: 9,
-  idle: 10,
-  stopped: 11,
-  merged: 12,
-  archived: 13,
+  blocked_external: 7,
+  ci_failed: 8,
+  pr_open: 9,
+  queued: 10,
+  idle: 11,
+  stopped: 12,
+  merged: 13,
+  archived: 14,
 };
 
 export function sortLedger(tasks: TaskView[]): TaskView[] {

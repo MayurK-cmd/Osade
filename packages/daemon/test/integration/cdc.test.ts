@@ -112,6 +112,50 @@ describe('schema', () => {
     expect(row.chat_id).toBe('t_old');
     raw.close();
   });
+
+  it('M7 keeps existing worktree paths and makes the column nullable', () => {
+    const raw = new Database(':memory:');
+    raw.pragma('foreign_keys = ON');
+    raw.exec(
+      'CREATE TABLE schema_migration (id INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)',
+    );
+    for (const migration of MIGRATIONS) {
+      if (migration.id >= 7) break;
+      raw.exec(migration.sql);
+      raw.prepare('INSERT INTO schema_migration (id, applied_at) VALUES (?, ?)').run(
+        migration.id,
+        NOW,
+      );
+    }
+    raw.prepare('INSERT INTO org (id, name, created_at) VALUES (?, ?, ?)').run('o1', 'acme', NOW);
+    raw
+      .prepare(
+        'INSERT INTO repo (id, org_id, path, default_branch, created_at) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run('r1', 'o1', '/repo', 'main', NOW);
+    raw
+      .prepare(
+        `INSERT INTO task (id, repo_id, title, intent, origin_kind, base_ref, base_sha, branch,
+                           worktree_path, chat_id, created_at)
+         VALUES ('t_old', 'r1', 'fix', 'fix it', 'manual', 'main', 'h', 'b', '/wt', 't_old', ?)`,
+      )
+      .run(NOW);
+    raw.prepare('INSERT INTO agent_fact (task_id) VALUES (?)').run('t_old');
+
+    const next = MIGRATIONS.find((m) => m.id === 7);
+    expect(next, 'migration 7 must exist').toBeDefined();
+    raw.exec(next!.sql);
+
+    const row = raw.prepare('SELECT worktree_path FROM task WHERE id = ?').get('t_old') as {
+      worktree_path: string | null;
+    };
+    expect(row.worktree_path).toBe('/wt');
+    const info = raw.prepare('PRAGMA table_info(task)').all() as { name: string; notnull: number }[];
+    expect(info.find((c) => c.name === 'worktree_path')?.notnull).toBe(0);
+    const cols = raw.prepare('PRAGMA table_info(agent_fact)').all() as { name: string }[];
+    expect(cols.some((c) => c.name === 'external_block')).toBe(true);
+    raw.close();
+  });
 });
 
 describe('CDC — a raw SQL write reaches a subscriber', () => {

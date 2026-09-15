@@ -47,7 +47,7 @@ function rowToTask(r: Record<string, unknown>): Task {
     base_ref: r.base_ref as string,
     base_sha: r.base_sha as string,
     branch: r.branch as string,
-    worktree_path: r.worktree_path as string,
+    worktree_path: (r.worktree_path as string | null) ?? null,
     substrate_workspace_id: (r.substrate_workspace_id as string | null) ?? null,
     archived_at: (r.archived_at as number | null) ?? null,
     created_at: r.created_at as number,
@@ -73,6 +73,7 @@ export function getAgentFact(db: Db, taskId: string): AgentFact | null {
     last_probe_at: (r.last_probe_at as number | null) ?? null,
     probe_failures: r.probe_failures as number,
     terminated: int2bool(r.terminated),
+    external_block: (r.external_block as string | null) ?? null,
     state_change_seq: r.state_change_seq as number,
     controller_generation: r.controller_generation as number,
   };

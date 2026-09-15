@@ -220,3 +220,57 @@ export async function githubRemote(repoPath: string): Promise<GitHubRemote | nul
     return null;
   }
 }
+
+export async function repoWorkingStatus(repoPath: string): Promise<{
+  branch: string;
+  dirty: boolean;
+  ahead: number | null;
+  behind: number | null;
+}> {
+  const branch = await currentBranch(repoPath);
+  const porcelain = await git(repoPath, ['status', '--porcelain', '--untracked-files=all']);
+  let ahead: number | null = null;
+  let behind: number | null = null;
+  try {
+    const counts = (await git(repoPath, ['rev-list', '--left-right', '--count', '@{u}...HEAD'])).trim();
+    const [left, right] = counts.split(/\s+/);
+    behind = Number(left);
+    ahead = Number(right);
+  } catch {
+    // No upstream.
+  }
+  return { branch, dirty: porcelain.trim().length > 0, ahead, behind };
+}
+
+export async function listLocalBranches(repoPath: string): Promise<string[]> {
+  const current = await currentBranch(repoPath);
+  const out = await git(repoPath, ['branch', '--format=%(refname:short)']);
+  const all = out.split('\n').map((line) => line.trim()).filter(Boolean);
+  return [current, ...all.filter((name) => name !== current)];
+}
+
+export async function checkoutBranch(cwd: string, branch: string): Promise<void> {
+  await git(cwd, ['checkout', branch]);
+}
+
+export async function stashPush(cwd: string, message: string): Promise<void> {
+  await git(cwd, ['stash', 'push', '-u', '-m', message]);
+}
+
+export async function stashRefByMessage(cwd: string, message: string): Promise<string | null> {
+  const list = await git(cwd, ['stash', 'list', '--format=%gd:%gs']);
+  for (const line of list.split('\n')) {
+    const cut = line.indexOf(':');
+    if (cut < 0) continue;
+    if (line.slice(cut + 1).includes(message)) return line.slice(0, cut);
+  }
+  return null;
+}
+
+export async function stashApply(cwd: string, ref: string): Promise<void> {
+  await git(cwd, ['stash', 'apply', ref]);
+}
+
+export async function stashDrop(cwd: string, ref: string): Promise<void> {
+  await git(cwd, ['stash', 'drop', ref]);
+}

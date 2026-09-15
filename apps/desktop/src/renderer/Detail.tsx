@@ -1,22 +1,24 @@
-import { useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 
 import type { TaskView, VerifyRun } from '@osade/contract';
 
 import { agentColor } from './agent-color.js';
+import { api } from './api.js';
+import { BranchControl } from './BranchControl.js';
 import { Composer } from './Composer.js';
 import { Conventions } from './Conventions.js';
 import { GateCard } from './GateCard.js';
 import type { ChatGroup } from './lanes.js';
 import { PrOpen } from './PrOpen.js';
 import type { CatalogAgent } from './RepoSettings.js';
-import { GLYPH, STATUS, TONE_COLOUR, ago } from './status.js';
+import { GLYPH, STATUS, TONE_COLOUR, ago, statusCopyFor } from './status.js';
 import { Transcript } from './Transcript.js';
 import { VerifyPlanReview } from './VerifyPlanReview.js';
 
 export type Lane = 'transcript' | 'checks' | 'diff' | 'rules';
 
 const PANES: { id: Lane; label: string; chord: string }[] = [
-  { id: 'transcript', label: 'Transcript', chord: '1' },
+  { id: 'transcript', label: 'Chat', chord: '1' },
   { id: 'checks', label: 'Checks', chord: '2' },
   { id: 'diff', label: 'Diff', chord: '3' },
   { id: 'rules', label: 'Rules', chord: '4' },
@@ -30,7 +32,9 @@ export function Detail({
   onLane,
   catalog,
   optimistic,
+  isolatedNotice,
   onSend,
+  onNewIsolatedChat,
 }: {
   chat: ChatGroup;
   focusId: string;
@@ -39,15 +43,54 @@ export function Detail({
   onLane: (lane: Lane) => void;
   catalog: CatalogAgent[];
   optimistic?: string;
+  isolatedNotice?: string;
   onSend: (text: string) => Promise<void>;
+  onNewIsolatedChat: () => void;
 }): JSX.Element {
   const [filter, setFilter] = useState<string | null>(null);
+  const [modHeld, setModHeld] = useState(false);
+  const [branchOfferDismissed, setBranchOfferDismissed] = useState(false);
   const focused = chat.lanes.find((t) => t.task.id === focusId) ?? chat.lanes[0]!;
-  const copy = STATUS[chat.status];
+  const copy = statusCopyFor(chat.status, focused.agent?.external_block);
   const colour = TONE_COLOUR[copy.tone];
   const openGates = chat.lanes.flatMap((t) =>
     t.openGates.filter((g) => g.decided_at == null).map((gate) => ({ gate, task: t })),
   );
+  const failingChecks = focused.latestVerifyRuns.filter(
+    (run) => run.finished_at != null && run.exit_code !== 0,
+  ).length;
+  const showBranchOffer =
+    focused.attachment === 'repo' && focused.status === 'implementing' && !branchOfferDismissed;
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent): void {
+      setModHeld(event.metaKey || event.ctrlKey);
+    }
+    function onUp(event: KeyboardEvent): void {
+      if (!event.metaKey && !event.ctrlKey) setModHeld(false);
+    }
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onUp);
+    window.addEventListener('blur', () => setModHeld(false));
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onUp);
+    };
+  }, []);
+
+  async function handleSend(text: string): Promise<void> {
+    const match = text.match(/^\/branch(?:\s+(.*))?$/iu);
+    if (match) {
+      const name = match[1]?.trim();
+      await api.taskBranchOut({
+        taskId: focused.task.id,
+        branch: name || undefined,
+        carryChanges: true,
+      });
+      return;
+    }
+    await onSend(text);
+  }
 
   return (
     <div
@@ -86,6 +129,7 @@ export function Detail({
           >
             {copy.label}
           </span>
+          <BranchControl task={focused} onNewIsolatedChat={onNewIsolatedChat} />
         </div>
         <LaneStrip chat={chat} focusId={focused.task.id} onFocus={onFocus} />
       </header>
@@ -119,8 +163,41 @@ export function Detail({
             }}
           >
             {copy.next}
+            {chat.status === 'blocked_external' && focused.agent?.external_block
+              ? ` ${focused.agent.external_block}`
+              : ''}
           </section>
         )
+      )}
+
+      {showBranchOffer && (
+        <section
+          style={{
+            padding: '10px 16px',
+            borderBottom: '0.5px solid var(--line)',
+            background: 'var(--bg-1)',
+            fontSize: 'var(--t-s)',
+          }}
+        >
+          <p style={{ margin: '0 0 8px' }}>
+            This chat is on your real checkout. Branch out before the agent writes, or it will
+            edit files in place.
+          </p>
+          <button
+            className="primary"
+            onClick={() => {
+              void api
+                .taskBranchOut({ taskId: focused.task.id, carryChanges: true })
+                .then(() => setBranchOfferDismissed(true))
+                .catch(() => setBranchOfferDismissed(true));
+            }}
+          >
+            Work on a branch
+          </button>
+          <button onClick={() => setBranchOfferDismissed(true)} style={{ marginLeft: 8 }}>
+            Keep working here
+          </button>
+        </section>
       )}
 
       <nav
@@ -133,6 +210,12 @@ export function Detail({
       >
         {PANES.map((item) => {
           const selected = lane === item.id;
+          const count =
+            item.id === 'transcript'
+              ? openGates.length
+              : item.id === 'checks'
+                ? failingChecks
+                : 0;
           return (
             <button
               key={item.id}
@@ -148,7 +231,18 @@ export function Detail({
                 color: selected ? 'var(--ink)' : 'var(--ink-2)',
               }}
             >
-              {item.label} <kbd>{item.chord}</kbd>
+              {item.label}
+              {count > 0 ? (
+                <span style={{ marginLeft: 6, color: 'var(--st-fail)', fontSize: 'var(--t-xs)' }}>
+                  {count}
+                </span>
+              ) : (
+                modHeld && (
+                  <kbd style={{ marginLeft: 6, border: 'none', padding: 0, color: 'var(--ink-3)' }}>
+                    ⌘{item.chord}
+                  </kbd>
+                )
+              )}
             </button>
           );
         })}
@@ -172,11 +266,10 @@ export function Detail({
               </div>
             )}
             <Transcript
-              lanes={chat.lanes.map((t) => ({ taskId: t.task.id, agentId: t.agentId }))}
-              filter={filter}
-              active
-              refreshKey={focused.agent?.last_event_at ?? null}
-              prefix={optimistic}
+              tasks={filter ? chat.lanes.filter((t) => t.agentId === filter) : chat.lanes}
+              extraUser={optimistic}
+              followTaskId={focused.task.id}
+              isolatedNotice={isolatedNotice}
             />
           </>
         )}
@@ -200,8 +293,8 @@ export function Detail({
         key={chat.chatId}
         autoFocus
         catalog={catalog}
-        placeholder="Write to the agent. @name at the start of a line to pick a lane."
-        onSend={onSend}
+        placeholder="Write to the agent. /branch to isolate. @name at the start of a line to pick a lane."
+        onSend={handleSend}
       />
     </div>
   );
@@ -302,11 +395,12 @@ export function DraftPane({
       <header style={{ padding: '14px 16px 12px', borderBottom: '0.5px solid var(--line)' }}>
         <h1 style={{ fontSize: 'var(--t-l)', fontWeight: 600, margin: 0 }}>New chat</h1>
         <p style={{ margin: '6px 0 0', color: 'var(--ink-2)', fontSize: 'var(--t-s)' }}>
-          One chat is one branch. @mention an agent on its own line to pick a lane.
+          A new chat uses this checkout. Branch out when you want a worktree. @mention an agent
+          on its own line to pick a lane.
         </p>
       </header>
       <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
-        <Transcript lanes={[]} active prefix={optimistic} refreshKey={null} />
+        <Transcript tasks={[]} extraUser={optimistic} />
       </div>
       <Composer
         autoFocus
@@ -375,13 +469,21 @@ function TechnicalDetails({ task }: { task: TaskView }): JSX.Element {
         <summary style={{ cursor: 'default', color: 'var(--ink-2)' }}>Where this is running</summary>
         <div style={{ marginTop: 10 }}>
           <Field label="Agent" value={task.agentId} />
-          <Field label="Branch" value={task.task.branch} mono />
+          <Field label="Branch" value={task.branch} mono />
           <Field
             label="Based on"
             value={`${task.task.base_sha.slice(0, 12)} on ${task.task.base_ref}`}
             mono
           />
-          <Field label="Worktree" value={task.task.worktree_path} mono />
+          <Field
+            label="Cwd"
+            value={task.cwd}
+            mono
+          />
+          <Field
+            label="Attachment"
+            value={task.attachment === 'repo' ? 'Repository checkout' : 'Isolated worktree'}
+          />
           <Field
             label="Workspace"
             value={task.task.substrate_workspace_id ?? 'Not created yet'}

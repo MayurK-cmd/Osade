@@ -68,6 +68,7 @@ export const TaskStatus = z.enum([
   'stopped',
   'queued',
   'idle',
+  'blocked_external',
 ]);
 export type TaskStatus = z.infer<typeof TaskStatus>;
 

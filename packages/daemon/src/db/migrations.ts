@@ -321,6 +321,65 @@ UPDATE task SET chat_id = id WHERE chat_id IS NULL;
 CREATE INDEX task_chat_idx ON task(chat_id);
 `;
 
+/**
+ * M7 — attached lanes. `worktree_path` NULL means the lane runs in the repository checkout.
+ * Existing rows keep their paths (isolated). `external_block` is a fact for quota/auth exits
+ * so they cannot be derived as awaiting_review.
+ */
+const M007_ATTACHED = `
+PRAGMA foreign_keys=OFF;
+
+CREATE TABLE task_m7 (
+  id            TEXT PRIMARY KEY,
+  repo_id       TEXT NOT NULL REFERENCES repo(id),
+  title         TEXT NOT NULL,
+  intent        TEXT NOT NULL,
+  origin_kind   TEXT NOT NULL,
+  origin_ref    TEXT,
+  agent_id      TEXT,
+  chat_id       TEXT,
+  base_ref      TEXT NOT NULL,
+  base_sha      TEXT NOT NULL,
+  branch        TEXT NOT NULL,
+  worktree_path TEXT,
+  substrate_workspace_id TEXT,
+  archived_at   INTEGER,
+  created_at    INTEGER NOT NULL
+);
+
+INSERT INTO task_m7 (
+  id, repo_id, title, intent, origin_kind, origin_ref, agent_id, chat_id,
+  base_ref, base_sha, branch, worktree_path, substrate_workspace_id, archived_at, created_at
+)
+SELECT
+  id, repo_id, title, intent, origin_kind, origin_ref, agent_id, chat_id,
+  base_ref, base_sha, branch, worktree_path, substrate_workspace_id, archived_at, created_at
+FROM task;
+
+DROP TABLE task;
+ALTER TABLE task_m7 RENAME TO task;
+CREATE INDEX task_repo_idx ON task(repo_id);
+CREATE INDEX task_archived_idx ON task(archived_at);
+CREATE INDEX task_chat_idx ON task(chat_id);
+
+CREATE TRIGGER task_cdc_insert AFTER INSERT ON task BEGIN
+  INSERT INTO change_log (table_name, row_id, op, at)
+  VALUES ('task', NEW.id, 'insert', CAST(strftime('%s','now') AS INTEGER) * 1000);
+END;
+CREATE TRIGGER task_cdc_update AFTER UPDATE ON task BEGIN
+  INSERT INTO change_log (table_name, row_id, op, at)
+  VALUES ('task', NEW.id, 'update', CAST(strftime('%s','now') AS INTEGER) * 1000);
+END;
+CREATE TRIGGER task_cdc_delete AFTER DELETE ON task BEGIN
+  INSERT INTO change_log (table_name, row_id, op, at)
+  VALUES ('task', OLD.id, 'delete', CAST(strftime('%s','now') AS INTEGER) * 1000);
+END;
+
+ALTER TABLE agent_fact ADD COLUMN external_block TEXT;
+
+PRAGMA foreign_keys=ON;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     id: 1,
@@ -351,5 +410,10 @@ export const MIGRATIONS: readonly Migration[] = [
     id: 6,
     name: 'chat_id on task, backfilled for one-lane chats',
     sql: M006_CHAT_LANES,
+  },
+  {
+    id: 7,
+    name: 'nullable worktree_path for attached lanes, external_block fact',
+    sql: M007_ATTACHED,
   },
 ];

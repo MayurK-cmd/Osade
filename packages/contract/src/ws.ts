@@ -34,6 +34,10 @@ export const TaskView = z.object({
   chatId: z.string(),
   /** What will run / did run: task.agent_id ?? repo.default_agent ?? daemon fallback. */
   agentId: z.string(),
+  /** `repo` when cwd is the checkout; `worktree` when isolated. */
+  attachment: z.enum(['repo', 'worktree']),
+  branch: z.string(),
+  cwd: z.string(),
 });
 export type TaskView = z.infer<typeof TaskView>;
 
