@@ -25,6 +25,7 @@ export async function git(cwd: string, args: string[], timeoutMs = 30_000): Prom
     timeout: timeoutMs,
     windowsHide: true,
     maxBuffer: 16 * 1024 * 1024,
+    encoding: 'utf8',
   });
   return stdout;
 }

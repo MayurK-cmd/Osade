@@ -10,6 +10,7 @@ import {
 import type { TaskView } from '@osade/contract';
 
 import { api } from './api.js';
+import { composeAppend } from './compose-event.js';
 import { flagColour, parseUnified } from './highlight.js';
 import { PrOpen } from './PrOpen.js';
 
@@ -43,6 +44,7 @@ export function Changes({ task, lanes }: { task: TaskView; lanes?: TaskView[] })
   } | null>(null);
   const [picked, setPicked] = useState<Pick | null>(null);
   const [diff, setDiff] = useState<string | null>(null);
+  const [marked, setMarked] = useState<Set<number>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const drag = useRef<{ start: number; width: number } | null>(null);
   const stamp = `${task.task.id}:${task.cwd}:${task.agent?.last_event_at ?? 0}:${task.status}`;
@@ -95,6 +97,10 @@ export function Changes({ task, lanes }: { task: TaskView; lanes?: TaskView[] })
     };
   }, [picked, stamp, task.task.id]);
 
+  useEffect(() => {
+    setMarked(new Set());
+  }, [picked?.path, picked?.vs, diff]);
+
   function onDragStart(event: ReactMouseEvent<HTMLDivElement>): void {
     event.preventDefault();
     drag.current = { start: event.clientX, width };
@@ -122,6 +128,22 @@ export function Changes({ task, lanes }: { task: TaskView; lanes?: TaskView[] })
 
   const lines = parseUnified(diff ?? '');
 
+  function toggleLine(index: number): void {
+    setMarked((current) => {
+      const next = new Set(current);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }
+
+  function ask(): void {
+    if (picked == null) return;
+    const selected = [...marked].sort((a, b) => a - b).map((i) => lines[i]?.text ?? '');
+    const body = selected.length > 0 ? selected.join('\n') : (diff ?? '');
+    composeAppend(`About ${picked.path}:\n\`\`\`diff\n${body}\n\`\`\``);
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
@@ -137,7 +159,7 @@ export function Changes({ task, lanes }: { task: TaskView; lanes?: TaskView[] })
           <Group title="Changes" count={files.length}>
             {files.length === 0 && (
               <p style={{ margin: '4px 12px', color: 'var(--ink-3)', fontSize: 'var(--t-xs)' }}>
-                No uncommitted changes
+                No changes since this chat started
               </p>
             )}
             {files.map((row) => (
@@ -155,7 +177,7 @@ export function Changes({ task, lanes }: { task: TaskView; lanes?: TaskView[] })
                 ? 'Outgoing'
                 : outgoing.ahead === 0
                   ? 'Outgoing'
-                  : `Outgoing · ${outgoing.ahead} unpushed`
+                  : `Outgoing · ${outgoing.ahead}`
             }
             count={outgoing?.files.length ?? 0}
           >
@@ -166,7 +188,7 @@ export function Changes({ task, lanes }: { task: TaskView; lanes?: TaskView[] })
             )}
             {outgoing?.ahead === 0 && (
               <p style={{ margin: '4px 12px', color: 'var(--ink-3)', fontSize: 'var(--t-xs)' }}>
-                All commits are pushed
+                No new commits
               </p>
             )}
             {outgoing?.commits.map((commit) => (
@@ -217,6 +239,9 @@ export function Changes({ task, lanes }: { task: TaskView; lanes?: TaskView[] })
               <div
                 className="mono"
                 style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
                   padding: '6px 12px',
                   fontSize: 'var(--t-xs)',
                   color: 'var(--ink-2)',
@@ -226,12 +251,27 @@ export function Changes({ task, lanes }: { task: TaskView; lanes?: TaskView[] })
                   background: 'var(--bg-0)',
                 }}
               >
-                {picked.path}
-                {picked.vs === 'outgoing' ? ' · unpushed' : ''}
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {picked.path}
+                  {picked.vs === 'outgoing' ? ' · unpushed' : ''}
+                </span>
+                <button type="button" onClick={ask} style={{ fontSize: 'var(--t-xs)', flexShrink: 0 }}>
+                  {marked.size > 0 ? `Ask · ${marked.size}` : 'Ask'}
+                </button>
               </div>
               <pre className="mono" style={{ margin: 0, fontSize: 'var(--t-s)' }}>
                 {lines.map((line, i) => (
-                  <div key={i} className={`diff-${line.kind}`} style={{ padding: '0 12px', whiteSpace: 'pre' }}>
+                  <div
+                    key={i}
+                    className={`diff-${line.kind}`}
+                    onClick={() => toggleLine(i)}
+                    style={{
+                      padding: '0 12px',
+                      whiteSpace: 'pre',
+                      cursor: 'pointer',
+                      background: marked.has(i) ? 'var(--bg-3)' : undefined,
+                    }}
+                  >
                     {line.text.length === 0 ? ' ' : line.text}
                   </div>
                 ))}

@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 
 import { openDb } from './db/index.js';
 import { Checkpoints } from './domain/checkpoints.js';
+import { settleAgentReply } from './domain/chat-turns.js';
 import { Gates } from './domain/gates.js';
 import { LaunchTask } from './domain/launch-task.js';
 import { Triage } from './domain/triage.js';
@@ -66,9 +67,19 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
 
   const db = openDb(paths.db);
   const substrate = new SubstrateClient();
-  const subscriber = new SubstrateEventSubscriber(db, substrate, { now: options.now, onWarning });
+  let launcher: LaunchTask | undefined;
+  const subscriber = new SubstrateEventSubscriber(db, substrate, {
+    now: options.now,
+    onWarning,
+    onAgentQuiet: (taskId) => {
+      settleAgentReply(db, taskId, options.now?.() ?? Date.now());
+      void launcher?.sendQueued(taskId).catch((err: Error) => {
+        onWarning(`queued chat for ${taskId}: ${err.message}`);
+      });
+    },
+  });
   const checkpoints = new Checkpoints(db, { now: options.now, onWarning });
-  const launcher = new LaunchTask(db, substrate, subscriber, {
+  launcher = new LaunchTask(db, substrate, subscriber, {
     now: options.now,
     onWarning,
     checkpoints,
@@ -79,7 +90,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
   const verifier = new VerifyRunner(db, substrate, {
     now: options.now,
     onWarning,
-    sendToAgent: (taskId, text) => launcher.prompt(taskId, text, false),
+    sendToAgent: (taskId, text) => launcher!.sendTurn(taskId, text, { origin: 'automation' }),
   });
 
   // A substrate that is not running is not an error at boot: agents survive the app, but the app
@@ -97,7 +108,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
     now: options.now,
     onWarning,
     // §21 M2 — a reviewer's requested changes go back to the agent, like a verify failure.
-    sendToAgent: (taskId, text) => launcher.prompt(taskId, text, false),
+    sendToAgent: (taskId, text) => launcher!.sendTurn(taskId, text, { origin: 'automation' }),
   });
   poller.start();
 

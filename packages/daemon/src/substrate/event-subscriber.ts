@@ -44,6 +44,8 @@ export interface EventSubscriberOptions {
   /** Injected in tests so a fake substrate can be driven without a socket. */
   createStream?: (socketPath: string, subs: readonly Subscription[]) => SubstrateEventStream;
   onWarning?: (message: string) => void;
+  /** After a turn settles (`done` / `blocked`). Flush queued chat. */
+  onAgentQuiet?: (taskId: string) => void;
 }
 
 interface PaneBinding {
@@ -57,6 +59,7 @@ export class SubstrateEventSubscriber {
   readonly #now: () => number;
   readonly #createStream: (socketPath: string, subs: readonly Subscription[]) => SubstrateEventStream;
   readonly #onWarning: (message: string) => void;
+  readonly #onAgentQuiet: ((taskId: string) => void) | null;
   readonly #panes = new Map<string, PaneBinding>();
   #global: SubstrateEventStream | null = null;
 
@@ -67,6 +70,7 @@ export class SubstrateEventSubscriber {
     this.#createStream =
       options.createStream ?? ((path, subs) => new SubstrateEventStream(path, subs));
     this.#onWarning = options.onWarning ?? (() => {});
+    this.#onAgentQuiet = options.onAgentQuiet ?? null;
   }
 
   get paneCount(): number {
@@ -297,10 +301,10 @@ export class SubstrateEventSubscriber {
    * advancing the counter, or a counter advanced without the fact, reintroduces the bug.
    */
   #apply(taskId: string, input: AgentInput): void {
-    const write = this.#db.transaction(() => {
+    const apply = this.#db.transaction((): boolean => {
       const current = getAgentFact(this.#db, taskId);
       const { patch } = reduceAgentInput(current, input);
-      if (patch == null) return;
+      if (patch == null) return false;
 
       if (current == null) {
         this.#db
@@ -309,7 +313,7 @@ export class SubstrateEventSubscriber {
       }
 
       const columns = Object.keys(patch);
-      if (columns.length === 0) return;
+      if (columns.length === 0) return false;
 
       const assignments = columns.map((c) => `${c} = ?`).join(', ');
       const values = columns.map((c) => {
@@ -319,11 +323,21 @@ export class SubstrateEventSubscriber {
       this.#db
         .prepare(`UPDATE agent_fact SET ${assignments} WHERE task_id = ?`)
         .run(...values, taskId);
+      return true;
     });
+    let wrote = false;
     try {
-      write();
+      wrote = apply();
     } catch (err) {
       this.#onWarning(`agent_fact write for ${taskId}: ${(err as Error).message}`);
+      return;
+    }
+    if (
+      wrote &&
+      input.kind === 'status' &&
+      (input.status === 'done' || input.status === 'blocked')
+    ) {
+      this.#onAgentQuiet?.(taskId);
     }
   }
 

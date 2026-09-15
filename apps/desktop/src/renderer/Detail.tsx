@@ -10,7 +10,7 @@ import { Composer } from './Composer.js';
 import { Conventions } from './Conventions.js';
 import { Files } from './Files.js';
 import { GateCard } from './GateCard.js';
-import type { ChatGroup } from './lanes.js';
+import { chatLabel, type ChatGroup } from './lanes.js';
 import type { CatalogAgent } from './RepoSettings.js';
 import { GLYPH, STATUS, TONE_COLOUR, ago, statusCopyFor } from './status.js';
 import { Transcript } from './Transcript.js';
@@ -116,7 +116,7 @@ export function Detail({
               minWidth: 0,
             }}
           >
-            {chat.title}
+            {chatLabel(chat)}
           </h1>
           <span
             style={{
@@ -294,15 +294,18 @@ export function Detail({
         {lane === 'rules' && <Conventions repoId={focused.task.repo_id} />}
       </div>
 
-      {lane !== 'files' && lane !== 'diff' && (
-        <Composer
-          key={chat.chatId}
-          autoFocus
-          catalog={catalog}
-          placeholder="Message. Enter to send, Shift+Enter for a new line. @name to pick a lane."
-          onSend={handleSend}
-        />
-      )}
+      <Composer
+        key={chat.chatId}
+        autoFocus={lane === 'transcript'}
+        catalog={catalog}
+        held={
+          focused.status === 'implementing' ||
+          focused.status === 'verifying' ||
+          focused.status === 'queued'
+        }
+        placeholder="Message. Enter to send, Shift+Enter for a new line. @name to pick a lane."
+        onSend={handleSend}
+      />
     </div>
   );
 }

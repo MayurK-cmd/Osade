@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { isOrchestratorId } from '@osade/contract';
+
 import { openDb, type Db } from '../../src/db/index.js';
 import { getTask } from '../../src/db/task-repo.js';
 import { LaunchTask } from '../../src/domain/launch-task.js';
@@ -89,5 +91,38 @@ describe('chat lanes — createTask', () => {
         agentId: 'not-an-agent',
       }),
     ).rejects.toThrow(/unknown agent/i);
+  });
+
+  it('home: true reuses the plan chat and stays attached', async () => {
+    const first = await launcher.createTask({
+      repoPath: repo,
+      title: 'Plan',
+      intent: 'plan work',
+      home: true,
+    });
+    const again = await launcher.createTask({
+      repoPath: repo,
+      title: 'Plan',
+      intent: 'plan work',
+      home: true,
+    });
+    expect(again.taskId).toBe(first.taskId);
+    expect(again.isolated).toBe(false);
+    const task = getTask(db, first.taskId)!;
+    expect(task.worktree_path).toBeNull();
+    expect(isOrchestratorId(task.chat_id)).toBe(true);
+  });
+
+  it('home: true stays attached even when another chat holds the checkout', async () => {
+    await launcher.createTask({ repoPath: repo, title: 'One', intent: 'a' });
+    const plan = await launcher.createTask({
+      repoPath: repo,
+      title: 'Plan',
+      intent: 'plan work',
+      home: true,
+    });
+    expect(plan.isolated).toBe(false);
+    const task = getTask(db, plan.taskId)!;
+    expect(task.worktree_path).toBeNull();
   });
 });

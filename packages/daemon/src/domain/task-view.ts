@@ -6,6 +6,7 @@ import { getTaskFacts } from '../db/task-repo.js';
 import { DAEMON_DEFAULT_AGENT } from './agent-catalog.js';
 import { isAttached, taskCwd } from './cwd.js';
 import { deriveStatus } from './derive-status.js';
+import { listTurns } from './chat-turns.js';
 
 export function toTaskView(db: Db, taskId: string, now: number): TaskView | null {
   const facts = getTaskFacts(db, taskId);
@@ -28,5 +29,6 @@ export function toTaskView(db: Db, taskId: string, now: number): TaskView | null
     attachment,
     branch: facts.task.branch,
     cwd: repo ? taskCwd(facts.task, repo.path) : facts.task.worktree_path ?? '',
+    turns: listTurns(db, taskId),
   };
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 
 import { agentColor } from './agent-color.js';
+import { COMPOSE_EVENT } from './compose-event.js';
 import { parseMentions } from './mentions.js';
 import type { CatalogAgent } from './RepoSettings.js';
 
@@ -9,12 +10,15 @@ export function Composer({
   placeholder,
   disabled,
   autoFocus,
+  held,
   catalog = [],
   onSend,
 }: {
   placeholder: string;
   disabled?: boolean;
   autoFocus?: boolean;
+  /** A turn is live — Send queues instead of interrupting. */
+  held?: boolean;
   catalog?: CatalogAgent[];
   onSend: (text: string) => Promise<void>;
 }): JSX.Element {
@@ -24,6 +28,9 @@ export function Composer({
   const [hint, setHint] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
   const ready = !disabled && !busy && text.trim().length > 0;
+  const hintText = held
+    ? 'Held until this turn finishes. Enter queues it.'
+    : placeholder;
 
   const ids = catalog.map((a) => a.id);
   const mentions = useMemo(() => parseMentions(text, ids), [text, ids]);
@@ -35,6 +42,21 @@ export function Composer({
   useEffect(() => {
     if (autoFocus) ref.current?.focus();
   }, [autoFocus]);
+
+  useEffect(() => {
+    function onCompose(event: Event): void {
+      const detail = (event as CustomEvent<string>).detail;
+      if (typeof detail !== 'string' || detail.trim().length === 0) return;
+      setText((current) => {
+        const chunk = detail.trim();
+        if (current.trim().length === 0) return chunk;
+        return `${current.replace(/\s+$/u, '')}\n${chunk}`;
+      });
+      ref.current?.focus();
+    }
+    window.addEventListener(COMPOSE_EVENT, onCompose);
+    return () => window.removeEventListener(COMPOSE_EVENT, onCompose);
+  }, []);
 
   useEffect(() => {
     setHint(0);
@@ -100,7 +122,7 @@ export function Composer({
           rows={1}
           disabled={disabled || busy}
           value={text}
-          placeholder={placeholder}
+          placeholder={hintText}
           autoFocus={autoFocus}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
@@ -182,7 +204,7 @@ export function Composer({
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
         <button className="primary" disabled={!ready} onClick={send}>
-          {busy ? 'Sending…' : 'Send'}
+          {busy ? 'Sending…' : held ? 'Hold' : 'Send'}
         </button>
         {error && (
           <span className="mono" style={{ color: 'var(--st-fail)', fontSize: 'var(--t-xs)' }}>

@@ -1,4 +1,4 @@
-import type { TaskStatus, TaskView } from '@osade/contract';
+import { isOrchestratorId, type TaskStatus, type TaskView } from '@osade/contract';
 
 import { SORT_RANK } from './status.js';
 
@@ -37,6 +37,41 @@ export function showPinnedNeedsYou(needsCount: number, visibleCount: number): bo
 
 export function primaryLane(chat: ChatGroup): TaskView {
   return chat.lanes[0]!;
+}
+
+export function chatLabel(chat: Pick<ChatGroup, 'chatId' | 'title'>): string {
+  return isOrchestratorId(chat.chatId) ? 'Plan' : chat.title;
+}
+
+export type BoardColumnId = 'needs' | 'working' | 'review' | 'ready' | 'rest';
+
+export const BOARD_COLUMNS: { id: BoardColumnId; label: string }[] = [
+  { id: 'needs', label: 'Needs you' },
+  { id: 'working', label: 'Working' },
+  { id: 'review', label: 'In review' },
+  { id: 'ready', label: 'Ready to merge' },
+  { id: 'rest', label: 'The rest' },
+];
+
+/** Derived placement — never a stored status. */
+export function boardColumn(chat: ChatGroup): BoardColumnId {
+  if (chat.needsYou) return 'needs';
+  if (chat.status === 'implementing' || chat.status === 'verifying') return 'working';
+  if (chat.status === 'pr_open') return 'review';
+  if (chat.status === 'merged') return 'ready';
+  return 'rest';
+}
+
+export function boardGroups(chats: ChatGroup[]): Record<BoardColumnId, ChatGroup[]> {
+  const out: Record<BoardColumnId, ChatGroup[]> = {
+    needs: [],
+    working: [],
+    review: [],
+    ready: [],
+    rest: [],
+  };
+  for (const chat of chats) out[boardColumn(chat)].push(chat);
+  return out;
 }
 
 export function worstStatus(statuses: TaskStatus[]): TaskStatus {

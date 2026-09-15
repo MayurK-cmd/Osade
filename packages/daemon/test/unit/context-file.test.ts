@@ -71,6 +71,23 @@ describe('§13.5 CONTEXT.md', () => {
     expect(body).toContain('- base: abc1234 on main');
   });
 
+  it('pastes .osade/rules.md verbatim when present', () => {
+    const { body, included } = renderContextFile({
+      repoSlug: 'acme/widget',
+      intent: 'Fix the flaky retry test.',
+      baseRef: 'main',
+      baseSha: 'abc1234',
+      conventions: [rule()],
+      rulesText: '- Keep PRs to one concern.\n- Tests go with the change.',
+      verifySteps: [],
+    });
+    expect(included).toBe(1);
+    expect(body).toContain('## Rules this project enforces');
+    expect(body).toContain('- Keep PRs to one concern.');
+    expect(body).toContain('- Tests go with the change.');
+    expect(body).not.toContain('Keep each pull request to one concern.');
+  });
+
   it('names the verification the agent will be held to', () => {
     const { body } = render([rule()]);
     expect(body).toContain('## Verification you must pass before this is reviewable');

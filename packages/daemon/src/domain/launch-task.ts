@@ -4,6 +4,8 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { platform } from 'node:os';
 import { basename, join } from 'node:path';
 
+import { orchestratorId } from '@osade/contract';
+
 import type { Db } from '../db/index.js';
 import { getTask } from '../db/task-repo.js';
 import {
@@ -15,7 +17,9 @@ import type { SubstrateEventSubscriber } from '../substrate/event-subscriber.js'
 import { Conventions } from '../knowledge/conventions.js';
 import { renderContextFile } from '../knowledge/context-file.js';
 import { osadePaths, worktreePathFor } from '../paths.js';
+import { readRepoRules, ensureRepoRules } from '../knowledge/repo-rules.js';
 import { agentEntry, DAEMON_DEFAULT_AGENT, hasCapability, requireAgent } from './agent-catalog.js';
+import { dispatchQueued, sendTurn as recordTurn } from './chat-turns.js';
 import type { Checkpoints } from './checkpoints.js';
 import {
   DEFAULT_MIRROR_PATHS,
@@ -112,6 +116,8 @@ export interface CreateTaskInput {
   baseRef?: string | undefined;
   /** Default false — attached to the checkout. Forced true if the repo already has an attached lane. */
   isolate?: boolean | undefined;
+  /** §17 — repo-root planner. Never isolated; reused if it already exists. */
+  home?: boolean | undefined;
 }
 
 export interface CreateTaskResult {
@@ -214,6 +220,16 @@ export class LaunchTask {
       default_agent: string | null;
     };
 
+    const homeChatId = input.home ? orchestratorId(repoId) : null;
+    if (homeChatId) {
+      const existing = this.#db
+        .prepare(
+          `SELECT id FROM task WHERE chat_id = ? AND archived_at IS NULL ORDER BY created_at ASC LIMIT 1`,
+        )
+        .get(homeChatId) as { id: string } | undefined;
+      if (existing) return { taskId: existing.id, isolated: false };
+    }
+
     const holder = this.#db
       .prepare(
         `SELECT id, chat_id, title FROM task
@@ -223,9 +239,10 @@ export class LaunchTask {
       .get(repoId) as { id: string; chat_id: string; title: string } | undefined;
 
     const wantIsolate = input.isolate === true;
-    const isolated = wantIsolate || holder != null;
+    // ponytail: home stays on the checkout even if another attached chat exists.
+    const isolated = homeChatId ? false : wantIsolate || holder != null;
     const isolatedBecause =
-      !wantIsolate && holder != null
+      !homeChatId && !wantIsolate && holder != null
         ? { taskId: holder.id, chatId: holder.chat_id, title: holder.title }
         : undefined;
 
@@ -239,7 +256,7 @@ export class LaunchTask {
       : undefined;
 
     const taskId = `t_${randomUUID().slice(0, 8)}`;
-    const chatId = input.chatId ?? taskId;
+    const chatId = homeChatId ?? input.chatId ?? taskId;
     const resolvedAgent = input.agentId ?? repo.default_agent ?? this.#defaultAgent;
 
     let baseRef: string;
@@ -825,6 +842,34 @@ export class LaunchTask {
   }
 
   /**
+   * Typed chat send — AO's contract: a message, not a keystroke. Queued while a turn is in flight.
+   */
+  async sendTurn(
+    taskId: string,
+    text: string,
+    options: { wait?: boolean; origin?: 'human' | 'automation' } = {},
+  ): Promise<void> {
+    await recordTurn(this.#db, (id, body, wait) => this.prompt(id, body, wait), {
+      taskId,
+      text,
+      origin: options.origin ?? 'human',
+      now: this.#now(),
+      wait: options.wait,
+    });
+  }
+
+  /** Dispatch the next held message after the live turn settles. */
+  async sendQueued(taskId: string): Promise<void> {
+    await dispatchQueued(
+      this.#db,
+      (id, body, wait) => this.prompt(id, body, wait),
+      taskId,
+      false,
+      this.#now(),
+    );
+  }
+
+  /**
    * Sends a prompt into the task's agent lane.
    *
    * `wait` is retried once on `agent_prompt_stalled`: the substrate requires an observed state change
@@ -946,15 +991,18 @@ export class LaunchTask {
     const path = join(dir, 'CONTEXT.md');
 
     const { injected, overflow } = new Conventions(this.#db).forInjection(repo.id);
+    const rulesText = readRepoRules(repo.path);
+    const usePasted = rulesText.trim().length > 0;
     const rendered = renderContextFile({
       repoSlug:
         repo.gh_owner && repo.gh_name ? `${repo.gh_owner}/${repo.gh_name}` : basename(repo.path),
       intent: task.intent,
       baseRef: task.base_ref,
       baseSha: task.base_sha,
-      conventions: injected,
+      conventions: usePasted ? [] : injected,
+      rulesText: usePasted ? rulesText : undefined,
       verifySteps: this.#verifyStepsFor(repo.id),
-      overflow,
+      overflow: usePasted ? 0 : overflow,
     });
 
     if (rendered.omitted > 0) {
@@ -1014,6 +1062,7 @@ export class LaunchTask {
    * `ON CONFLICT DO NOTHING` followed by a read is race-free without a lock of our own.
    */
   async ensureRepo(repoPath: string): Promise<string> {
+    ensureRepoRules(repoPath);
     const existing = this.#db.prepare('SELECT id FROM repo WHERE path = ?').get(repoPath) as
       | { id: string }
       | undefined;

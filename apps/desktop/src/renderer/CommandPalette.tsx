@@ -22,27 +22,45 @@ export function CommandPalette({
   onClose,
   selected,
   repo,
+  chats = [],
+  onOpenChat,
   onNewChat,
+  onPlan,
+  onBoard,
   onError,
 }: {
   open: boolean;
   onClose: () => void;
   selected: TaskView | null;
   repo: PaletteRepo | null;
+  chats?: { id: string; title: string }[];
+  onOpenChat?: (id: string) => void;
   onNewChat: () => void;
+  onPlan?: () => void;
+  onBoard?: () => void;
   onError: (message: string) => void;
 }): JSX.Element | null {
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
 
   const items = useMemo<Item[]>(() => {
-    const repoId = repo?.repoId ?? selected?.task.repo_id ?? null;
     return [
       {
         id: 'new',
         label: 'New chat',
         chord: chord('t'),
         run: onNewChat,
+      },
+      {
+        id: 'plan',
+        label: 'Open plan',
+        disabled: repo == null && selected == null,
+        run: () => onPlan?.(),
+      },
+      {
+        id: 'board',
+        label: 'Show board',
+        run: () => onBoard?.(),
       },
       {
         id: 'launch',
@@ -68,16 +86,13 @@ export function CommandPalette({
           await api.prOpenRequest(selected!.task.id, selected!.task.title, '');
         },
       },
-      {
-        id: 'mine',
-        label: 'Mine repository',
-        disabled: repoId == null,
-        run: async () => {
-          await api.mineRepo(repoId!);
-        },
-      },
+      ...chats.map((chat) => ({
+        id: `chat:${chat.id}`,
+        label: `Open ${chat.title}`,
+        run: () => onOpenChat?.(chat.id),
+      })),
     ];
-  }, [onNewChat, repo, selected]);
+  }, [chats, onBoard, onNewChat, onOpenChat, onPlan, repo, selected]);
 
   const filtered = items.filter((item) =>
     item.label.toLowerCase().includes(query.trim().toLowerCase()),

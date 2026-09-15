@@ -14,7 +14,7 @@ export interface Migration {
 }
 
 /** Tables whose mutations must reach the UI. Each gets the three CDC triggers below. */
-export const CDC_TABLES = [
+const CORE_CDC_TABLES = [
   'task',
   'agent_fact',
   'verify_run',
@@ -22,6 +22,8 @@ export const CDC_TABLES = [
   'scm_fact',
   'turn_checkpoint',
 ] as const;
+
+export const CDC_TABLES = [...CORE_CDC_TABLES, 'chat_turn'] as const;
 
 export type CdcTable = (typeof CDC_TABLES)[number];
 
@@ -380,11 +382,26 @@ ALTER TABLE agent_fact ADD COLUMN external_block TEXT;
 PRAGMA foreign_keys=ON;
 `;
 
+const M008_CHAT_TURNS = `
+CREATE TABLE chat_turn (
+  id          TEXT PRIMARY KEY,
+  task_id     TEXT NOT NULL REFERENCES task(id),
+  seq         INTEGER NOT NULL,
+  role        TEXT NOT NULL,
+  origin      TEXT NOT NULL,
+  text        TEXT NOT NULL,
+  delivery    TEXT NOT NULL,
+  created_at  INTEGER NOT NULL,
+  UNIQUE (task_id, seq)
+);
+CREATE INDEX chat_turn_task_seq ON chat_turn (task_id, seq);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     id: 1,
     name: 'core tables, facts, change_log',
-    sql: M001_CORE + CDC_TABLES.map(cdcTriggers).join('\n'),
+    sql: M001_CORE + CORE_CDC_TABLES.map(cdcTriggers).join('\n'),
   },
   {
     id: 2,
@@ -415,5 +432,10 @@ export const MIGRATIONS: readonly Migration[] = [
     id: 7,
     name: 'nullable worktree_path for attached lanes, external_block fact',
     sql: M007_ATTACHED,
+  },
+  {
+    id: 8,
+    name: 'durable chat turns — typed send, not pane scrape',
+    sql: M008_CHAT_TURNS + cdcTriggers('chat_turn'),
   },
 ];

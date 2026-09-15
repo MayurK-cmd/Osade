@@ -194,7 +194,7 @@ export default tseslint.config(
 
   // ── the synthetic orchestrator id lives in exactly one file (§17) ─────────
   {
-    files: ['packages/daemon/src/domain/orchestrator-id.ts'],
+    files: ['packages/contract/src/orchestrator-id.ts'],
     rules: { 'no-restricted-syntax': ['error', NO_ENV_DESTRUCTURE, NO_PROCESS_BINDING_IMPORT] },
   },
 

@@ -25,3 +25,8 @@ photographs the window.
 4) I would not auto-checkout main for you. If you opened the repo on feat/foo, attaching there is the honest default. Silent git checkout main is the failure we added gate.branch_switch to prevent.
 
 Want me to retitle that control and the empty-state lines to this wording?
+
+5) read about git worktrees - https://www.youtube.com/watch?v=oI631eCAQnQ
+
+6) redo checks tab
+

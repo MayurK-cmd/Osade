@@ -38,6 +38,7 @@ import {
 import type { Triage, TriageKind } from '../domain/triage.js';
 import type { VerifyRunner } from '../domain/verify-run.js';
 import type { Knowledge } from '../knowledge/service.js';
+import { readRepoRules, repoRulesPath, writeRepoRules } from '../knowledge/repo-rules.js';
 import type { ScmPoller } from '../scm/poller.js';
 import type { ScmWrites } from '../scm/writes.js';
 
@@ -141,6 +142,7 @@ export const appRouter = t.router({
         chatId: z.string().optional(),
         baseRef: z.string().optional(),
         isolate: z.boolean().optional(),
+        home: z.boolean().optional(),
       }),
     )
     .output(
@@ -161,6 +163,27 @@ export const appRouter = t.router({
       }
     }),
 
+  orchestratorOpen: t.procedure
+    .input(z.object({ repoPath: z.string().min(1), agentId: z.string().optional() }))
+    .output(z.object({ taskId: TaskId, chatId: z.string(), isolated: z.literal(false) }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        if (input.agentId) requireAgent(input.agentId);
+        const created = await ctx.launcher.createTask({
+          repoPath: input.repoPath,
+          title: 'Plan',
+          intent: 'Plan work across this repository and delegate focused tasks.',
+          agentId: input.agentId,
+          home: true,
+        });
+        const row = getTask(ctx.db, created.taskId);
+        if (!row) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'plan chat missing' });
+        return { taskId: created.taskId, chatId: row.chat_id, isolated: false as const };
+      } catch (err) {
+        unknownAgent(err);
+      }
+    }),
+
   /** Runs the §8.2 launch sequence. Long-running: worktree, lane, agent start. */
   taskLaunch: t.procedure
     .input(z.object({ taskId: TaskId }))
@@ -175,7 +198,10 @@ export const appRouter = t.router({
     .input(z.object({ taskId: TaskId, text: z.string().min(1), wait: z.boolean().optional() }))
     .output(z.object({ ok: z.literal(true) }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.launcher.prompt(input.taskId, input.text, input.wait ?? false);
+      await ctx.launcher.sendTurn(input.taskId, input.text, {
+        wait: input.wait ?? false,
+        origin: 'human',
+      });
       return { ok: true as const };
     }),
 
@@ -287,7 +313,7 @@ export const appRouter = t.router({
     .query(async ({ ctx, input }) => {
       const located = locateTaskCwd(ctx, input.taskId);
       try {
-        return await listWorkingChanges(located.cwd);
+        return await listWorkingChanges(located.cwd, located.baseSha);
       } catch (err) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
       }
@@ -311,7 +337,7 @@ export const appRouter = t.router({
     .query(async ({ ctx, input }) => {
       const located = locateTaskCwd(ctx, input.taskId);
       try {
-        return await readChangeDiff(located.cwd, input.path, input.vs);
+        return await readChangeDiff(located.cwd, input.path, input.vs, located.baseSha);
       } catch (err) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
       }
@@ -460,6 +486,22 @@ export const appRouter = t.router({
         defaultAgent: repo.default_agent,
         taskCount: counted.n,
       };
+    }),
+
+  repoRulesGet: t.procedure
+    .input(z.object({ repoId: z.string().min(1) }))
+    .output(z.object({ text: z.string(), path: z.string() }))
+    .query(({ ctx, input }) => {
+      const path = requireRepoPath(ctx, input.repoId);
+      return { text: readRepoRules(path), path: repoRulesPath(path) };
+    }),
+
+  repoRulesSave: t.procedure
+    .input(z.object({ repoId: z.string().min(1), text: z.string() }))
+    .output(z.object({ ok: z.literal(true) }))
+    .mutation(({ ctx, input }) => {
+      writeRepoRules(requireRepoPath(ctx, input.repoId), input.text);
+      return { ok: true as const };
     }),
 
   repoSetDefaultAgent: t.procedure
@@ -868,6 +910,14 @@ function requireKnowledge(ctx: DaemonContext): Knowledge {
     });
   }
   return ctx.knowledge;
+}
+
+function requireRepoPath(ctx: DaemonContext, repoId: string): string {
+  const repo = ctx.db.prepare('SELECT path FROM repo WHERE id = ?').get(repoId) as
+    | { path: string }
+    | undefined;
+  if (!repo) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown repo' });
+  return repo.path;
 }
 
 export type AppRouter = typeof appRouter;

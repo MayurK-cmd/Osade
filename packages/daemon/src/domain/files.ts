@@ -50,7 +50,8 @@ export function safeResolve(cwd: string, relativePath: string): string {
 
 export function parsePorcelain(text: string): Map<string, FileFlag> {
   const out = new Map<string, FileFlag>();
-  for (const line of text.split('\n')) {
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\r$/u, '');
     if (line.length < 4) continue;
     const xy = line.slice(0, 2);
     let rest = line.slice(3);
@@ -68,7 +69,8 @@ export function parsePorcelain(text: string): Map<string, FileFlag> {
 
 export function parseNumstat(text: string): Map<string, { insertions: number; deletions: number }> {
   const out = new Map<string, { insertions: number; deletions: number }>();
-  for (const line of text.split('\n')) {
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\r$/u, '');
     if (!line.trim()) continue;
     const parts = line.split('\t');
     if (parts.length < 3) continue;
@@ -95,7 +97,7 @@ export function mergeChanges(
 
 export async function fileChanges(cwd: string, baseSha: string): Promise<Map<string, FileChange>> {
   const [porcelain, numstat] = await Promise.all([
-    git(cwd, ['status', '--porcelain', '--untracked-files=all']).catch(() => ''),
+    git(cwd, ['status', '--porcelain=v1', '--untracked-files=all']).catch(() => ''),
     git(cwd, ['diff', '--numstat', baseSha]).catch(() => ''),
   ]);
   return mergeChanges(parsePorcelain(porcelain), parseNumstat(numstat));
@@ -167,39 +169,60 @@ export interface OutgoingCommit {
   subject: string;
 }
 
-export async function listWorkingChanges(cwd: string): Promise<{
+export async function listWorkingChanges(
+  cwd: string,
+  baseSha: string,
+): Promise<{
   files: WorkingChange[];
   outgoing: { ahead: number; commits: OutgoingCommit[]; files: WorkingChange[] } | null;
 }> {
-  const changes = await fileChanges(cwd, 'HEAD');
+  const changes = await fileChanges(cwd, baseSha);
   const files = [...changes.entries()]
     .map(([path, hit]) => ({ path, flag: hit.flag, insertions: hit.insertions, deletions: hit.deletions }))
     .sort((a, b) => a.path.localeCompare(b.path));
 
-  let outgoing: { ahead: number; commits: OutgoingCommit[]; files: WorkingChange[] } | null = null;
+  const range = await outgoingRange(cwd, baseSha);
+  if (range == null) return { files, outgoing: null };
+
   try {
-    const ahead = Number((await git(cwd, ['rev-list', '--count', '@{upstream}..HEAD'])).trim()) || 0;
-    const log = ahead > 0 ? await git(cwd, ['log', '--format=%h\t%s', '@{upstream}..HEAD']) : '';
+    const ahead = Number((await git(cwd, ['rev-list', '--count', range.revList])).trim()) || 0;
+    const log = ahead > 0 ? await git(cwd, ['log', '--format=%h\t%s', range.revList]) : '';
     const commits = log
       .trim()
       .split('\n')
       .filter((line) => line.length > 0)
       .map((line) => {
         const tab = line.indexOf('\t');
-        return { sha: line.slice(0, tab), subject: line.slice(tab + 1) };
+        return { sha: line.slice(0, tab).trim(), subject: line.slice(tab + 1).trim() };
       });
     const outgoingFiles =
       ahead > 0
         ? parseNameStatus(
-            await git(cwd, ['diff', '--name-status', '@{upstream}...HEAD']),
-            parseNumstat(await git(cwd, ['diff', '--numstat', '@{upstream}...HEAD'])),
+            await git(cwd, ['diff', '--name-status', range.diff]),
+            parseNumstat(await git(cwd, ['diff', '--numstat', range.diff])),
           )
         : [];
-    outgoing = { ahead, commits, files: outgoingFiles };
+    return { files, outgoing: { ahead, commits, files: outgoingFiles } };
   } catch {
-    outgoing = null;
+    return { files, outgoing: null };
   }
-  return { files, outgoing };
+}
+
+async function outgoingRange(
+  cwd: string,
+  baseSha: string,
+): Promise<{ revList: string; diff: string } | null> {
+  try {
+    await git(cwd, ['rev-parse', '--abbrev-ref', '@{u}']);
+    return { revList: '@{u}..HEAD', diff: '@{u}...HEAD' };
+  } catch {
+    try {
+      await git(cwd, ['rev-parse', '--verify', baseSha]);
+      return { revList: `${baseSha}..HEAD`, diff: `${baseSha}...HEAD` };
+    } catch {
+      return null;
+    }
+  }
 }
 
 export function parseNameStatus(
@@ -207,7 +230,8 @@ export function parseNameStatus(
   stats: Map<string, { insertions: number; deletions: number }>,
 ): WorkingChange[] {
   const files: WorkingChange[] = [];
-  for (const line of text.split('\n')) {
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\r$/u, '');
     if (!line.trim()) continue;
     const parts = line.split('\t');
     const code = parts[0] ?? '';
@@ -224,13 +248,16 @@ export async function readChangeDiff(
   cwd: string,
   relativePath: string,
   vs: 'working' | 'outgoing',
+  baseSha: string,
 ): Promise<{ path: string; flag: FileFlag | null; diff: string }> {
   const path = toPosix(relativePath);
   if (vs === 'outgoing') {
-    const diff = await git(cwd, ['diff', '@{upstream}...HEAD', '--', path]).catch(() => '');
+    const range = await outgoingRange(cwd, baseSha);
+    const spec = range?.diff ?? `${baseSha}...HEAD`;
+    const diff = await git(cwd, ['diff', spec, '--', path]).catch(() => '');
     return { path, flag: 'M', diff };
   }
-  const changes = await fileChanges(cwd, 'HEAD');
+  const changes = await fileChanges(cwd, baseSha);
   const flag = changes.get(path)?.flag ?? null;
   if (flag === '?') {
     const body = readFile(cwd, path);
@@ -243,7 +270,7 @@ export async function readChangeDiff(
     ].join('\n');
     return { path, flag, diff };
   }
-  const diff = await git(cwd, ['diff', 'HEAD', '--', path]).catch(() => '');
+  const diff = await git(cwd, ['diff', baseSha, '--', path]).catch(() => '');
   return { path, flag, diff };
 }
 

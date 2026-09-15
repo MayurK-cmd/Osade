@@ -3,6 +3,18 @@ import { z } from 'zod';
 import { AgentFact, GateRequest, ScmFact, Task, VerifyRun } from './facts.js';
 import { TaskId, TaskStatus, Timestamp } from './primitives.js';
 
+export const ChatTurn = z.object({
+  id: z.string(),
+  task_id: TaskId,
+  seq: z.number().int(),
+  role: z.enum(['user', 'agent']),
+  origin: z.enum(['human', 'automation', 'provider']),
+  text: z.string(),
+  delivery: z.enum(['queued', 'sending', 'accepted', 'failed']),
+  created_at: Timestamp,
+});
+export type ChatTurn = z.infer<typeof ChatTurn>;
+
 /**
  * The daemon → renderer websocket protocol.
  *
@@ -38,6 +50,8 @@ export const TaskView = z.object({
   attachment: z.enum(['repo', 'worktree']),
   branch: z.string(),
   cwd: z.string(),
+  /** Durable conversation. Absent on older snapshots until the daemon is rebuilt. */
+  turns: z.array(ChatTurn).optional(),
 });
 export type TaskView = z.infer<typeof TaskView>;
 

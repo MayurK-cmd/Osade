@@ -3,12 +3,13 @@ import { useEffect, useMemo, useState, type CSSProperties, type JSX } from 'reac
 import type { TaskView } from '@osade/contract';
 
 import { agentColor } from './agent-color.js';
+import { Board } from './Board.js';
 import { CommandPalette } from './CommandPalette.js';
 import { Detail, DraftPane, type Lane } from './Detail.js';
 import { api } from './api.js';
 import { chord } from './chords.js';
 import { GitHubSignIn, useGithub } from './GitHubSignIn.js';
-import { groupChats, laneDigest, primaryLane, showPinnedNeedsYou, withDigest, type ChatGroup } from './lanes.js';
+import { groupChats, laneDigest, primaryLane, showPinnedNeedsYou, withDigest, chatLabel, type ChatGroup } from './lanes.js';
 import { lanePrompt, parseMentions } from './mentions.js';
 import { RepoSettings, useAgentCatalog } from './RepoSettings.js';
 import { GLYPH, STATUS, TONE_COLOUR, summarise } from './status.js';
@@ -18,6 +19,7 @@ import { useRepo, type OpenRepo } from './useRepo.js';
 
 const LANES: Lane[] = ['transcript', 'files', 'checks', 'diff', 'rules'];
 const COLLAPSE_KEY = 'osade.repo-collapsed';
+const VIEW_KEY = 'osade.ledger-view';
 const NAMES_KEY = 'osade.repo-names';
 const GITHUB_SKIP_KEY = 'osade.github-skipped';
 
@@ -52,6 +54,13 @@ export function App(): JSX.Element {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lane, setLane] = useState<Lane>('transcript');
+  const [view, setView] = useState<'list' | 'board'>(() => {
+    try {
+      return localStorage.getItem(VIEW_KEY) === 'board' ? 'board' : 'list';
+    } catch {
+      return 'list';
+    }
+  });
   const [palette, setPalette] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -89,6 +98,10 @@ export function App(): JSX.Element {
   useEffect(() => {
     localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...collapsed]));
   }, [collapsed]);
+
+  useEffect(() => {
+    localStorage.setItem(VIEW_KEY, view);
+  }, [view]);
 
   useEffect(() => {
     localStorage.setItem(NAMES_KEY, JSON.stringify(aliases));
@@ -209,20 +222,6 @@ export function App(): JSX.Element {
     setLane('transcript');
   }
 
-  function openChat(taskId: string): void {
-    const task = chats.find((t) => t.task.id === taskId);
-    if (task) openLane(task);
-    else {
-      setTabs((current) =>
-        current.some((t) => t.kind === 'chat' && t.id === taskId)
-          ? current
-          : [...current, { kind: 'chat', id: taskId, focusId: taskId }],
-      );
-      setActiveId(taskId);
-      setLane('transcript');
-    }
-  }
-
   async function openDraftTab(from?: {
     repoId: string;
     path?: string;
@@ -249,6 +248,32 @@ export function App(): JSX.Element {
     ]);
     setActiveId(id);
     setLane('transcript');
+  }
+
+  async function openPlan(): Promise<void> {
+    let repoPath = repo?.path ?? (selected ? (repoPaths[selected.task.repo_id] ?? null) : null);
+    if (repoPath == null) {
+      const picked = await pickRepo();
+      if (!picked) return;
+      repoPath = picked.path;
+      setRepoPaths((current) => ({ ...current, [picked.repoId]: picked.path }));
+    }
+    const created = await api.orchestratorOpen(repoPath, defaultAgent ?? undefined);
+    const task = chats.find((t) => t.task.id === created.taskId);
+    if (task) openLane(task);
+    else {
+      setTabs((current) =>
+        current.some((t) => t.kind === 'chat' && t.id === created.chatId)
+          ? current.map((t) =>
+              t.kind === 'chat' && t.id === created.chatId
+                ? { ...t, focusId: created.taskId }
+                : t,
+            )
+          : [...current, { kind: 'chat', id: created.chatId, focusId: created.taskId }],
+      );
+      setActiveId(created.chatId);
+      setLane('transcript');
+    }
   }
 
   function closeTab(id: string | null): void {
@@ -377,7 +402,7 @@ export function App(): JSX.Element {
     text: string,
     repoPath: string | null,
   ): Promise<void> {
-    let lane = chat.lanes.find((l) => l.agentId === agentId);
+    const lane = chat.lanes.find((l) => l.agentId === agentId);
     if (lane == null) {
       if (repoPath == null) throw new Error('Open this repository to add a lane');
       const created = await api.taskCreate({
@@ -425,7 +450,8 @@ export function App(): JSX.Element {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(280px, 360px) minmax(0, 1fr)',
+        gridTemplateColumns:
+          view === 'board' ? 'minmax(420px, 1.15fr) minmax(0, 1fr)' : 'minmax(280px, 360px) minmax(0, 1fr)',
         height: '100%',
         background: 'var(--bg-0)',
       }}
@@ -446,7 +472,10 @@ export function App(): JSX.Element {
             working: working.length,
             total: groups.length,
           })}
+          view={view}
+          onView={setView}
           onNew={() => void openDraftTab()}
+          onPlan={() => void openPlan().catch((err: Error) => setActionError(err.message))}
           settings={
             repo ? (
               <RepoSettings
@@ -475,12 +504,19 @@ export function App(): JSX.Element {
           </div>
         )}
 
-        <div style={{ flex: 1, overflow: 'auto' }}>
+        <div style={{ flex: 1, overflow: view === 'board' ? 'hidden' : 'auto', minHeight: 0 }}>
           {chats.length === 0 && tabs.length === 0 ? (
             <Empty
               connection={connection}
               repo={repo}
               onNew={() => void openDraftTab()}
+            />
+          ) : view === 'board' ? (
+            <Board
+              chats={groups}
+              selectedId={selectedChat?.chatId ?? null}
+              onSelect={(chat) => openLane(primaryLane(chat))}
+              onMenu={(id, x, y) => setMenu({ id, x, y })}
             />
           ) : (
             <>
@@ -694,10 +730,20 @@ export function App(): JSX.Element {
         onClose={() => setPalette(false)}
         selected={selected}
         repo={repo}
+        chats={groups.map((g) => ({ id: g.chatId, title: chatLabel(g) }))}
+        onOpenChat={(id) => {
+          const chat = groups.find((g) => g.chatId === id);
+          if (chat) openLane(primaryLane(chat));
+        }}
         onNewChat={() => {
           setPalette(false);
           void openDraftTab();
         }}
+        onPlan={() => {
+          setPalette(false);
+          void openPlan().catch((err: Error) => setActionError(err.message));
+        }}
+        onBoard={() => setView('board')}
         onError={setActionError}
       />
 
@@ -753,7 +799,6 @@ function TabStrip({
       {tabs.map((tab) => {
         const chat = tab.kind === 'chat' ? groups.find((g) => g.chatId === tab.id) : null;
         const title = tab.kind === 'draft' ? 'New chat' : (chat?.title ?? 'Chat');
-        const branch = chat?.lanes.length === 1 ? chat.lanes[0]?.task.branch : `${chat?.lanes.length ?? 0} lanes`;
         const dirty = tab.kind === 'draft';
         const active = tab.id === activeId;
         return (
@@ -762,9 +807,8 @@ function TabStrip({
             onClick={() => onSelect(tab.id)}
             style={{
               display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'flex-start',
-              gap: 1,
+              alignItems: 'center',
+              gap: 6,
               maxWidth: 180,
               background: active ? 'var(--bg-0)' : 'transparent',
               border: '0.5px solid',
@@ -773,53 +817,39 @@ function TabStrip({
               borderRadius: 'var(--radius) var(--radius) 0 0',
               marginBottom: -1,
               padding: '6px 10px',
+              fontSize: 'var(--t-s)',
             }}
           >
-            <span
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                width: '100%',
-                fontSize: 'var(--t-s)',
-              }}
-            >
-              {dirty && (
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: 'var(--st-needs)',
-                    flexShrink: 0,
-                  }}
-                />
-              )}
+            {dirty && (
               <span
                 style={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  minWidth: 0,
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: 'var(--st-needs)',
+                  flexShrink: 0,
                 }}
-              >
-                {title}
-              </span>
-              <span
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onClose(tab.id);
-                }}
-                style={{ marginLeft: 'auto', color: 'var(--ink-3)', fontSize: 'var(--t-xs)' }}
-              >
-                ×
-              </span>
-            </span>
-            {branch && (
-              <span className="mono" style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-3)' }}>
-                {branch}
-              </span>
+              />
             )}
+            <span
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                minWidth: 0,
+              }}
+            >
+              {title}
+            </span>
+            <span
+              onClick={(event) => {
+                event.stopPropagation();
+                onClose(tab.id);
+              }}
+              style={{ marginLeft: 'auto', color: 'var(--ink-3)', fontSize: 'var(--t-xs)' }}
+            >
+              ×
+            </span>
           </button>
         );
       })}
@@ -883,7 +913,7 @@ function ChatRow({
           minWidth: 0,
         }}
       >
-        {chat.title}
+        {chatLabel(chat)}
       </div>
       {chat.lanes.length > 1 && (
         <span className="mono" style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-3)' }}>
@@ -1004,12 +1034,18 @@ function RowMenu({
 function Header({
   repo,
   summary,
+  view,
+  onView,
   onNew,
+  onPlan,
   settings,
 }: {
   repo: { name: string; slug: string | null } | null;
   summary: string;
+  view: 'list' | 'board';
+  onView: (view: 'list' | 'board') => void;
   onNew: () => void;
+  onPlan: () => void;
   settings: JSX.Element | null;
 }): JSX.Element {
   return (
@@ -1017,7 +1053,7 @@ function Header({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
+        gap: 8,
         padding: '10px 12px 10px 16px',
         borderBottom: '0.5px solid var(--line)',
         background: 'var(--bg-1)',
@@ -1048,7 +1084,18 @@ function Header({
           {summary}
         </div>
       </div>
+      <button
+        type="button"
+        title={view === 'board' ? 'List' : 'Board'}
+        onClick={() => onView(view === 'board' ? 'list' : 'board')}
+        style={{ flexShrink: 0, fontSize: 'var(--t-xs)' }}
+      >
+        {view === 'board' ? 'List' : 'Board'}
+      </button>
       {settings ? <div style={{ flexShrink: 0 }}>{settings}</div> : null}
+      <button type="button" onClick={onPlan} style={{ flexShrink: 0, fontSize: 'var(--t-xs)' }}>
+        Plan
+      </button>
       <button data-new-task onClick={onNew} style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
         New chat <kbd>{chord('t')}</kbd>
       </button>

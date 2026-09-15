@@ -16,7 +16,7 @@ htmlcov/
 *~
 .DS_Store
 Thumbs.db
-
+inspiration/
 # Local environment and secrets
 .env
 .env.*

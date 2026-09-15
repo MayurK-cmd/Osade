@@ -126,11 +126,19 @@ export const api = {
     chatId?: string;
     baseRef?: string;
     isolate?: boolean;
+    home?: boolean;
   }) =>
     call('mutation', 'taskCreate', input) as Promise<{
       taskId: string;
       isolated: boolean;
       isolatedBecause?: { taskId: string; chatId: string; title: string };
+    }>,
+
+  orchestratorOpen: (repoPath: string, agentId?: string) =>
+    call('mutation', 'orchestratorOpen', { repoPath, agentId }) as Promise<{
+      taskId: string;
+      chatId: string;
+      isolated: false;
     }>,
 
   /** §8.2 — the launch sequence. Long-running: worktree, lane, agent start. */
@@ -143,6 +151,12 @@ export const api = {
 
   mineStatus: (repoId: string) =>
     call('query', 'mineStatus', { repoId }) as Promise<MineStatus>,
+
+  repoRulesGet: (repoId: string) =>
+    call('query', 'repoRulesGet', { repoId }) as Promise<{ text: string; path: string }>,
+
+  repoRulesSave: (repoId: string, text: string) =>
+    call('mutation', 'repoRulesSave', { repoId, text }) as Promise<{ ok: true }>,
 
   /** Starts a background run and returns at once; poll `mineStatus` for progress. */
   mineRepo: (repoId: string, full?: boolean) =>

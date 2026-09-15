@@ -22,6 +22,8 @@ export interface ContextFileInput {
   baseSha: string;
   /** Already ranked and capped by `Conventions.forInjection`. */
   conventions: readonly ConventionWithEvidence[];
+  /** Pasted `<repo>/.osade/rules.md`. When set, this is the rules section. */
+  rulesText?: string;
   /** Rendered verbatim under "Verification you must pass". */
   verifySteps: readonly { name: string; cmd: string }[];
   /** Rules that were active but did not fit the cap, so the UI can surface them. */
@@ -68,6 +70,18 @@ export function renderContextFile(input: ContextFileInput): RenderedContext {
   // Everything except the rules is non-negotiable, so the rules get whatever budget is left.
   const fixed = [...header, ...verify, ...footer].join('\n');
   const budget = MAX_INJECTED_TOKENS - estimateTokens(fixed);
+
+  const pasted = input.rulesText?.trim() ?? '';
+  if (pasted.length > 0) {
+    const rules = ['## Rules this project enforces', '', pasted, ''];
+    const body = [...header, ...rules, ...verify, ...footer].join('\n');
+    return {
+      body,
+      included: 1,
+      omitted: 0,
+      estimatedTokens: estimateTokens(body),
+    };
+  }
 
   const capped = input.conventions.slice(0, MAX_INJECTED_RULES);
   const rendered: string[] = [];

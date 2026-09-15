@@ -73,9 +73,30 @@ describe('listDir overlay', () => {
     expect(added?.flag).toBe('?');
     expect(listDir(dir, '', changes).find((e) => e.name === 'clean.ts')?.flag).toBeNull();
 
-    const working = await listWorkingChanges(dir);
+    const working = await listWorkingChanges(dir, sha);
     expect(working.files.some((f) => f.path === 'src/a.ts' && f.flag === 'M')).toBe(true);
-    expect(working.outgoing).toBeNull();
+    expect(working.files.some((f) => f.path === 'src/new.ts' && f.flag === '?')).toBe(true);
+    expect(working.outgoing?.ahead ?? 0).toBe(0);
+  });
+
+  it('still lists files after they are committed, against the task base', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'osade-files-'));
+    sh(dir, ['init', '-q', '-b', 'main']);
+    sh(dir, ['config', 'user.email', 't@t']);
+    sh(dir, ['config', 'user.name', 't']);
+    mkdirSync(join(dir, 'src'));
+    writeFileSync(join(dir, 'src/a.ts'), 'one\n');
+    sh(dir, ['add', '-A']);
+    sh(dir, ['commit', '-qm', 'init']);
+    const base = sh(dir, ['rev-parse', 'HEAD']);
+    writeFileSync(join(dir, 'src/a.ts'), 'one\ntwo\n');
+    sh(dir, ['add', '-A']);
+    sh(dir, ['commit', '-qm', 'agent work']);
+
+    const listed = await listWorkingChanges(dir, base);
+    expect(listed.files.some((f) => f.path === 'src/a.ts')).toBe(true);
+    expect(listed.outgoing?.ahead).toBe(1);
+    expect(listed.outgoing?.commits[0]?.subject).toBe('agent work');
   });
 
   it('refuses to read outside cwd', () => {
