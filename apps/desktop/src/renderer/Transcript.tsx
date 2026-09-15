@@ -1,13 +1,16 @@
-import { useEffect, useState, type CSSProperties, type JSX } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 
 import type { TaskView } from '@osade/contract';
 
 import { agentColor } from './agent-color.js';
+import { api } from './api.js';
 import { chatLines, type ChatLine } from './chat.js';
 
 /**
- * Chat for one or more lanes. Agents keep running in their panes; this view never reads the
- * terminal (no pane.read, no TUI dump).
+ * Chat for one or more lanes: your text, then Claude's reply, repeating.
+ *
+ * User bubbles are the prompts Osade sent. Replies are sliced out of on-demand `pane.read`
+ * (§4.4.1) at ≤1 Hz — Claude/codex never write `final_message`.
  */
 export function Transcript({
   tasks,
@@ -21,6 +24,7 @@ export function Transcript({
   isolatedNotice?: string;
 }): JSX.Element {
   const [followUps, setFollowUps] = useState<string[]>([]);
+  const panes = usePaneTranscripts(tasks);
 
   useEffect(() => {
     const text = extraUser?.trim();
@@ -47,6 +51,7 @@ export function Transcript({
             followTaskId == null || task.task.id === followTaskId || tasks.length === 1
               ? followUps
               : [],
+            panes[task.task.id],
           ),
         );
 
@@ -70,8 +75,65 @@ export function Transcript({
       {lines.map((line) => (
         <Bubble key={line.id} line={line} />
       ))}
+      <ScrollAnchor token={lines.map((l) => l.id + l.text.length).join('|')} />
     </div>
   );
+}
+
+/** §4.4.1 — one pane.read per live lane per second, skipped when revision is unchanged. */
+function usePaneTranscripts(tasks: TaskView[]): Record<string, string> {
+  const [texts, setTexts] = useState<Record<string, string>>({});
+  const revisions = useRef<Record<string, number>>({});
+  const lastErrorLog = useRef(0);
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+  const stamp = tasks
+    .map((t) => `${t.task.id}:${t.agent?.substrate_pane_id ?? ''}:${t.agent?.last_event_at ?? 0}:${t.status}`)
+    .join('|');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function pull(): Promise<void> {
+      await Promise.all(
+        tasksRef.current.map(async (task) => {
+          if (!task.agent?.substrate_pane_id) return;
+          try {
+            const result = await api.taskTranscript(task.task.id, 400);
+            if (cancelled) return;
+            if (revisions.current[task.task.id] === result.revision) return;
+            revisions.current[task.task.id] = result.revision;
+            setTexts((prev) =>
+              prev[task.task.id] === result.text ? prev : { ...prev, [task.task.id]: result.text },
+            );
+          } catch (err) {
+            const now = Date.now();
+            if (now - lastErrorLog.current > 5_000) {
+              lastErrorLog.current = now;
+              window.osade?.log?.(`taskTranscript ${task.task.id}: ${(err as Error).message}`);
+            }
+          }
+        }),
+      );
+    }
+
+    void pull();
+    const tick = window.setInterval(() => void pull(), 1_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(tick);
+    };
+  }, [stamp]);
+
+  return texts;
+}
+
+function ScrollAnchor({ token }: { token: string }): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.scrollIntoView({ block: 'end' });
+  }, [token]);
+  return <div ref={ref} />;
 }
 
 function Bubble({ line }: { line: ChatLine }): JSX.Element {

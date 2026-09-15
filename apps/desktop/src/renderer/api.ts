@@ -36,8 +36,39 @@ async function call(kind: 'query' | 'mutation', path: string, input?: unknown): 
     result?: { data?: unknown };
     error?: { message?: string; json?: { message?: string } };
   };
-  if (body.error) throw new Error(body.error.json?.message ?? body.error.message ?? 'daemon error');
+  if (body.error) {
+    const raw = body.error.json?.message ?? body.error.message ?? 'daemon error';
+    const shown = humanizeDaemonError(raw);
+    if (shown !== raw) window.osade?.log?.(raw);
+    throw new Error(shown);
+  }
   return body.result?.data;
+}
+
+/** tRPC/Zod dumps a JSON issue array as `error.message`. Never show that in the chrome. */
+export function humanizeDaemonError(raw: string): string {
+  const trimmed = raw.trim();
+  if (/worktree\.create failed|worktree_create_failed/iu.test(trimmed)) {
+    return 'could not create a worktree — see the terminal';
+  }
+  if (!trimmed.startsWith('[')) return raw;
+  try {
+    const issues = JSON.parse(trimmed) as unknown;
+    if (!Array.isArray(issues) || issues.length === 0) return raw;
+    const issue = issues[0];
+    if (!issue || typeof issue !== 'object') return raw;
+    const row = issue as { code?: unknown; path?: unknown; message?: unknown };
+    const path = Array.isArray(row.path)
+      ? row.path.filter((part): part is string => typeof part === 'string').join('.')
+      : '';
+    if (row.code === 'too_small') return path ? `${path} is required` : 'a required value was empty';
+    if (typeof row.message === 'string' && row.message.length > 0 && row.message.length < 120) {
+      return path ? `${path}: ${row.message}` : row.message;
+    }
+  } catch {
+    return raw;
+  }
+  return raw;
 }
 
 export interface Issue {
@@ -177,6 +208,38 @@ export const api = {
   /** Sends a prompt into the task's agent lane. State arrives through useLedger. */
   taskSend: (taskId: string, text: string, wait?: boolean) =>
     call('mutation', 'taskSend', { taskId, text, wait }) as Promise<{ ok: true }>,
+
+  /** §4.4.1 — on-demand pane.read, never a render loop. */
+  taskTranscript: (taskId: string, lines?: number) =>
+    call('query', 'taskTranscript', { taskId, lines }) as Promise<{
+      text: string;
+      revision: number;
+      truncated: boolean;
+    }>,
+
+  taskFsList: (taskId: string, dirs?: string[]) =>
+    call('query', 'taskFsList', { taskId, dirs }) as Promise<{
+      cwd: string;
+      listings: {
+        dir: string;
+        entries: {
+          name: string;
+          path: string;
+          kind: 'dir' | 'file';
+          flag: 'M' | 'A' | 'D' | '?' | null;
+          insertions: number;
+          deletions: number;
+        }[];
+      }[];
+    }>,
+
+  taskFsRead: (taskId: string, path: string) =>
+    call('query', 'taskFsRead', { taskId, path }) as Promise<{
+      path: string;
+      text: string | null;
+      binary: boolean;
+      truncated: boolean;
+    }>,
 
   /** Hides the task from the ledger. Does not kill the agent process. */
   taskArchive: (taskId: string) =>

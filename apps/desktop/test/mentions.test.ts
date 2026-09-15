@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { TaskView } from '@osade/contract';
 
 import { agentColor } from '../src/renderer/agent-color.js';
-import { parseMentions } from '../src/renderer/mentions.js';
+import { lanePrompt, parseMentions } from '../src/renderer/mentions.js';
 import { groupChats, laneDigest, worstStatus } from '../src/renderer/lanes.js';
 
 describe('parseMentions', () => {
@@ -42,6 +42,18 @@ describe('parseMentions', () => {
     const parsed = parseMentions('@ghost do a thing\n@claude real work', catalog);
     expect(parsed.shared).toBe('@ghost do a thing');
     expect(parsed.targets).toEqual([{ agentId: 'claude', text: 'real work' }]);
+  });
+
+  it('a mention and its task on the same line is one target', () => {
+    expect(parseMentions('@claude do this task', catalog)).toEqual({
+      shared: '',
+      targets: [{ agentId: 'claude', text: 'do this task' }],
+    });
+  });
+
+  it('lanePrompt never sends an empty string for @claude plus a task', () => {
+    const parsed = parseMentions('@claude do this task', catalog);
+    expect(lanePrompt(parsed, parsed.targets[0]!, '@claude do this task')).toBe('do this task');
   });
 });
 

@@ -7,6 +7,7 @@ import { api } from './api.js';
 import { BranchControl } from './BranchControl.js';
 import { Composer } from './Composer.js';
 import { Conventions } from './Conventions.js';
+import { Files } from './Files.js';
 import { GateCard } from './GateCard.js';
 import type { ChatGroup } from './lanes.js';
 import { PrOpen } from './PrOpen.js';
@@ -15,13 +16,14 @@ import { GLYPH, STATUS, TONE_COLOUR, ago, statusCopyFor } from './status.js';
 import { Transcript } from './Transcript.js';
 import { VerifyPlanReview } from './VerifyPlanReview.js';
 
-export type Lane = 'transcript' | 'checks' | 'diff' | 'rules';
+export type Lane = 'transcript' | 'files' | 'checks' | 'diff' | 'rules';
 
 const PANES: { id: Lane; label: string; chord: string }[] = [
   { id: 'transcript', label: 'Chat', chord: '1' },
-  { id: 'checks', label: 'Checks', chord: '2' },
-  { id: 'diff', label: 'Diff', chord: '3' },
-  { id: 'rules', label: 'Rules', chord: '4' },
+  { id: 'files', label: 'Files', chord: '2' },
+  { id: 'checks', label: 'Checks', chord: '3' },
+  { id: 'diff', label: 'Diff', chord: '4' },
+  { id: 'rules', label: 'Rules', chord: '5' },
 ];
 
 export function Detail({
@@ -248,7 +250,14 @@ export function Detail({
         })}
       </nav>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflow: lane === 'files' ? 'hidden' : 'auto',
+          padding: lane === 'files' ? 0 : '14px 16px',
+        }}
+      >
         {lane === 'transcript' && (
           <>
             {chat.lanes.length > 1 && (
@@ -273,6 +282,7 @@ export function Detail({
             />
           </>
         )}
+        {lane === 'files' && <Files key={focused.task.id} task={focused} />}
         {lane === 'checks' && (
           <>
             <VerifyPlanReview taskId={focused.task.id} />

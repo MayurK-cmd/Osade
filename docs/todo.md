@@ -17,7 +17,7 @@ photographs the window.
       not shipped.** Nothing in the test suite can answer this one.
 
 
-1) File view mode - terax
+1) File view mode - terax (https://github.com/crynta/terax-ai)
 2) Kanban mode
 3) agent orchestration sort
 

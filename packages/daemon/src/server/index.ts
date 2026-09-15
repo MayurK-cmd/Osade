@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { createHTTPHandler } from '@trpc/server/adapters/standalone';
@@ -125,6 +125,7 @@ export async function startDaemonServer(options: DaemonServerOptions): Promise<R
   const paths = osadePaths();
   mkdirSync(dirname(paths.portFile), { recursive: true });
   writeFileSync(paths.portFile, String(port));
+  writeFileSync(paths.pidFile, String(process.pid));
 
   // §5.4 — retain the last 50k change_log rows; prune on a timer.
   const pruneTimer = setInterval(() => {
@@ -136,15 +137,20 @@ export async function startDaemonServer(options: DaemonServerOptions): Promise<R
   }, CHANGE_LOG_PRUNE_INTERVAL_MS);
   pruneTimer.unref?.();
 
+  let closed = false;
   return {
     port,
     broadcaster,
     async close() {
+      if (closed) return;
+      closed = true;
       clearInterval(pruneTimer);
       broadcaster.stop();
       for (const client of wss.clients) client.terminate();
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       await new Promise<void>((resolve) => http.close(() => resolve()));
+      rmSync(paths.portFile, { force: true });
+      rmSync(paths.pidFile, { force: true });
     },
   };
 }

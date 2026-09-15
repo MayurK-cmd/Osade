@@ -10,11 +10,31 @@ import { contextBridge, ipcRenderer } from 'electron';
  */
 contextBridge.exposeInMainWorld('osade', {
   daemonPort: (): Promise<number | null> => ipcRenderer.invoke('osade:daemon-port'),
+  log: (message: string): void => {
+    ipcRenderer.send('osade:log', message);
+  },
   openInSubstrate: (): Promise<{ command: string; hint: string }> =>
     ipcRenderer.invoke('osade:open-in-substrate'),
 
-  /** The repository `osade .` opened on, or null when the window was opened on its own. */
   openedRepo: (): Promise<string | null> => ipcRenderer.invoke('osade:opened-repo'),
+
+  githubStatus: (): Promise<{ signedIn: boolean; login: string | null }> =>
+    ipcRenderer.invoke('osade:github-status'),
+
+  githubLogin: (
+    token?: string,
+  ): Promise<
+    | { ok: true; login: string }
+    | { ok: false; need: 'paste'; message: string }
+    | { ok: false; error: string }
+  > => ipcRenderer.invoke('osade:github-login', token),
+
+  onGithubDevice: (handler: (prompt: { userCode: string; verificationUri: string }) => void): (() => void) => {
+    const listener = (_event: unknown, prompt: { userCode: string; verificationUri: string }): void =>
+      handler(prompt);
+    ipcRenderer.on('osade:github-device', listener);
+    return () => ipcRenderer.removeListener('osade:github-device', listener);
+  },
 
   /**
    * The operating system's folder picker, for choosing a repository. Resolves to the chosen

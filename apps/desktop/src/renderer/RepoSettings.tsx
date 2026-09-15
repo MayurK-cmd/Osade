@@ -8,11 +8,12 @@ export interface CatalogAgent {
   installed: boolean;
 }
 
-export function useAgentCatalog(): CatalogAgent[] {
+export function useAgentCatalog(ready = true): CatalogAgent[] {
   const [agents, setAgents] = useState<CatalogAgent[]>([]);
   useEffect(() => {
+    if (!ready) return;
     void api.agentCatalogList().then(setAgents, () => setAgents([]));
-  }, []);
+  }, [ready]);
   return agents;
 }
 

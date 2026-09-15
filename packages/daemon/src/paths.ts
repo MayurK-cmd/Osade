@@ -30,6 +30,7 @@ export interface OsadePaths {
   readonly electronUserData: string;
   /** Where the daemon writes its port so the CLI and the Electron app can find it. */
   readonly portFile: string;
+  readonly pidFile: string;
 }
 
 export function osadePaths(env: NodeJS.ProcessEnv = process.env): OsadePaths {
@@ -46,6 +47,7 @@ export function osadePaths(env: NodeJS.ProcessEnv = process.env): OsadePaths {
     worktreesDir: join(root, 'worktrees'),
     electronUserData: join(root, 'electron'),
     portFile: join(root, 'daemon.port'),
+    pidFile: join(root, 'daemon.pid'),
   };
 }
 

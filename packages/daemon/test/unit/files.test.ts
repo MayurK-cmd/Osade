@@ -1,0 +1,84 @@
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+
+import {
+  fileChanges,
+  listDir,
+  parseNumstat,
+  parsePorcelain,
+  readFile,
+  safeResolve,
+} from '../../src/domain/files.js';
+
+describe('files path guard', () => {
+  it('rejects .. and absolute paths', () => {
+    const root = join(tmpdir(), 'osade-files-root');
+    expect(() => safeResolve(root, '../secret')).toThrow(/escapes/);
+  });
+});
+
+describe('git status parsing', () => {
+  it('reads porcelain flags including untracked and renames', () => {
+    const flags = parsePorcelain([' M src/a.ts', '?? new.md', 'R  old.ts -> src/b.ts', ''].join('\n'));
+    expect(flags.get('src/a.ts')).toBe('M');
+    expect(flags.get('new.md')).toBe('?');
+    expect(flags.get('src/b.ts')).toBe('M');
+  });
+
+  it('reads numstat insertions and deletions', () => {
+    const stats = parseNumstat('12\t3\tsrc/a.ts\n-\t-\tpic.png\n');
+    expect(stats.get('src/a.ts')).toEqual({ insertions: 12, deletions: 3 });
+    expect(stats.get('pic.png')).toEqual({ insertions: 0, deletions: 0 });
+  });
+});
+
+describe('listDir overlay', () => {
+  let dir: string;
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('marks a dirty file and its parent folder with the diffstat', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'osade-files-'));
+    sh(dir, ['init', '-q', '-b', 'main']);
+    sh(dir, ['config', 'user.email', 't@t']);
+    sh(dir, ['config', 'user.name', 't']);
+    mkdirSync(join(dir, 'src'));
+    writeFileSync(join(dir, 'src/a.ts'), 'one\n');
+    writeFileSync(join(dir, 'clean.ts'), 'ok\n');
+    sh(dir, ['add', '-A']);
+    sh(dir, ['commit', '-qm', 'init']);
+    writeFileSync(join(dir, 'src/a.ts'), 'one\ntwo\n');
+    writeFileSync(join(dir, 'src/new.ts'), 'fresh\n');
+
+    const sha = sh(dir, ['rev-parse', 'HEAD']);
+    const changes = await fileChanges(dir, sha);
+    const root = listDir(dir, '', changes);
+    const src = root.find((e) => e.name === 'src');
+    expect(src?.kind).toBe('dir');
+    expect(src?.flag).not.toBeNull();
+    expect((src?.insertions ?? 0) + (src?.deletions ?? 0)).toBeGreaterThan(0);
+
+    const nested = listDir(dir, 'src', changes);
+    const edited = nested.find((e) => e.name === 'a.ts');
+    const added = nested.find((e) => e.name === 'new.ts');
+    expect(edited?.flag).toBe('M');
+    expect(added?.flag).toBe('?');
+    expect(listDir(dir, '', changes).find((e) => e.name === 'clean.ts')?.flag).toBeNull();
+  });
+
+  it('refuses to read outside cwd', () => {
+    dir = mkdtempSync(join(tmpdir(), 'osade-files-'));
+    writeFileSync(join(dir, 'ok.ts'), 'hi\n');
+    expect(() => readFile(dir, '../nope.ts')).toThrow(/escapes/);
+    expect(readFile(dir, 'ok.ts').text).toContain('hi');
+  });
+});
+
+function sh(cwd: string, args: string[]): string {
+  return execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true }).trim();
+}

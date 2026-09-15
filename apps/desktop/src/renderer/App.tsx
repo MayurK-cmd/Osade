@@ -7,17 +7,19 @@ import { CommandPalette } from './CommandPalette.js';
 import { Detail, DraftPane, type Lane } from './Detail.js';
 import { api } from './api.js';
 import { chord } from './chords.js';
+import { GitHubSignIn, useGithub } from './GitHubSignIn.js';
 import { groupChats, laneDigest, primaryLane, showPinnedNeedsYou, withDigest, type ChatGroup } from './lanes.js';
-import { composeLanePrompt, parseMentions } from './mentions.js';
+import { lanePrompt, parseMentions } from './mentions.js';
 import { RepoSettings, useAgentCatalog } from './RepoSettings.js';
 import { GLYPH, STATUS, TONE_COLOUR, summarise } from './status.js';
 import { titleFrom } from './title.js';
 import { useLedger } from './useLedger.js';
 import { useRepo, type OpenRepo } from './useRepo.js';
 
-const LANES: Lane[] = ['transcript', 'checks', 'diff', 'rules'];
+const LANES: Lane[] = ['transcript', 'files', 'checks', 'diff', 'rules'];
 const COLLAPSE_KEY = 'osade.repo-collapsed';
 const NAMES_KEY = 'osade.repo-names';
+const GITHUB_SKIP_KEY = 'osade.github-skipped';
 
 type Tab =
   | {
@@ -33,9 +35,18 @@ type Tab =
   | { kind: 'chat'; id: string; focusId?: string; optimistic?: string; isolatedNotice?: string };
 
 export function App(): JSX.Element {
-  const { tasks: allTasks, connection, error } = useLedger();
+  const { tasks: allTasks, connection } = useLedger();
   const { repo, error: repoError } = useRepo();
-  const catalog = useAgentCatalog();
+  const catalog = useAgentCatalog(connection === 'live');
+  const github = useGithub();
+  const [githubSkipped, setGithubSkipped] = useState(() => {
+    try {
+      return localStorage.getItem(GITHUB_SKIP_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [githubWelcome, setGithubWelcome] = useState(false);
   const [agentOverride, setAgentOverride] = useState<string | null>(null);
   const [repoPaths, setRepoPaths] = useState<Record<string, string>>({});
   const [tabs, setTabs] = useState<Tab[]>([]);
@@ -51,6 +62,7 @@ export function App(): JSX.Element {
   const defaultAgent = agentOverride ?? repo?.defaultAgent ?? null;
   const scoped = repo ? allTasks.filter((t) => t.task.repo_id === repo.repoId) : allTasks;
   const chats = scoped.filter((t) => t.status !== 'archived');
+  const emptyLedger = chats.length === 0 && tabs.length === 0;
   const groups = useMemo(() => groupChats(chats), [chats]);
   const needsYou = groups.filter((g) => g.needsYou);
   const working = chats.filter((t) => t.status === 'implementing' || t.status === 'verifying');
@@ -81,6 +93,16 @@ export function App(): JSX.Element {
   useEffect(() => {
     localStorage.setItem(NAMES_KEY, JSON.stringify(aliases));
   }, [aliases]);
+
+  useEffect(() => {
+    if (github.status.signedIn || githubSkipped) {
+      setGithubWelcome(false);
+      return;
+    }
+    if (github.ready && connection === 'live' && emptyLedger) {
+      setGithubWelcome(true);
+    }
+  }, [github.ready, github.status.signedIn, githubSkipped, connection, emptyLedger]);
 
   useEffect(() => {
     for (const group of groups) {
@@ -161,7 +183,7 @@ export function App(): JSX.Element {
         return;
       }
 
-      const digit = event.key === '1' || event.key === '2' || event.key === '3' || event.key === '4';
+      const digit = event.key >= '1' && event.key <= '5';
       if (digit && selected) {
         event.preventDefault();
         setLane(LANES[Number(event.key) - 1]!);
@@ -256,12 +278,18 @@ export function App(): JSX.Element {
       const targets =
         parsed.targets.length > 0
           ? parsed.targets
-          : [{ agentId: defaultAgent ?? undefined, text: parsed.shared || message }];
+          : [{ agentId: defaultAgent ?? 'claude', text: parsed.shared || message }];
       const first = targets[0]!;
+      const firstPrompt = lanePrompt(
+        parsed,
+        { agentId: first.agentId ?? 'claude', text: first.text },
+        message,
+      );
+      if (firstPrompt.length === 0) throw new Error('Write something to send');
       const created = await api.taskCreate({
         repoPath: tab.repoPath,
         title: titleFrom(message),
-        intent: composeLanePrompt(parsed.shared, first.text) || message,
+        intent: firstPrompt,
         ...(first.agentId ? { agentId: first.agentId } : {}),
         ...(tab.defaultBranch ? { baseRef: tab.defaultBranch } : {}),
         ...(tab.isolate ? { isolate: true } : {}),
@@ -284,21 +312,23 @@ export function App(): JSX.Element {
         ),
       );
       setActiveId(created.taskId);
-      void launchAndSend(created.taskId, composeLanePrompt(parsed.shared, first.text) || message);
+      await launchAndSend(created.taskId, firstPrompt);
       for (const extra of targets.slice(1)) {
         if (!extra.agentId) continue;
+        const extraPrompt = lanePrompt(parsed, extra, message);
+        if (extraPrompt.length === 0) continue;
         void (async () => {
           const lane = await api.taskCreate({
             repoPath: tab.repoPath!,
             title: titleFrom(message),
-            intent: composeLanePrompt(parsed.shared, extra.text),
+            intent: extraPrompt,
             chatId: created.taskId,
             agentId: extra.agentId,
             ...(tab.defaultBranch ? { baseRef: tab.defaultBranch } : {}),
             isolate: true,
           });
-          await launchAndSend(lane.taskId, composeLanePrompt(parsed.shared, extra.text));
-        })();
+          await launchAndSend(lane.taskId, extraPrompt);
+        })().catch((err: Error) => setActionError(err.message));
       }
     } catch (err) {
       setTabs((current) =>
@@ -330,12 +360,14 @@ export function App(): JSX.Element {
     const repoPath = repoPaths[chat.lanes[0]!.task.repo_id] ?? repo?.path ?? null;
 
     for (const target of targets) {
-      void sendToLane(
-        chat,
-        target.agentId,
-        composeLanePrompt(parsed.shared, target.text),
-        repoPath,
-      ).catch((err: Error) => setActionError(err.message));
+      const text = lanePrompt(parsed, target, message);
+      if (text.length === 0) {
+        setActionError('Write something to send');
+        continue;
+      }
+      void sendToLane(chat, target.agentId, text, repoPath).catch((err: Error) =>
+        setActionError(err.message),
+      );
     }
   }
 
@@ -365,10 +397,28 @@ export function App(): JSX.Element {
   }
 
   async function launchAndSend(taskId: string, text: string): Promise<void> {
+    const payload = text.trim();
+    if (payload.length === 0) throw new Error('Write something to send');
     const view = chats.find((t) => t.task.id === taskId);
     const live = view?.agent?.pane_alive === true && view.agent.terminated !== true;
     if (!live) await api.taskLaunch(taskId);
-    await api.taskSend(taskId, text);
+    await api.taskSend(taskId, payload);
+  }
+
+  if (githubWelcome && !github.status.signedIn && !githubSkipped) {
+    return (
+      <div style={{ padding: '34px 22px', maxWidth: 490 }}>
+        <p style={{ marginTop: 0, fontWeight: 600 }}>Welcome to Osade</p>
+        <GitHubSignIn
+          status={github.status}
+          onSignedIn={(login) => github.setStatus({ signedIn: true, login })}
+          onSkip={() => {
+            localStorage.setItem(GITHUB_SKIP_KEY, '1');
+            setGithubSkipped(true);
+          }}
+        />
+      </div>
+    );
   }
 
   return (
@@ -391,8 +441,6 @@ export function App(): JSX.Element {
       >
         <Header
           repo={repo}
-          connection={connection}
-          error={error ?? repoError ?? actionError}
           summary={summarise({
             needsYou: needsYou.length,
             working: working.length,
@@ -410,10 +458,30 @@ export function App(): JSX.Element {
             ) : null
           }
         />
+        {(repoError ?? actionError) && (
+          <div
+            title={repoError ?? actionError ?? undefined}
+            style={{
+              padding: '6px 16px',
+              fontSize: 'var(--t-xs)',
+              color: 'var(--st-fail)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              borderBottom: '0.5px solid var(--line)',
+            }}
+          >
+            {repoError ?? actionError}
+          </div>
+        )}
 
         <div style={{ flex: 1, overflow: 'auto' }}>
           {chats.length === 0 && tabs.length === 0 ? (
-            <Empty connection={connection} repo={repo} onNew={() => void openDraftTab()} />
+            <Empty
+              connection={connection}
+              repo={repo}
+              onNew={() => void openDraftTab()}
+            />
           ) : (
             <>
               {showPinnedNeedsYou(needsYou.length, groups.length) && (
@@ -566,6 +634,8 @@ export function App(): JSX.Element {
           working={working.length}
           total={groups.length}
           connected={connection === 'live'}
+          github={github.status}
+          onGithubSignedIn={(login) => github.setStatus({ signedIn: true, login })}
         />
       </main>
 
@@ -933,35 +1003,30 @@ function RowMenu({
 
 function Header({
   repo,
-  connection,
-  error,
   summary,
   onNew,
   settings,
 }: {
   repo: { name: string; slug: string | null } | null;
-  connection: string;
-  error: string | null;
   summary: string;
   onNew: () => void;
   settings: JSX.Element | null;
 }): JSX.Element {
-  const connected = connection === 'live';
   return (
     <header
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 14,
-        padding: '10px 16px',
+        gap: 10,
+        padding: '10px 12px 10px 16px',
         borderBottom: '0.5px solid var(--line)',
         background: 'var(--bg-1)',
+        minWidth: 0,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, minWidth: 0 }}>
-        <span
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
           style={{
-            fontSize: 'var(--t-m)',
             fontWeight: 600,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -970,19 +1035,23 @@ function Header({
           title={repo?.slug ?? undefined}
         >
           {repo ? repo.name : 'Osade'}
-        </span>
-        <span style={{ color: 'var(--ink-2)', fontSize: 'var(--t-xs)' }}>{summary}</span>
+        </div>
+        <div
+          style={{
+            color: 'var(--ink-2)',
+            fontSize: 'var(--t-xs)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {summary}
+        </div>
       </div>
-      <span style={{ flex: 1 }} />
-      {settings}
-      <button data-new-task onClick={onNew}>
+      {settings ? <div style={{ flexShrink: 0 }}>{settings}</div> : null}
+      <button data-new-task onClick={onNew} style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
         New chat <kbd>{chord('t')}</kbd>
       </button>
-      {(error || !connected) && (
-        <span style={{ fontSize: 'var(--t-xs)', color: 'var(--st-fail)', whiteSpace: 'nowrap' }}>
-          {error ?? 'Reconnecting'}
-        </span>
-      )}
     </header>
   );
 }
@@ -991,13 +1060,24 @@ function SidebarFoot({
   working,
   total,
   connected,
+  github,
+  onGithubSignedIn,
 }: {
   working: number;
   total: number;
   connected: boolean;
+  github: { signedIn: boolean; login: string | null };
+  onGithubSignedIn: (login: string) => void;
 }): JSX.Element {
   return (
-    <div style={{ background: 'var(--bg-1)', borderTop: '0.5px solid var(--line)', padding: '6px 0' }}>
+    <div
+      style={{
+        background: 'var(--bg-1)',
+        borderTop: '0.5px solid var(--line)',
+        padding: '6px 0',
+        position: 'relative',
+      }}
+    >
       <FootRow label="Agents" value={working === 0 ? 'Idle' : `${working} running`} />
       <FootRow label="Chats" value={String(total)} />
       <FootRow
@@ -1005,6 +1085,37 @@ function SidebarFoot({
         value={connected ? 'Connected' : 'Reconnecting'}
         tone={connected ? undefined : 'var(--st-fail)'}
       />
+      {github.signedIn ? (
+        <FootRow label="GitHub" value={github.login ?? 'Signed in'} />
+      ) : (
+        <details>
+          <summary
+            style={{
+              padding: '2px 16px',
+              fontSize: 'var(--t-xs)',
+              cursor: 'pointer',
+            }}
+          >
+            Sign in with GitHub
+          </summary>
+          <div
+            style={{
+              position: 'absolute',
+              left: 8,
+              right: 8,
+              bottom: '100%',
+              marginBottom: 6,
+              zIndex: 20,
+              background: 'var(--bg-1)',
+              border: '0.5px solid var(--line)',
+              borderRadius: 'var(--radius)',
+              padding: 12,
+            }}
+          >
+            <GitHubSignIn status={github} onSignedIn={onGithubSignedIn} />
+          </div>
+        </details>
+      )}
     </div>
   );
 }
@@ -1029,7 +1140,17 @@ function FootRow({
       }}
     >
       <span>{label}</span>
-      <span className="mono" style={{ color: tone ?? 'var(--ink)' }}>
+      <span
+        className="mono"
+        style={{
+          color: tone ?? 'var(--ink)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          marginLeft: 12,
+          minWidth: 0,
+        }}
+      >
         {value}
       </span>
     </div>
@@ -1056,12 +1177,13 @@ function Empty({
       </div>
     );
   }
+
   return (
     <div style={{ padding: '34px 22px', maxWidth: 490 }}>
       <p style={{ marginTop: 0 }}>{repo ? `No chats in ${repo.name} yet` : 'No chats yet'}</p>
       <p style={{ color: 'var(--ink-2)', lineHeight: 1.45 }}>
-        A chat is one piece of work on one branch. Osade gives it its own git worktree, runs an
-        agent inside it, and stops for you before anything is published.
+        A new chat starts on this checkout. Branch out when you want a private copy. Osade stops
+        before anything is published.
       </p>
       <button className="primary" onClick={onNew} style={{ marginTop: 8 }}>
         New chat

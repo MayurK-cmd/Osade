@@ -78,7 +78,13 @@ export class SubstrateEventSubscriber {
     await this.reconcile();
 
     const stream = this.#createStream(this.#client.socketPath, GLOBAL_SUBSCRIPTIONS);
-    stream.on('event', (envelope) => this.#handleGlobal(envelope));
+    stream.on('event', (envelope) => {
+      try {
+        this.#handleGlobal(envelope);
+      } catch (err) {
+        this.#onWarning(`substrate global event write: ${(err as Error).message}`);
+      }
+    });
     stream.on('closed', ({ willRetry }) => {
       // A reconnect replays the ring buffer, so reconcile again before trusting the stream.
       if (willRetry) void this.reconcile().catch(() => {});
@@ -154,7 +160,13 @@ export class SubstrateEventSubscriber {
     const stream = this.#createStream(this.#client.socketPath, [
       { type: 'pane.agent_status_changed', pane_id: paneId },
     ]);
-    stream.on('event', (envelope) => this.#handlePaneEvent(taskId, envelope));
+    stream.on('event', (envelope) => {
+      try {
+        this.#handlePaneEvent(taskId, envelope);
+      } catch (err) {
+        this.#onWarning(`pane ${paneId} fact write: ${(err as Error).message}`);
+      }
+    });
     stream.on('error', (err) => this.#onWarning(`pane ${paneId} status stream: ${err.message}`));
     stream.start();
 
@@ -308,7 +320,11 @@ export class SubstrateEventSubscriber {
         .prepare(`UPDATE agent_fact SET ${assignments} WHERE task_id = ?`)
         .run(...values, taskId);
     });
-    write();
+    try {
+      write();
+    } catch (err) {
+      this.#onWarning(`agent_fact write for ${taskId}: ${(err as Error).message}`);
+    }
   }
 
   #nextSeqFor(taskId: string): number {

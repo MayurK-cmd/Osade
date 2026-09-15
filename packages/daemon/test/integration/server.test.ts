@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -99,6 +99,14 @@ describe('daemon server', () => {
   it('binds loopback only — §2.1', () => {
     // The port file is how the CLI and Electron find us; a fixed port would collide.
     expect(daemon.port).toBeGreaterThan(0);
+    expect(readFileSync(join(home, 'daemon.port'), 'utf8').trim()).toBe(String(daemon.port));
+    expect(Number(readFileSync(join(home, 'daemon.pid'), 'utf8').trim())).toBeGreaterThan(0);
+  });
+
+  it('removes the port and pid files on close', async () => {
+    await daemon.close();
+    expect(existsSync(join(home, 'daemon.port'))).toBe(false);
+    expect(existsSync(join(home, 'daemon.pid'))).toBe(false);
   });
 
   it('answers /health', async () => {

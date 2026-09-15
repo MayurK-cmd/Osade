@@ -51,3 +51,10 @@ export function composeLanePrompt(shared: string, text: string): string {
   if (text.length === 0) return shared;
   return `${shared}\n\n${text}`;
 }
+
+/** What actually gets sent to a lane. Empty `@claude` with no body must not become "". */
+export function lanePrompt(parsed: ParsedMentions, target: MentionTarget, raw: string): string {
+  const composed = composeLanePrompt(parsed.shared, target.text).trim();
+  if (composed.length > 0) return composed;
+  return raw.replace(/^@[a-z][a-z0-9_-]*\s*/iu, '').trim();
+}

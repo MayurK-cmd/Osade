@@ -16,10 +16,11 @@ async function main(argv: string[]): Promise<number> {
       const portFlag = argv.indexOf('--port');
       const port = portFlag >= 0 ? Number(argv[portFlag + 1]) : undefined;
 
+      const stamp = (): string => new Date().toISOString();
       const daemon = await startDaemon({
         port,
-        onInfo: (m) => console.log(m),
-        onWarning: (m) => console.warn(`warning: ${m}`),
+        onInfo: (m) => console.log(`${stamp()} ${m}`),
+        onWarning: (m) => console.warn(`${stamp()} warning: ${m}`),
       });
 
       const shutdown = async () => {

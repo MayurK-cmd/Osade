@@ -2,13 +2,42 @@ import { describe, expect, it } from 'vitest';
 
 import type { TaskView } from '@osade/contract';
 
-import { chatLines, visibleUserText } from '../src/renderer/chat.js';
+import { chatLines, splitPaneReplies, visibleUserText } from '../src/renderer/chat.js';
 
 describe('visibleUserText', () => {
   it('drops the sibling-lane digest', () => {
     expect(
       visibleUserText('<osade_lanes>\n- codex on osade/x/codex: working\n</osade_lanes>\n\nreal work'),
     ).toBe('real work');
+  });
+});
+
+describe('splitPaneReplies', () => {
+  it('interleaves each user prompt with the text Claude produced after it', () => {
+    const pane = [
+      'Welcome to Claude Code',
+      'First read C:\\Users\\asus\\.osade\\tasks\\t_abc\\CONTEXT.md, then: what are the files in the repo',
+      '',
+      'Here are the files:',
+      'README.md',
+      'package.json',
+      '',
+      '> show the files present, list them down',
+      '',
+      'README.md, package.json, src/',
+    ].join('\n');
+
+    expect(
+      splitPaneReplies(pane, ['what are the files in the repo', 'show the files present, list them down']),
+    ).toEqual(['Here are the files:\nREADME.md\npackage.json', 'README.md, package.json, src/']);
+  });
+
+  it('does not treat the whole CLI dump as the only reply', () => {
+    const pane = '╭──╮\n│ > list files │\n╰──╯\nREADME.md';
+    const replies = splitPaneReplies(pane, ['list files']);
+    expect(replies).toHaveLength(1);
+    expect(replies[0]).toContain('README.md');
+    expect(replies[0]).not.toMatch(/╭|│/);
   });
 });
 
@@ -41,6 +70,27 @@ describe('chatLines', () => {
       view({ intent: 'ping', status: 'awaiting_review', final: 'PONG' }),
     );
     expect(lines.at(-1)).toMatchObject({ role: 'agent', text: 'PONG', live: false });
+  });
+
+  it('is user, reply, user, reply — not all users then a CLI dump', () => {
+    const pane = [
+      'then: list the files',
+      'README.md',
+      'package.json',
+      'show the files present, list them down',
+      'src/main.ts',
+    ].join('\n');
+    const lines = chatLines(
+      view({ intent: 'list the files', status: 'awaiting_review' }),
+      ['show the files present, list them down'],
+      pane,
+    );
+    expect(lines.map((l) => ({ role: l.role, text: l.text }))).toEqual([
+      { role: 'user', text: 'list the files' },
+      { role: 'agent', text: 'README.md\npackage.json' },
+      { role: 'user', text: 'show the files present, list them down' },
+      { role: 'agent', text: 'src/main.ts' },
+    ]);
   });
 });
 

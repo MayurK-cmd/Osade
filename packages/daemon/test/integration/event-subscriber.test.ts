@@ -47,9 +47,10 @@ function fakeClient(
   } as unknown as SubstrateClient;
 }
 
-function subscriber(client = fakeClient()): SubstrateEventSubscriber {
+function subscriber(client = fakeClient(), onWarning?: (message: string) => void): SubstrateEventSubscriber {
   return new SubstrateEventSubscriber(db, client, {
     now: () => NOW,
+    onWarning,
     createStream: (_path, subs) => {
       const s = new FakeStream(subs);
       streams.push(s);
@@ -76,7 +77,13 @@ beforeEach(() => {
   streams = [];
 });
 
-afterEach(() => db.close());
+afterEach(() => {
+  try {
+    db.close();
+  } catch {
+    // A test that needed a dead connection already closed it.
+  }
+});
 
 describe('event subscriber — the N+1 connection manager (§7.2)', () => {
   it('opens one global connection at start', async () => {
@@ -309,6 +316,25 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
     const fact = getAgentFact(db, 't1')!;
     expect(fact.substrate_state).toBe('working');
     expect(fact.terminated).toBe(false);
+    s.stop();
+  });
+
+  it('a locked write does not throw out of the pane event handler', async () => {
+    seed();
+    const warnings: string[] = [];
+    const s = subscriber(fakeClient(), (m) => warnings.push(m));
+    await s.start();
+    s.watchPane('t1', 'w3:p2');
+    db.close();
+
+    expect(() =>
+      streams[1]!.push('pane.agent_status_changed', {
+        pane_id: 'w3:p2',
+        agent_status: 'working',
+        title: 'Editing',
+      }),
+    ).not.toThrow();
+    expect(warnings.some((w) => /agent_fact write|fact write/i.test(w))).toBe(true);
     s.stop();
   });
 });

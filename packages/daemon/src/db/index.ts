@@ -22,9 +22,11 @@ export function openDb(path: string): Db {
 
   // WAL so the CDC poller can read while writers commit.
   db.pragma('journal_mode = WAL');
+  db.pragma('synchronous = NORMAL');
   db.pragma('foreign_keys = ON');
-  // The daemon is the only writer; wait rather than throwing SQLITE_BUSY on a checkpoint.
-  db.pragma('busy_timeout = 5000');
+  // Wait out a checkpoint or a briefly overlapping writer. Still SQLITE_BUSY after this
+  // means another process is holding osade.db — callers must not treat that as fatal.
+  db.pragma('busy_timeout = 10000');
 
   migrate(db);
   return db;

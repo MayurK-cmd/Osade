@@ -1,8 +1,19 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 
 import { runtimeEnv, substrateBinary } from './substrate.js';
+import { githubToken } from '../secrets.js';
 import { delimiter, dirname, join } from 'node:path';
 
 /**
@@ -43,6 +54,47 @@ function readPort(): number | null {
   }
 }
 
+function pidFile(): string {
+  return join(osadeRoot(), 'daemon.pid');
+}
+
+function readPid(): number | null {
+  try {
+    const pid = Number(readFileSync(pidFile(), 'utf8').trim());
+    return Number.isFinite(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Stops a daemon we spawned or adopted, so the next spawn can carry a new GitHub token. */
+export async function stopDaemon(child: ChildProcess | null, lastPort?: number | null): Promise<void> {
+  const pids = new Set<number>();
+  if (child?.pid) pids.add(child.pid);
+  const written = readPid();
+  if (written) pids.add(written);
+  for (const pid of pids) {
+    try {
+      process.kill(pid);
+    } catch {
+      // Already gone.
+    }
+  }
+  const port = lastPort ?? readPort();
+  if (port != null) {
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      if (!(await health(port, 400))) break;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    if (await health(port, 400)) {
+      throw new Error('the osade daemon did not stop');
+    }
+  }
+  rmSync(portFile(), { force: true });
+  rmSync(pidFile(), { force: true });
+}
+
 /**
  * How to actually run the daemon — three things the first live launch got wrong, each of which
  * surfaced as the same useless symptom: "the daemon did not become healthy within 30s".
@@ -72,6 +124,9 @@ export function daemonCommand(entry: string): {
   // Read at the use site, never snapshotted (§20.1).
   const env = { ...process.env };
   if (node.isElectron) env.ELECTRON_RUN_AS_NODE = '1';
+
+  const token = githubToken();
+  if (token) env.OSADE_GITHUB_TOKEN = token;
 
   // Point better-sqlite3 straight at its addon, packaged or not.
   //
@@ -186,10 +241,64 @@ function viteNodeCli(daemonEntry: string): string {
  * a terminal pipeline open long after the app exits, and §2.2 says everything Osade writes lives
  * under `~/.osade` anyway.
  */
+export function daemonLogPath(): string {
+  return join(osadeRoot(), 'logs', 'daemon.log');
+}
+
 function daemonLog(): number {
-  const dir = join(osadeRoot(), 'logs');
-  mkdirSync(dir, { recursive: true });
-  return openSync(join(dir, 'daemon.log'), 'a');
+  mkdirSync(join(osadeRoot(), 'logs'), { recursive: true });
+  return openSync(daemonLogPath(), 'a');
+}
+
+let daemonLogFollow: NodeJS.Timeout | null = null;
+
+/**
+ * Mirror new daemon.log lines to the Electron console.
+ *
+ * The child still owns a file fd (so a detached daemon survives the window). Piping stdout
+ * into the parent would EPIPE that daemon on quit, and `stdio: 'inherit'` kills a packaged
+ * Windows spawn. Tailing the log is the remaining way `pnpm start` can show launch failures.
+ */
+function followDaemonLog(onInfo: (message: string) => void): void {
+  if (daemonLogFollow) {
+    clearInterval(daemonLogFollow);
+    daemonLogFollow = null;
+  }
+  const path = daemonLogPath();
+  let offset = 0;
+  try {
+    offset = statSync(path).size;
+  } catch {
+    offset = 0;
+  }
+  let pending = '';
+  const tick = (): void => {
+    let fd: number;
+    try {
+      fd = openSync(path, 'r');
+    } catch {
+      return;
+    }
+    try {
+      const size = fstatSync(fd).size;
+      if (size < offset) offset = 0;
+      if (size <= offset) return;
+      const buf = Buffer.alloc(size - offset);
+      const n = readSync(fd, buf, 0, buf.length, offset);
+      offset += n;
+      pending += buf.toString('utf8', 0, n);
+      const lines = pending.split(/\r?\n/);
+      pending = lines.pop() ?? '';
+      for (const line of lines) {
+        const trimmed = line.trimEnd();
+        if (trimmed.length > 0) onInfo(trimmed);
+      }
+    } finally {
+      closeSync(fd);
+    }
+  };
+  daemonLogFollow = setInterval(tick, 250) as unknown as NodeJS.Timeout;
+  daemonLogFollow.unref();
 }
 
 export interface DaemonSupervisorOptions {
@@ -213,14 +322,17 @@ export async function adoptOrSpawnDaemon(
   options: DaemonSupervisorOptions,
 ): Promise<AdoptedDaemon> {
   const onInfo = options.onInfo ?? (() => {});
+  followDaemonLog(onInfo);
 
   const existing = readPort();
   if (existing != null && (await health(existing))) {
     onInfo(`adopted the running osade daemon on 127.0.0.1:${existing}`);
     return { port: existing, child: null };
   }
-  if (existing != null && existsSync(portFile())) {
-    rmSync(portFile(), { force: true });
+  const stalePid = readPid();
+  if (existing != null || stalePid != null) {
+    onInfo('stopping a stale osade daemon before spawn');
+    await stopDaemon(null, existing);
   }
 
   const { command, args, env } = daemonCommand(options.entry);

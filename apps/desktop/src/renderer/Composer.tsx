@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 
 import { agentColor } from './agent-color.js';
-import { chord } from './chords.js';
 import { parseMentions } from './mentions.js';
 import type { CatalogAgent } from './RepoSettings.js';
 
@@ -104,13 +103,21 @@ export function Composer({
               setHint((h) => (h + delta + suggestions.length) % suggestions.length);
               return;
             }
-            if (suggestions.length > 0 && (event.key === 'Tab' || event.key === 'Enter') && !event.metaKey && !event.ctrlKey) {
-              event.preventDefault();
+            if (
+              suggestions.length > 0 &&
+              (event.key === 'Tab' || event.key === 'Enter') &&
+              !event.metaKey &&
+              !event.ctrlKey &&
+              !event.shiftKey
+            ) {
               const pick = suggestions[hint];
-              if (pick && pick.installed) insertMention(pick.id);
-              return;
+              if (pick?.installed) {
+                event.preventDefault();
+                insertMention(pick.id);
+                return;
+              }
             }
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+            if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
               event.stopPropagation();
               send();
@@ -170,7 +177,7 @@ export function Composer({
         <button className="primary" disabled={!ready} onClick={send}>
           {busy ? 'Sending…' : 'Send'}
         </button>
-        <kbd>{chord('enter')}</kbd>
+        <kbd>Enter</kbd>
         {error && (
           <span className="mono" style={{ color: 'var(--st-fail)', fontSize: 'var(--t-xs)' }}>
             {error}

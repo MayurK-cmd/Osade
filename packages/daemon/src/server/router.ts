@@ -27,6 +27,7 @@ import { repoRoot, checkoutBranch, listLocalBranches, repoWorkingStatus } from '
 import { toTaskView } from '../domain/task-view.js';
 import { deriveVerifyPlan, type VerifyStep } from '../domain/verify-plan.js';
 import { isAttached, taskCwd } from '../domain/cwd.js';
+import { fileChanges, listDir, readFile as readTaskFile } from '../domain/files.js';
 import type { Triage, TriageKind } from '../domain/triage.js';
 import type { VerifyRunner } from '../domain/verify-run.js';
 import type { Knowledge } from '../knowledge/service.js';
@@ -64,6 +65,16 @@ function unknownAgent(err: unknown): never {
     throw new TRPCError({ code: 'BAD_REQUEST', message: err.message });
   }
   throw err;
+}
+
+function locateTaskCwd(ctx: DaemonContext, taskId: string): { cwd: string; baseSha: string } {
+  const task = getTask(ctx.db, taskId);
+  if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown task' });
+  const repo = ctx.db.prepare('SELECT path FROM repo WHERE id = ?').get(task.repo_id) as
+    | { path: string }
+    | undefined;
+  if (!repo) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown repo' });
+  return { cwd: taskCwd(task, repo.path), baseSha: task.base_sha };
 }
 
 /**
@@ -169,6 +180,61 @@ export const appRouter = t.router({
       const result = await ctx.launcher.readTranscript(input.taskId, input.lines ?? 200);
       if (!result) throw new TRPCError({ code: 'NOT_FOUND', message: 'task has no live pane' });
       return result;
+    }),
+
+  taskFsList: t.procedure
+    .input(z.object({ taskId: TaskId, dirs: z.array(z.string()).optional() }))
+    .output(
+      z.object({
+        cwd: z.string(),
+        listings: z.array(
+          z.object({
+            dir: z.string(),
+            entries: z.array(
+              z.object({
+                name: z.string(),
+                path: z.string(),
+                kind: z.enum(['dir', 'file']),
+                flag: z.enum(['M', 'A', 'D', '?']).nullable(),
+                insertions: z.number().int(),
+                deletions: z.number().int(),
+              }),
+            ),
+          }),
+        ),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const located = locateTaskCwd(ctx, input.taskId);
+      try {
+        const changes = await fileChanges(located.cwd, located.baseSha);
+        const dirs = input.dirs ?? [''];
+        return {
+          cwd: located.cwd,
+          listings: dirs.map((dir) => ({ dir, entries: listDir(located.cwd, dir, changes) })),
+        };
+      } catch (err) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
+      }
+    }),
+
+  taskFsRead: t.procedure
+    .input(z.object({ taskId: TaskId, path: z.string().min(1) }))
+    .output(
+      z.object({
+        path: z.string(),
+        text: z.string().nullable(),
+        binary: z.boolean(),
+        truncated: z.boolean(),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const located = locateTaskCwd(ctx, input.taskId);
+      try {
+        return readTaskFile(located.cwd, input.path);
+      } catch (err) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
+      }
     }),
 
   taskArchive: t.procedure

@@ -29,7 +29,15 @@ app.setPath('userData', join(OSADE_ROOT, 'electron'));
 app.setPath('sessionData', join(OSADE_ROOT, 'electron', 'session'));
 
 import { repoFromArgv } from './argv.js';
-import { adoptOrSpawnDaemon } from './supervisor/daemon.js';
+import {
+  beginDeviceFlow,
+  githubClientId,
+  githubLogin as githubUser,
+  pollDeviceFlow,
+  tokenFromGh,
+} from './oauth.js';
+import { githubToken, setGithubToken } from './secrets.js';
+import { adoptOrSpawnDaemon, stopDaemon } from './supervisor/daemon.js';
 import {
   adoptOrSpawnSubstrate,
   OSADE_SESSION,
@@ -373,17 +381,93 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
 }
 
 ipcMain.handle('osade:daemon-port', () => daemonPort);
+ipcMain.on('osade:log', (_event, message: unknown) => {
+  if (typeof message === 'string' && message.length > 0) say(message);
+});
 ipcMain.handle('osade:opened-repo', () => openedRepo);
 
-/**
- * The New task form's "choose folder…": the operating system's own folder picker.
- *
- * Main-process only, because the renderer has no filesystem access (contextIsolation, §18.1). It
- * returns the folder the person chose and nothing more — whether that folder is a repository,
- * and which one, is the daemon's question. Modal to the asking window, so it cannot end up
- * behind it.
- */
+ipcMain.handle('osade:github-status', async () => {
+  const token = githubToken();
+  if (!token) return { signedIn: false, login: null };
+  try {
+    const login = await githubUser(token);
+    return { signedIn: true, login };
+  } catch {
+    return { signedIn: false, login: null };
+  }
+});
+
+ipcMain.handle('osade:github-login', async (event, pasted?: unknown) => {
+  try {
+    const token = await resolveGithubToken(
+      event.sender,
+      typeof pasted === 'string' ? pasted : undefined,
+    );
+    if (token == null) {
+      return {
+        ok: false as const,
+        need: 'paste' as const,
+        message:
+          'Paste a GitHub personal access token with repo scope, or run `gh auth login` and try again.',
+      };
+    }
+    setGithubToken(token);
+    const login = await githubUser(token);
+    await respawnDaemonWithToken();
+    return { ok: true as const, login };
+  } catch (err) {
+    return { ok: false as const, error: (err as Error).message };
+  }
+});
+
+async function resolveGithubToken(
+  sender: Electron.WebContents,
+  pasted?: string,
+): Promise<string | null> {
+  if (pasted?.trim()) return pasted.trim();
+  const fromGh = await tokenFromGh();
+  if (fromGh) return fromGh;
+  const clientId = githubClientId();
+  if (!clientId) return null;
+
+  const begin = await beginDeviceFlow(clientId);
+  sender.send('osade:github-device', {
+    userCode: begin.userCode,
+    verificationUri: begin.verificationUri,
+  });
+  await shell.openExternal(begin.verificationUri);
+
+  const deadline = Date.now() + begin.expiresInSec * 1000;
+  let waitMs = begin.intervalSec * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    const result = await pollDeviceFlow(clientId, begin.deviceCode);
+    if (result === 'slow_down') {
+      waitMs += 5_000;
+      continue;
+    }
+    if (result === 'pending') continue;
+    return result;
+  }
+  throw new Error('the GitHub sign-in code expired');
+}
+
+async function respawnDaemonWithToken(): Promise<void> {
+  const previous = daemonPort;
+  await stopDaemon(spawnedDaemon, previous);
+  spawnedDaemon = null;
+  daemonPort = null;
+  const entry = process.env.OSADE_DAEMON_ENTRY ?? daemonEntry();
+  const daemon = await adoptOrSpawnDaemon({ entry, onInfo: (m) => say(`[daemon] ${m}`) });
+  daemonPort = daemon.port;
+  spawnedDaemon = daemon.child;
+}
+
 ipcMain.handle('osade:choose-repository', async (event, defaultPath?: unknown) => {
+  /**
+   * The operating system's own folder picker. Main-process only — the renderer has no filesystem
+   * access (contextIsolation, §18.1).
+   */
   const options: OpenDialogOptions = {
     title: 'Choose a repository',
     buttonLabel: 'Choose',

@@ -17,10 +17,22 @@ declare global {
   interface Window {
     osade?: {
       daemonPort(): Promise<number | null>;
+      log(message: string): void;
       openInSubstrate(): Promise<{ command: string; hint: string }>;
       openedRepo(): Promise<string | null>;
       chooseRepository(defaultPath?: string): Promise<string | null>;
       onRepoOpened(handler: (path: string) => void): () => void;
+      githubStatus(): Promise<{ signedIn: boolean; login: string | null }>;
+      githubLogin(
+        token?: string,
+      ): Promise<
+        | { ok: true; login: string }
+        | { ok: false; need: 'paste'; message: string }
+        | { ok: false; error: string }
+      >;
+      onGithubDevice(
+        handler: (prompt: { userCode: string; verificationUri: string }) => void,
+      ): () => void;
     };
   }
 }

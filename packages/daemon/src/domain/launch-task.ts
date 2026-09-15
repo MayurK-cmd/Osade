@@ -65,6 +65,44 @@ async function withRepoLock<T>(repoPath: string, fn: () => Promise<T>): Promise<
   }
 }
 
+function execDetail(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const extra = err as Error & { stderr?: unknown; stdout?: unknown };
+  const parts = [err.message];
+  if (typeof extra.stderr === 'string' && extra.stderr.trim()) parts.push(extra.stderr.trim());
+  if (typeof extra.stdout === 'string' && extra.stdout.trim()) parts.push(extra.stdout.trim());
+  return parts.join('\n');
+}
+
+/** Read-only snapshot so a truncated substrate git dump is not the only record. */
+async function describeWorktreeFailure(
+  repoPath: string,
+  dest: string,
+  branch: string,
+  base: string,
+): Promise<string> {
+  const lines = [
+    `cwd=${repoPath}`,
+    `branch=${branch}`,
+    `base=${base}`,
+    `path=${dest}`,
+    `pathExists=${existsSync(dest)}`,
+  ];
+  try {
+    const listed = (await git(repoPath, ['worktree', 'list'])).trim();
+    lines.push(`git worktree list:\n${listed || '(none)'}`);
+  } catch (err) {
+    lines.push(`git worktree list failed: ${execDetail(err)}`);
+  }
+  try {
+    const refs = (await git(repoPath, ['show-ref', '--heads', '--', branch])).trim();
+    lines.push(`git show-ref ${branch}: ${refs || '(no matching heads)'}`);
+  } catch {
+    lines.push(`git show-ref ${branch}: (none)`);
+  }
+  return lines.join('\n');
+}
+
 export interface CreateTaskInput {
   repoPath: string;
   title: string;
@@ -279,22 +317,38 @@ export class LaunchTask {
         workspaceId = created.workspace.workspace_id;
       } else {
         await pruneWorktrees(repo.path);
-        const created = await this.#substrate.request<
-          'worktree.create',
-          { workspace: { workspace_id: string }; root_pane: { pane_id: string } }
-        >(
-          'worktree.create',
-          {
-            cwd: repo.path,
-            branch: task.branch,
-            base: task.base_sha,
-            path: task.worktree_path!,
-            label: task.title,
-            focus: false,
-          },
-          60_000,
+        this.#onWarning(
+          `worktree.create ${taskId} cwd=${repo.path} branch=${task.branch} base=${task.base_sha} path=${task.worktree_path}`,
         );
-        workspaceId = created.workspace.workspace_id;
+        try {
+          const created = await this.#substrate.request<
+            'worktree.create',
+            { workspace: { workspace_id: string }; root_pane: { pane_id: string } }
+          >(
+            'worktree.create',
+            {
+              cwd: repo.path,
+              branch: task.branch,
+              base: task.base_sha,
+              path: task.worktree_path!,
+              label: task.title,
+              focus: false,
+            },
+            60_000,
+          );
+          workspaceId = created.workspace.workspace_id;
+        } catch (err) {
+          const detail = await describeWorktreeFailure(
+            repo.path,
+            task.worktree_path!,
+            task.branch,
+            task.base_sha,
+          );
+          this.#onWarning(
+            `worktree.create failed for ${taskId}: ${err instanceof Error ? err.message : String(err)}\n${detail}`,
+          );
+          throw new Error('could not create a worktree — see the terminal');
+        }
         const mirrored = await mirrorPaths(repo.path, task.worktree_path!, DEFAULT_MIRROR_PATHS);
         if (mirrored.length > 0) {
           this.#onWarning(`mirrored into worktree: ${mirrored.join(', ')}`);
@@ -819,7 +873,7 @@ export class LaunchTask {
       { read: { text: string; revision: number; truncated: boolean } }
     >('pane.read', {
       pane_id: paneId,
-      source: 'recent',
+      source: 'recent_unwrapped',
       lines,
       format: 'text',
       strip_ansi: true,
