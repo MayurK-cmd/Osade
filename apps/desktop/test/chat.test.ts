@@ -1,54 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import type { TaskView } from '@osade/contract';
+import type { ChatTurn, TaskView } from '@osade/contract';
 
-import { chatLines, splitPaneReplies, visibleUserText } from '../src/renderer/chat.js';
+import { chatLines, visibleUserText } from '../src/renderer/chat.js';
 
 describe('visibleUserText', () => {
   it('drops the sibling-lane digest', () => {
     expect(
       visibleUserText('<osade_lanes>\n- codex on osade/x/codex: working\n</osade_lanes>\n\nreal work'),
     ).toBe('real work');
-  });
-});
-
-describe('splitPaneReplies', () => {
-  it('interleaves each user prompt with the text Claude produced after it', () => {
-    const pane = [
-      'Welcome to Claude Code',
-      'First read C:\\Users\\asus\\.osade\\tasks\\t_abc\\CONTEXT.md, then: what are the files in the repo',
-      '',
-      'Here are the files:',
-      'README.md',
-      'package.json',
-      '',
-      '> show the files present, list them down',
-      '',
-      'README.md, package.json, src/',
-    ].join('\n');
-
-    expect(
-      splitPaneReplies(pane, ['what are the files in the repo', 'show the files present, list them down']),
-    ).toEqual(['Here are the files:\nREADME.md\npackage.json', 'README.md, package.json, src/']);
-  });
-
-  it('does not treat the whole CLI dump as the only reply', () => {
-    const pane = '╭──╮\n│ > list files │\n╰──╯\nREADME.md';
-    const replies = splitPaneReplies(pane, ['list files']);
-    expect(replies).toHaveLength(1);
-    expect(replies[0]).toContain('README.md');
-    expect(replies[0]).not.toMatch(/╭|│/);
-  });
-
-  it('strips Claude Code tool-call chrome from a reply', () => {
-    const pane = [
-      'list files',
-      'Read(src/index.ts)',
-      'Thinking…',
-      'Here are the files:',
-      'README.md',
-    ].join('\n');
-    expect(splitPaneReplies(pane, ['list files'])).toEqual(['Here are the files:\nREADME.md']);
   });
 });
 
@@ -74,6 +34,7 @@ describe('chatLines', () => {
       'also write tests',
     ]);
     expect(lines.filter((l) => l.role === 'user').map((l) => l.text)).toEqual(['first', 'also write tests']);
+    expect(lines.find((l) => l.text === 'also write tests')?.held).toBe(true);
   });
 
   it('uses the agent final_message when there is one', () => {
@@ -89,18 +50,18 @@ describe('chatLines', () => {
     expect(lines[0]!.text).toBe('list the files');
   });
 
-  it('is user, reply, user, reply — not all users then a CLI dump', () => {
-    const pane = [
-      'then: list the files',
-      'README.md',
-      'package.json',
-      'show the files present, list them down',
-      'src/main.ts',
-    ].join('\n');
+  it('is user, reply, user, reply from durable turns — not a pane scrape', () => {
     const lines = chatLines(
-      view({ intent: 'list the files', status: 'awaiting_review' }),
-      ['show the files present, list them down'],
-      pane,
+      view({
+        intent: 'list the files',
+        status: 'awaiting_review',
+        turns: [
+          turn(1, 'user', 'list the files'),
+          turn(2, 'agent', 'README.md\npackage.json'),
+          turn(3, 'user', 'show the files present, list them down'),
+          turn(4, 'agent', 'src/main.ts'),
+        ],
+      }),
     );
     expect(lines.map((l) => ({ role: l.role, text: l.text }))).toEqual([
       { role: 'user', text: 'list the files' },
@@ -109,13 +70,39 @@ describe('chatLines', () => {
       { role: 'agent', text: 'src/main.ts' },
     ]);
   });
+
+  it('shows a queued follow-up as held', () => {
+    const lines = chatLines(
+      view({
+        intent: 'first',
+        status: 'implementing',
+        activity: 'Working',
+        turns: [turn(1, 'user', 'first'), { ...turn(2, 'user', 'also write tests'), delivery: 'queued' }],
+      }),
+    );
+    expect(lines.find((l) => l.text === 'also write tests')).toMatchObject({ held: true, live: false });
+  });
 });
+
+function turn(seq: number, role: ChatTurn['role'], text: string): ChatTurn {
+  return {
+    id: `ct_${seq}`,
+    task_id: 't1',
+    seq,
+    role,
+    origin: role === 'user' ? 'human' : 'provider',
+    text,
+    delivery: 'accepted',
+    created_at: seq,
+  };
+}
 
 function view(over: {
   intent?: string;
   status?: TaskView['status'];
   activity?: string;
   final?: string;
+  turns?: ChatTurn[];
 }): TaskView {
   return {
     task: {
@@ -166,5 +153,6 @@ function view(over: {
     attachment: 'worktree',
     branch: 'osade/token-refresh/claude',
     cwd: '/wt',
+    turns: over.turns,
   };
 }

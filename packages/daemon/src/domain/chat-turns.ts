@@ -21,34 +21,14 @@ export function listTurns(db: Db, taskId: string): ChatTurn[] {
   );
 }
 
-/**
- * A typed send is in flight: substrate is still working on an accepted user turn, or a prompt
- * is mid-flight. `done` / `blocked` are quiet — queued messages may go.
- */
 export function turnInFlight(db: Db, taskId: string): boolean {
   const sending = db
     .prepare(`SELECT 1 FROM chat_turn WHERE task_id = ? AND delivery = 'sending' LIMIT 1`)
     .get(taskId);
   if (sending) return true;
-
-  const lastUser = db
-    .prepare(
-      `SELECT seq FROM chat_turn
-         WHERE task_id = ? AND role = 'user' AND delivery = 'accepted'
-         ORDER BY seq DESC LIMIT 1`,
-    )
-    .get(taskId) as { seq: number } | undefined;
-  if (!lastUser) return false;
-
-  const laterAgent = db
-    .prepare(
-      `SELECT 1 FROM chat_turn WHERE task_id = ? AND role = 'agent' AND seq > ? LIMIT 1`,
-    )
-    .get(taskId, lastUser.seq);
-  if (laterAgent) return false;
-
+  // Mid-turn hold — AO queues while the live turn is working, then flushes on quiet.
   const fact = getAgentFact(db, taskId);
-  return fact?.substrate_state !== 'done' && fact?.substrate_state !== 'blocked';
+  return fact?.substrate_state === 'working';
 }
 
 export function enqueueTurn(
@@ -151,32 +131,52 @@ export async function sendTurn(
 
 /** After a turn settles (`done` / `blocked`), persist the agent's last words if we have them. */
 export function settleAgentReply(db: Db, taskId: string, now: number): ChatTurn | null {
-  const last = db
+  const lastUser = db
     .prepare(
-      `SELECT id, role, delivery FROM chat_turn WHERE task_id = ? ORDER BY seq DESC LIMIT 1`,
+      `SELECT seq FROM chat_turn
+         WHERE task_id = ? AND role = 'user' AND delivery = 'accepted'
+         ORDER BY seq DESC LIMIT 1`,
     )
-    .get(taskId) as { id: string; role: string; delivery: string } | undefined;
-  if (!last || last.role !== 'user' || last.delivery !== 'accepted') return null;
+    .get(taskId) as { seq: number } | undefined;
+  if (!lastUser) return null;
+
+  const laterAgent = db
+    .prepare(
+      `SELECT 1 FROM chat_turn WHERE task_id = ? AND role = 'agent' AND seq > ? LIMIT 1`,
+    )
+    .get(taskId, lastUser.seq);
+  if (laterAgent) return null;
 
   const fact = getAgentFact(db, taskId);
   const text = settleText(fact?.final_message ?? null, fact?.activity_text ?? null);
   if (text.length === 0) return null;
 
-  const seq =
-    (
-      db.prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM chat_turn WHERE task_id = ?').get(taskId) as {
-        seq: number;
-      }
-    ).seq + 1;
-  return insertRow(db, {
-    taskId,
-    seq,
-    role: 'agent',
-    origin: 'provider',
-    text,
-    delivery: 'accepted',
-    now,
-  });
+  const lastAgent = db
+    .prepare(
+      `SELECT text FROM chat_turn WHERE task_id = ? AND role = 'agent' ORDER BY seq DESC LIMIT 1`,
+    )
+    .get(taskId) as { text: string } | undefined;
+  if (lastAgent?.text === text) return null;
+
+  return db.transaction(() => {
+    const later = db
+      .prepare(
+        `SELECT id, seq FROM chat_turn WHERE task_id = ? AND seq > ? ORDER BY seq DESC`,
+      )
+      .all(taskId, lastUser.seq) as { id: string; seq: number }[];
+    for (const row of later) {
+      db.prepare('UPDATE chat_turn SET seq = ? WHERE id = ?').run(row.seq + 1, row.id);
+    }
+    return insertRow(db, {
+      taskId,
+      seq: lastUser.seq + 1,
+      role: 'agent',
+      origin: 'provider',
+      text,
+      delivery: 'accepted',
+      now,
+    });
+  })();
 }
 
 function settleText(finalMessage: string | null, activityText: string | null): string {

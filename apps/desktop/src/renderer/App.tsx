@@ -475,7 +475,6 @@ export function App(): JSX.Element {
           view={view}
           onView={setView}
           onNew={() => void openDraftTab()}
-          onPlan={() => void openPlan().catch((err: Error) => setActionError(err.message))}
           settings={
             repo ? (
               <RepoSettings
@@ -1037,7 +1036,6 @@ function Header({
   view,
   onView,
   onNew,
-  onPlan,
   settings,
 }: {
   repo: { name: string; slug: string | null } | null;
@@ -1045,7 +1043,6 @@ function Header({
   view: 'list' | 'board';
   onView: (view: 'list' | 'board') => void;
   onNew: () => void;
-  onPlan: () => void;
   settings: JSX.Element | null;
 }): JSX.Element {
   return (
@@ -1093,9 +1090,6 @@ function Header({
         {view === 'board' ? 'List' : 'Board'}
       </button>
       {settings ? <div style={{ flexShrink: 0 }}>{settings}</div> : null}
-      <button type="button" onClick={onPlan} style={{ flexShrink: 0, fontSize: 'var(--t-xs)' }}>
-        Plan
-      </button>
       <button data-new-task onClick={onNew} style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
         New chat <kbd>{chord('t')}</kbd>
       </button>

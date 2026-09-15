@@ -208,6 +208,34 @@ describe('CDC — a raw SQL write reaches a subscriber', () => {
     expect(push.task.needsYou).toBe(true);
   });
 
+  it('a chat_turn insert reaches the snapshot as durable turns', () => {
+    seedTask();
+    const broadcaster = new CdcBroadcaster(db, { now: () => NOW });
+    const seen: ServerMessage[] = [];
+    broadcaster.subscribe((m) => seen.push(m));
+
+    db.prepare(
+      `INSERT INTO chat_turn (id, task_id, seq, role, origin, text, delivery, created_at)
+       VALUES ('ct_1', 't1', 1, 'user', 'human', 'hello', 'accepted', ?)`,
+    ).run(NOW);
+    expect(broadcaster.tick()).toBe(1);
+
+    const push = seen.at(-1);
+    if (push?.type !== 'task.upserted') throw new Error('expected upsert');
+    expect(push.task.turns).toEqual([
+      {
+        id: 'ct_1',
+        task_id: 't1',
+        seq: 1,
+        role: 'user',
+        origin: 'human',
+        text: 'hello',
+        delivery: 'accepted',
+        created_at: NOW,
+      },
+    ]);
+  });
+
   it('collapses several fact writes in one transaction into a single push', () => {
     seedTask();
     const broadcaster = new CdcBroadcaster(db, { now: () => NOW });

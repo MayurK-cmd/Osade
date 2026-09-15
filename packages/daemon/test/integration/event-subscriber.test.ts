@@ -206,6 +206,32 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
     s.stop();
   });
 
+  it('calls onAgentQuiet when the agent goes done or blocked', async () => {
+    seed();
+    const quiet: string[] = [];
+    const s = new SubstrateEventSubscriber(db, fakeClient(), {
+      now: () => NOW,
+      onAgentQuiet: (taskId) => quiet.push(taskId),
+      createStream: (_path, subs) => {
+        const stream = new FakeStream(subs);
+        streams.push(stream);
+        return stream as unknown as SubstrateEventStream;
+      },
+    });
+    await s.start();
+    s.watchPane('t1', 'w3:p2');
+    const pane = streams[1]!;
+
+    pane.push('pane.agent_status_changed', { agent_status: 'working' });
+    expect(quiet).toEqual([]);
+    pane.push('pane.agent_status_changed', { agent_status: 'done' });
+    expect(quiet).toEqual(['t1']);
+    pane.push('pane.agent_status_changed', { agent_status: 'blocked' });
+    expect(quiet).toEqual(['t1', 't1']);
+    s.stop();
+  });
+
+
   it('an idle after done does not clear awaiting_review (§4.4 focus invariant)', async () => {
     seed();
     const s = subscriber();

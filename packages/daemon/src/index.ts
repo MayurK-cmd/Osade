@@ -67,30 +67,31 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
 
   const db = openDb(paths.db);
   const substrate = new SubstrateClient();
-  let launcher: LaunchTask | undefined;
+  let launch: LaunchTask | null = null;
   const subscriber = new SubstrateEventSubscriber(db, substrate, {
     now: options.now,
     onWarning,
     onAgentQuiet: (taskId) => {
       settleAgentReply(db, taskId, options.now?.() ?? Date.now());
-      void launcher?.sendQueued(taskId).catch((err: Error) => {
+      void launch?.sendQueued(taskId).catch((err: Error) => {
         onWarning(`queued chat for ${taskId}: ${err.message}`);
       });
     },
   });
   const checkpoints = new Checkpoints(db, { now: options.now, onWarning });
-  launcher = new LaunchTask(db, substrate, subscriber, {
+  const launcher = new LaunchTask(db, substrate, subscriber, {
     now: options.now,
     onWarning,
     checkpoints,
   });
+  launch = launcher;
   const gates = new Gates(db, { now: options.now });
   // §10.2 — the failure loop. Wired here rather than inside the runner so the dependency
   // points one way: the runner knows nothing about launching.
   const verifier = new VerifyRunner(db, substrate, {
     now: options.now,
     onWarning,
-    sendToAgent: (taskId, text) => launcher!.sendTurn(taskId, text, { origin: 'automation' }),
+    sendToAgent: (taskId, text) => launcher.sendTurn(taskId, text, { origin: 'automation' }),
   });
 
   // A substrate that is not running is not an error at boot: agents survive the app, but the app
@@ -108,7 +109,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
     now: options.now,
     onWarning,
     // §21 M2 — a reviewer's requested changes go back to the agent, like a verify failure.
-    sendToAgent: (taskId, text) => launcher!.sendTurn(taskId, text, { origin: 'automation' }),
+    sendToAgent: (taskId, text) => launcher.sendTurn(taskId, text, { origin: 'automation' }),
   });
   poller.start();
 
