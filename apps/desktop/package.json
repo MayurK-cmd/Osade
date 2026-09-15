@@ -8,9 +8,9 @@
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
     "build": "pnpm build:main && pnpm build:renderer",
-    "start": "pnpm build && electron .",
-    "smoke": "pnpm build && cross-env OSADE_HOME=.smoke OSADE_SMOKE_SHOT=smoke.png electron .",
-    "smoke:panels": "pnpm build && pnpm --filter @osade/daemon exec vite-node scripts/seed-smoke-fixture.mjs ../../apps/desktop/.smoke && cross-env OSADE_HOME=.smoke OSADE_SMOKE_SHOT=smoke.png OSADE_SMOKE_CLICK=[data-task-id] OSADE_SMOKE_EXPECT=\"Retry the flaky poller test|Needs your approval|Nothing leaves this machine until you say so.|Open pull request|osade/retry-flaky-poller|Approving binds this exact text|Transcript|Checks|Diff|Rules\" electron ."
+    "start": "pnpm --filter @osade/daemon build && pnpm build && electron .",
+    "smoke": "pnpm --filter @osade/daemon build && pnpm build && cross-env OSADE_HOME=.smoke OSADE_SMOKE_SHOT=smoke.png electron .",
+    "smoke:panels": "pnpm --filter @osade/daemon build && pnpm build && pnpm --filter @osade/daemon exec vite-node scripts/seed-smoke-fixture.mjs ../../apps/desktop/.smoke && cross-env OSADE_HOME=.smoke OSADE_SMOKE_SHOT=smoke.png OSADE_SMOKE_CLICK=[data-task-id] OSADE_SMOKE_EXPECT=\"Retry the flaky poller test|Needs your approval|Nothing leaves this machine until you say so.|Open pull request|osade/retry-flaky-poller|Approving binds this exact text|Transcript|Checks|Diff|Rules\" electron ."
   },
   "dependencies": {
     "@osade/contract": "workspace:*"

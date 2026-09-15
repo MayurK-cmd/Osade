@@ -169,6 +169,7 @@ function createWindow(): void {
     width: 1440,
     height: 900,
     minWidth: 900,
+    center: true,
     // Match --bg-0 so the frame does not flash light before the page paints.
     backgroundColor: '#101210',
     icon: windowIcon(),
@@ -197,6 +198,14 @@ function createWindow(): void {
   // Why the window went away, in the log. Without these, a renderer that dies takes the app with
   // it through `window-all-closed` and leaves an app.log whose last line is "creating the window"
   // — which reads exactly like a hang.
+  window.webContents.on('did-fail-load', (_event, code, description, url) =>
+    say(`renderer failed to load: ${description} (${code}) ${url}`),
+  );
+  window.webContents.on('did-finish-load', () => {
+    say('renderer loaded');
+    window?.show();
+    window?.focus();
+  });
   window.webContents.on('render-process-gone', (_event, details) =>
     say(`renderer gone: ${details.reason}${details.exitCode ? ` (exit ${details.exitCode})` : ''}`),
   );

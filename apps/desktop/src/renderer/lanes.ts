@@ -20,9 +20,10 @@ export function groupChats(tasks: TaskView[]): ChatGroup[] {
   }
   return [...map.values()].map((lanes) => {
     const ordered = [...lanes].sort((a, b) => a.task.created_at - b.task.created_at);
+    const first = ordered[0]!;
     return {
-      chatId: ordered[0]!.chatId,
-      title: ordered[0]!.task.title,
+      chatId: first.chatId || first.task.chat_id || first.task.id,
+      title: first.task.title,
       lanes: ordered,
       status: worstStatus(ordered.map((l) => l.status)),
       needsYou: ordered.some((l) => l.needsYou),

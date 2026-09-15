@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import type { TaskView } from '@osade/contract';
 
+import { agentColor } from '../src/renderer/agent-color.js';
 import { parseMentions } from '../src/renderer/mentions.js';
-import { laneDigest, worstStatus } from '../src/renderer/lanes.js';
+import { groupChats, laneDigest, worstStatus } from '../src/renderer/lanes.js';
 
 describe('parseMentions', () => {
   const catalog = ['claude', 'codex', 'opencode', 'pi'];
@@ -72,6 +73,21 @@ describe('worstStatus', () => {
   });
 });
 
+describe('agentColor', () => {
+  it('does not throw when the snapshot has no agentId yet', () => {
+    expect(agentColor(undefined)).toMatch(/^var\(--ag-/);
+    expect(agentColor('claude')).toBe('var(--ag-claude)');
+  });
+});
+
+describe('groupChats', () => {
+  it('groups a pre-lane snapshot that has no chatId', () => {
+    const grouped = groupChats([view('claude', { skipChatId: true })]);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]!.chatId).toBe('t1');
+  });
+});
+
 function view(
   agentId: string,
   over: {
@@ -80,13 +96,15 @@ function view(
     status?: TaskView['status'];
     lastEventAt?: number;
     checks?: NonNullable<TaskView['scm']>['checks_state'];
+    skipChatId?: boolean;
   } = {},
 ): TaskView {
+  const taskId = over.id ?? 't1';
   return {
     task: {
-      id: over.id ?? 't1',
+      id: taskId,
       repo_id: 'r1',
-      chat_id: 'c1',
+      chat_id: over.skipChatId ? (undefined as unknown as string) : 'c1',
       title: 'Token refresh',
       intent: 'x',
       origin_kind: 'manual',
@@ -141,7 +159,7 @@ function view(
     openGates: [],
     latestVerifyRuns: [],
     needsYou: false,
-    chatId: 'c1',
-    agentId,
+    chatId: over.skipChatId ? (undefined as unknown as string) : 'c1',
+    agentId: over.skipChatId ? (undefined as unknown as string) : agentId,
   };
 }
