@@ -22,6 +22,7 @@ function task(over: Partial<Task> = {}): Task {
     origin_kind: 'manual',
     origin_ref: null,
     agent_id: null,
+    chat_id: 't1',
     base_ref: 'main',
     base_sha: HEAD,
     branch: 'osade/fix-thing-t1',

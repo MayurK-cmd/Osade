@@ -71,6 +71,7 @@ export const api = {
       name: string;
       slug: string | null;
       defaultBranch: string;
+      defaultAgent: string | null;
       taskCount: number;
     }>,
 
@@ -82,6 +83,7 @@ export const api = {
     title: string;
     intent: string;
     agentId?: string;
+    chatId?: string;
     baseRef?: string;
   }) => call('mutation', 'taskCreate', input) as Promise<{ taskId: string }>,
   taskLaunch: (taskId: string) =>

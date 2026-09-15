@@ -2,41 +2,52 @@ import { useState, type JSX } from 'react';
 
 import type { TaskView, VerifyRun } from '@osade/contract';
 
-import { api } from './api.js';
+import { agentColor } from './agent-color.js';
 import { Composer } from './Composer.js';
 import { Conventions } from './Conventions.js';
 import { GateCard } from './GateCard.js';
+import type { ChatGroup } from './lanes.js';
 import { PrOpen } from './PrOpen.js';
-import { STATUS, TONE_COLOUR, ago } from './status.js';
+import type { CatalogAgent } from './RepoSettings.js';
+import { GLYPH, STATUS, TONE_COLOUR, ago } from './status.js';
 import { Transcript } from './Transcript.js';
 import { VerifyPlanReview } from './VerifyPlanReview.js';
 
 export type Lane = 'transcript' | 'checks' | 'diff' | 'rules';
 
-const LANES: { id: Lane; label: string; chord: string }[] = [
+const PANES: { id: Lane; label: string; chord: string }[] = [
   { id: 'transcript', label: 'Transcript', chord: '1' },
   { id: 'checks', label: 'Checks', chord: '2' },
   { id: 'diff', label: 'Diff', chord: '3' },
   { id: 'rules', label: 'Rules', chord: '4' },
 ];
 
-/**
- * One task: header, gate banner, lane tabs, composer.
- * Existing panels keep their behaviour; only their parent changes.
- */
 export function Detail({
-  task,
+  chat,
+  focusId,
+  onFocus,
   lane,
   onLane,
+  catalog,
+  optimistic,
+  onSend,
 }: {
-  task: TaskView;
+  chat: ChatGroup;
+  focusId: string;
+  onFocus: (taskId: string) => void;
   lane: Lane;
   onLane: (lane: Lane) => void;
+  catalog: CatalogAgent[];
+  optimistic?: string;
+  onSend: (text: string) => Promise<void>;
 }): JSX.Element {
-  const copy = STATUS[task.status];
+  const [filter, setFilter] = useState<string | null>(null);
+  const focused = chat.lanes.find((t) => t.task.id === focusId) ?? chat.lanes[0]!;
+  const copy = STATUS[chat.status];
   const colour = TONE_COLOUR[copy.tone];
-  const openGates = task.openGates.filter((gate) => gate.decided_at == null);
-  const sha = task.task.base_sha.slice(0, 12);
+  const openGates = chat.lanes.flatMap((t) =>
+    t.openGates.filter((g) => g.decided_at == null).map((gate) => ({ gate, task: t })),
+  );
 
   return (
     <div
@@ -44,6 +55,7 @@ export function Detail({
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
+        minHeight: 0,
         background: 'var(--bg-0)',
       }}
     >
@@ -59,7 +71,7 @@ export function Detail({
               minWidth: 0,
             }}
           >
-            {task.task.title}
+            {chat.title}
           </h1>
           <span
             style={{
@@ -75,17 +87,7 @@ export function Detail({
             {copy.label}
           </span>
         </div>
-        <div
-          className="mono"
-          style={{ marginTop: 6, fontSize: 'var(--t-s)', color: 'var(--ink-2)' }}
-        >
-          {task.task.branch}
-          {sha ? ` · ${sha}` : ''}
-          {task.scm?.pr_number != null ? ` · PR #${task.scm.pr_number}` : ''}
-        </div>
-        <p style={{ margin: '6px 0 0', color: 'var(--ink-2)', fontSize: 'var(--t-s)' }}>
-          {copy.meaning}
-        </p>
+        <LaneStrip chat={chat} focusId={focused.task.id} onFocus={onFocus} />
       </header>
 
       {openGates.length > 0 ? (
@@ -97,8 +99,13 @@ export function Detail({
             padding: '12px 16px',
           }}
         >
-          {openGates.map((gate) => (
-            <GateCard key={gate.id} gate={gate} task={task} onDecided={() => {}} />
+          {openGates.map(({ gate, task }) => (
+            <div key={gate.id}>
+              <p className="mono" style={{ margin: '0 0 6px', fontSize: 'var(--t-xs)', color: agentColor(task.agentId) }}>
+                {task.agentId} · {task.task.branch}
+              </p>
+              <GateCard gate={gate} task={task} onDecided={() => {}} />
+            </div>
           ))}
         </section>
       ) : (
@@ -116,8 +123,6 @@ export function Detail({
         )
       )}
 
-      {task.status === 'queued' && <StartTask taskId={task.task.id} />}
-
       <nav
         style={{
           display: 'flex',
@@ -126,7 +131,7 @@ export function Detail({
           borderBottom: '0.5px solid var(--line)',
         }}
       >
-        {LANES.map((item) => {
+        {PANES.map((item) => {
           const selected = lane === item.id;
           return (
             <button
@@ -151,62 +156,166 @@ export function Detail({
 
       <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
         {lane === 'transcript' && (
-          <Transcript
-            taskId={task.task.id}
-            active
-            refreshKey={task.agent?.last_event_at ?? null}
-          />
+          <>
+            {chat.lanes.length > 1 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                <FilterChip label="All" active={filter == null} onClick={() => setFilter(null)} />
+                {chat.lanes.map((task) => (
+                  <FilterChip
+                    key={task.task.id}
+                    label={task.agentId}
+                    color={agentColor(task.agentId)}
+                    active={filter === task.agentId}
+                    onClick={() => setFilter(task.agentId)}
+                  />
+                ))}
+              </div>
+            )}
+            <Transcript
+              lanes={chat.lanes.map((t) => ({ taskId: t.task.id, agentId: t.agentId }))}
+              filter={filter}
+              active
+              refreshKey={focused.agent?.last_event_at ?? null}
+              prefix={optimistic}
+            />
+          </>
         )}
         {lane === 'checks' && (
           <>
-            <VerifyPlanReview taskId={task.task.id} />
-            <VerifyRuns runs={task.latestVerifyRuns} />
+            <VerifyPlanReview taskId={focused.task.id} />
+            <VerifyRuns runs={focused.latestVerifyRuns} />
           </>
         )}
         {lane === 'diff' && (
           <>
-            <PrOpen task={task} />
-            <ScmFacts task={task} />
-            <TechnicalDetails task={task} />
+            <PrOpen task={focused} lanes={chat.lanes} />
+            <ScmFacts task={focused} />
+            <TechnicalDetails task={focused} />
           </>
         )}
-        {lane === 'rules' && <Conventions repoId={task.task.repo_id} />}
+        {lane === 'rules' && <Conventions repoId={focused.task.repo_id} />}
       </div>
 
-      <Composer task={task} />
+      <Composer
+        key={chat.chatId}
+        autoFocus
+        catalog={catalog}
+        placeholder="Write to the agent. @name at the start of a line to pick a lane."
+        onSend={onSend}
+      />
     </div>
   );
 }
 
-function StartTask({ taskId }: { taskId: string }): JSX.Element {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
+function LaneStrip({
+  chat,
+  focusId,
+  onFocus,
+}: {
+  chat: ChatGroup;
+  focusId: string;
+  onFocus: (id: string) => void;
+}): JSX.Element {
   return (
-    <section style={{ padding: '12px 16px', borderBottom: '0.5px solid var(--line)' }}>
-      <button
-        className="primary"
-        disabled={busy}
-        onClick={() => {
-          setBusy(true);
-          setError(null);
-          void api
-            .taskLaunch(taskId)
-            .catch((err: Error) => setError(err.message))
-            .finally(() => setBusy(false));
-        }}
-      >
-        {busy ? 'Starting…' : 'Start the agent'}
-      </button>
-      <p style={{ margin: '8px 0 0', color: 'var(--ink-2)', fontSize: 'var(--t-xs)' }}>
-        Creates a worktree and launches the agent inside it. Your own checkout is not touched.
-      </p>
-      {error && (
-        <p className="mono" style={{ color: 'var(--st-fail)', fontSize: 'var(--t-xs)' }}>
-          {error}
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+      {chat.lanes.map((task) => {
+        const copy = STATUS[task.status];
+        const selected = task.task.id === focusId;
+        const colour = agentColor(task.agentId);
+        return (
+          <button
+            key={task.task.id}
+            onClick={() => onFocus(task.task.id)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '3px 8px',
+              border: '0.5px solid',
+              borderColor: selected ? colour : 'var(--line)',
+              background: selected ? 'var(--bg-2)' : 'var(--bg-1)',
+              color: colour,
+              fontSize: 'var(--t-xs)',
+            }}
+          >
+            <span style={{ color: TONE_COLOUR[copy.tone] }}>{GLYPH[copy.tone]}</span>
+            <span>{task.agentId}</span>
+            <span className="mono" style={{ color: 'var(--ink-3)' }}>
+              {task.task.branch}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  color,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  color?: string;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '2px 8px',
+        fontSize: 'var(--t-xs)',
+        border: '0.5px solid',
+        borderColor: active ? (color ?? 'var(--line)') : 'var(--line)',
+        color: color ?? 'var(--ink-2)',
+        background: active ? 'var(--bg-2)' : 'transparent',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+export function DraftPane({
+  optimistic,
+  submitting,
+  catalog,
+  onSend,
+}: {
+  optimistic?: string;
+  submitting: boolean;
+  catalog: CatalogAgent[];
+  onSend: (text: string) => Promise<void>;
+}): JSX.Element {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        background: 'var(--bg-0)',
+      }}
+    >
+      <header style={{ padding: '14px 16px 12px', borderBottom: '0.5px solid var(--line)' }}>
+        <h1 style={{ fontSize: 'var(--t-l)', fontWeight: 600, margin: 0 }}>New chat</h1>
+        <p style={{ margin: '6px 0 0', color: 'var(--ink-2)', fontSize: 'var(--t-s)' }}>
+          One chat is one branch. @mention an agent on its own line to pick a lane.
         </p>
-      )}
-    </section>
+      </header>
+      <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
+        <Transcript lanes={[]} active prefix={optimistic} refreshKey={null} />
+      </div>
+      <Composer
+        autoFocus
+        disabled={submitting}
+        catalog={catalog}
+        placeholder="What are we working on?"
+        onSend={onSend}
+      />
+    </div>
   );
 }
 
@@ -263,11 +372,9 @@ function TechnicalDetails({ task }: { task: TaskView }): JSX.Element {
   return (
     <section style={{ marginTop: 16 }}>
       <details>
-        <summary style={{ cursor: 'default', color: 'var(--ink-2)' }}>
-          Where this is running
-        </summary>
-
+        <summary style={{ cursor: 'default', color: 'var(--ink-2)' }}>Where this is running</summary>
         <div style={{ marginTop: 10 }}>
+          <Field label="Agent" value={task.agentId} />
           <Field label="Branch" value={task.task.branch} mono />
           <Field
             label="Based on"
@@ -282,7 +389,6 @@ function TechnicalDetails({ task }: { task: TaskView }): JSX.Element {
           />
           <Field label="Pane" value={task.agent?.substrate_pane_id ?? 'No agent running'} mono />
           {task.scm?.pr_url && <Field label="Pull request" value={task.scm.pr_url} mono />}
-
           {probeFailures > 0 && (
             <p style={{ color: 'var(--st-rest)', fontSize: 'var(--t-xs)', marginTop: 8 }}>
               {probeFailures} failed {probeFailures === 1 ? 'probe' : 'probes'} — the status above
@@ -291,7 +397,6 @@ function TechnicalDetails({ task }: { task: TaskView }): JSX.Element {
           )}
         </div>
       </details>
-
       <div style={{ marginTop: 14 }}>
         <button onClick={() => void window.osade?.openInSubstrate()}>Open the terminal</button>
         <p style={{ margin: '8px 0 0', color: 'var(--ink-2)', fontSize: 'var(--t-xs)' }}>

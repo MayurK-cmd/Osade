@@ -74,12 +74,27 @@ export const api = {
       name: string;
       slug: string | null;
       defaultBranch: string;
+      defaultAgent: string | null;
       taskCount: number;
     }>,
 
+  repoSetDefaultAgent: (repoId: string, agentId: string) =>
+    call('mutation', 'repoSetDefaultAgent', { repoId, agentId }) as Promise<{ ok: true }>,
+
+  agentCatalogList: () =>
+    call('query', 'agentCatalogList') as Promise<
+      { id: string; displayName: string; installed: boolean }[]
+    >,
+
   /** §8.2 — creating a task prepares a worktree. It does not start an agent. */
-  taskCreate: (input: { repoPath: string; title: string; intent: string }) =>
-    call('mutation', 'taskCreate', input) as Promise<{ taskId: string }>,
+  taskCreate: (input: {
+    repoPath: string;
+    title: string;
+    intent: string;
+    agentId?: string;
+    chatId?: string;
+    baseRef?: string;
+  }) => call('mutation', 'taskCreate', input) as Promise<{ taskId: string }>,
 
   /** §8.2 — the launch sequence. Long-running: worktree, lane, agent start. */
   taskLaunch: (taskId: string) =>

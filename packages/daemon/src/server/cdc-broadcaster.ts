@@ -1,10 +1,9 @@
 import type { ServerMessage, TaskView } from '@osade/contract';
-import { isNeedsYou } from '@osade/contract';
 
 import type { Db } from '../db/index.js';
 import { currentWatermark } from '../db/index.js';
-import { getTaskFacts, listTaskFacts } from '../db/task-repo.js';
-import { deriveStatus } from '../domain/derive-status.js';
+import { listTaskFacts } from '../db/task-repo.js';
+import { toTaskView } from '../domain/task-view.js';
 
 /**
  * OSADE.md §5.4 — INVARIANT: the one event path.
@@ -139,18 +138,6 @@ export class CdcBroadcaster {
   }
 
   #view(taskId: string): TaskView | null {
-    const facts = getTaskFacts(this.#db, taskId);
-    if (!facts) return null;
-    // §6 — recomputed on every read, never stored, never sent from the client.
-    const status = deriveStatus(facts, this.#now());
-    return {
-      task: facts.task,
-      status,
-      agent: facts.agent,
-      scm: facts.scm,
-      openGates: facts.openGates,
-      latestVerifyRuns: facts.verifyRuns,
-      needsYou: isNeedsYou(status),
-    };
+    return toTaskView(this.#db, taskId, this.#now());
   }
 }

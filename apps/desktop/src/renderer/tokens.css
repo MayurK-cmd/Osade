@@ -22,6 +22,12 @@
   --st-rest: #7e887f;
   --focus: #8fa8c4;
 
+  /* Agent colours — cousins of --st-* / --focus, never the status tokens themselves. */
+  --ag-claude: #8fa8c4;
+  --ag-codex: #5f9e86;
+  --ag-opencode: #c4a06a;
+  --ag-pi: #9a8bb8;
+
   /* Aliases for panels that still speak the old names. */
   --paper: var(--bg-0);
   --surface: var(--bg-1);
@@ -109,7 +115,8 @@ button.primary:disabled {
 }
 
 input,
-textarea {
+textarea,
+select {
   font: inherit;
   color: var(--ink);
   background: var(--bg-0);
@@ -155,6 +162,18 @@ details[open] > summary::before {
 textarea {
   resize: vertical;
   line-height: 1.45;
+}
+
+.branch-tail {
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: right;
+  min-width: 0;
 }
 
 .ledger-row:hover {

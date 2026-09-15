@@ -15,7 +15,7 @@ import type { SubstrateEventSubscriber } from '../substrate/event-subscriber.js'
 import { Conventions } from '../knowledge/conventions.js';
 import { renderContextFile } from '../knowledge/context-file.js';
 import { worktreePathFor } from '../paths.js';
-import { agentEntry, hasCapability } from './agent-catalog.js';
+import { agentEntry, DAEMON_DEFAULT_AGENT, hasCapability, requireAgent } from './agent-catalog.js';
 import type { Checkpoints } from './checkpoints.js';
 import {
   DEFAULT_MIRROR_PATHS,
@@ -63,6 +63,7 @@ export interface CreateTaskInput {
   title: string;
   intent: string;
   agentId?: string | undefined;
+  chatId?: string | undefined;
   baseRef?: string | undefined;
 }
 
@@ -130,32 +131,47 @@ export class LaunchTask {
     this.#substrate = substrate;
     this.#subscriber = subscriber;
     this.#now = options.now ?? Date.now;
-    this.#defaultAgent = options.defaultAgent ?? 'claude';
+    this.#defaultAgent = options.defaultAgent ?? DAEMON_DEFAULT_AGENT;
     this.#onWarning = options.onWarning ?? (() => {});
     this.#checkpoints = options.checkpoints ?? null;
   }
 
   /** Registers a repo and a task row. No substrate calls, no worktree — that is `launch`. */
   async createTask(input: CreateTaskInput): Promise<string> {
+    if (input.agentId) requireAgent(input.agentId);
+
     const repoId = await this.ensureRepo(input.repoPath);
     const repo = this.#db.prepare('SELECT * FROM repo WHERE id = ?').get(repoId) as {
       path: string;
       default_branch: string;
+      default_agent: string | null;
     };
 
-    const baseRef = input.baseRef ?? repo.default_branch;
-    const baseSha = await resolveSha(repo.path, baseRef);
+    const sibling = input.chatId
+      ? (this.#db
+          .prepare(
+            `SELECT title, base_ref, base_sha FROM task
+              WHERE chat_id = ? ORDER BY created_at ASC LIMIT 1`,
+          )
+          .get(input.chatId) as { title: string; base_ref: string; base_sha: string } | undefined)
+      : undefined;
+
+    const baseRef = input.baseRef ?? sibling?.base_ref ?? repo.default_branch;
+    const baseSha =
+      sibling && input.baseRef == null ? sibling.base_sha : await resolveSha(repo.path, baseRef);
 
     const taskId = `t_${randomUUID().slice(0, 8)}`;
-    const slug = slugify(input.title);
-    const branch = `osade/${slug}-${taskId.slice(2)}`;
+    const chatId = input.chatId ?? taskId;
+    const resolvedAgent = input.agentId ?? repo.default_agent ?? this.#defaultAgent;
+    const slug = slugify(sibling?.title ?? input.title);
+    const branch = `osade/${slug}/${resolvedAgent}`;
     const worktreePath = worktreePathFor(basename(repo.path), taskId);
 
     this.#db
       .prepare(
-        `INSERT INTO task (id, repo_id, title, intent, origin_kind, agent_id, base_ref, base_sha,
-                           branch, worktree_path, created_at)
-         VALUES (?, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO task (id, repo_id, title, intent, origin_kind, agent_id, chat_id, base_ref,
+                           base_sha, branch, worktree_path, created_at)
+         VALUES (?, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         taskId,
@@ -163,6 +179,7 @@ export class LaunchTask {
         input.title,
         input.intent,
         input.agentId ?? null,
+        chatId,
         baseRef,
         baseSha,
         branch,

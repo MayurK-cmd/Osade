@@ -10,15 +10,21 @@ import {
   TaskId,
   TaskStatus,
   TaskView,
-  isNeedsYou,
 } from '@osade/contract';
 
 import type { Db } from '../db/index.js';
 import { getTask, getTaskFacts, listTaskFacts } from '../db/task-repo.js';
-import { deriveStatus } from '../domain/derive-status.js';
+import {
+  AGENT_CATALOG,
+  agentDisplayName,
+  binaryOnPath,
+  requireAgent,
+  UnknownAgentError,
+} from '../domain/agent-catalog.js';
 import type { Gates } from '../domain/gates.js';
 import type { LaunchTask } from '../domain/launch-task.js';
 import { repoRoot } from '../domain/git.js';
+import { toTaskView } from '../domain/task-view.js';
 import { deriveVerifyPlan, type VerifyStep } from '../domain/verify-plan.js';
 import type { Triage, TriageKind } from '../domain/triage.js';
 import type { VerifyRunner } from '../domain/verify-run.js';
@@ -49,19 +55,14 @@ export interface DaemonContext {
 const t = initTRPC.context<DaemonContext>().create();
 
 function viewFor(ctx: DaemonContext, taskId: string): TaskView | null {
-  const facts = getTaskFacts(ctx.db, taskId);
-  if (!facts) return null;
-  // §6 — derived on every read. Never stored, never accepted from the client.
-  const status = deriveStatus(facts, ctx.now());
-  return {
-    task: facts.task,
-    status,
-    agent: facts.agent,
-    scm: facts.scm,
-    openGates: facts.openGates,
-    latestVerifyRuns: facts.verifyRuns,
-    needsYou: isNeedsYou(status),
-  };
+  return toTaskView(ctx.db, taskId, ctx.now());
+}
+
+function unknownAgent(err: unknown): never {
+  if (err instanceof UnknownAgentError) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: err.message });
+  }
+  throw err;
 }
 
 /**
@@ -117,13 +118,19 @@ export const appRouter = t.router({
         title: z.string().min(1),
         intent: z.string().min(1),
         agentId: z.string().optional(),
+        chatId: z.string().optional(),
         baseRef: z.string().optional(),
       }),
     )
     .output(z.object({ taskId: TaskId }))
     .mutation(async ({ ctx, input }) => {
-      const taskId = await ctx.launcher.createTask(input);
-      return { taskId };
+      try {
+        if (input.agentId) requireAgent(input.agentId);
+        const taskId = await ctx.launcher.createTask(input);
+        return { taskId };
+      } catch (err) {
+        unknownAgent(err);
+      }
     }),
 
   /** Runs the §8.2 launch sequence. Long-running: worktree, lane, agent start. */
@@ -180,6 +187,7 @@ export const appRouter = t.router({
         /** `owner/name` when there is a GitHub remote; null for a local-only repo. */
         slug: z.string().nullable(),
         defaultBranch: z.string(),
+        defaultAgent: z.string().nullable(),
         taskCount: z.number().int(),
       }),
     )
@@ -196,6 +204,7 @@ export const appRouter = t.router({
       const repo = ctx.db.prepare('SELECT * FROM repo WHERE id = ?').get(repoId) as {
         path: string;
         default_branch: string;
+        default_agent: string | null;
         gh_owner: string | null;
         gh_name: string | null;
       };
@@ -209,9 +218,46 @@ export const appRouter = t.router({
         name: basename(repo.path) || repo.path,
         slug: repo.gh_owner && repo.gh_name ? `${repo.gh_owner}/${repo.gh_name}` : null,
         defaultBranch: repo.default_branch,
+        defaultAgent: repo.default_agent,
         taskCount: counted.n,
       };
     }),
+
+  repoSetDefaultAgent: t.procedure
+    .input(z.object({ repoId: z.string().min(1), agentId: z.string().min(1) }))
+    .output(z.object({ ok: z.literal(true) }))
+    .mutation(({ ctx, input }) => {
+      try {
+        requireAgent(input.agentId);
+      } catch (err) {
+        unknownAgent(err);
+      }
+      const result = ctx.db
+        .prepare('UPDATE repo SET default_agent = ? WHERE id = ?')
+        .run(input.agentId, input.repoId);
+      if (result.changes === 0) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown repo' });
+      }
+      return { ok: true as const };
+    }),
+
+  agentCatalogList: t.procedure
+    .output(
+      z.array(
+        z.object({
+          id: z.string(),
+          displayName: z.string(),
+          installed: z.boolean(),
+        }),
+      ),
+    )
+    .query(() =>
+      AGENT_CATALOG.map((entry) => ({
+        id: entry.id,
+        displayName: agentDisplayName(entry.id),
+        installed: binaryOnPath(entry.binary),
+      })),
+    ),
 
   // ── verification (§10) ───────────────────────────────────────────────────
 

@@ -22,7 +22,10 @@ interface Plan {
   base: string;
 }
 
-export function PrOpen({ task }: { task: TaskView }): JSX.Element {
+export function PrOpen({ task, lanes }: { task: TaskView; lanes?: TaskView[] }): JSX.Element {
+  const choices = lanes && lanes.length > 1 ? lanes : [task];
+  const [picked, setPicked] = useState(task.task.id);
+  const active = choices.find((l) => l.task.id === picked) ?? task;
   const [plan, setPlan] = useState<Plan | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
   const [title, setTitle] = useState(task.task.title);
@@ -33,11 +36,15 @@ export function PrOpen({ task }: { task: TaskView }): JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setPicked(task.task.id);
+  }, [task.task.id]);
+
+  useEffect(() => {
     let cancelled = false;
     setPlan(null);
     setPlanError(null);
     setRequested(false);
-    api.prPlan(task.task.id).then(
+    api.prPlan(active.task.id).then(
       (p) => {
         if (!cancelled) setPlan(p);
       },
@@ -48,14 +55,14 @@ export function PrOpen({ task }: { task: TaskView }): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [task.task.id]);
+  }, [active.task.id]);
 
-  if (task.scm?.pr_number != null) {
+  if (active.scm?.pr_number != null) {
     return (
       <p style={{ fontSize: 'var(--t-xs)' }}>
         Pull request{' '}
-        <a href={task.scm.pr_url ?? '#'} style={{ color: 'var(--st-live)' }}>
-          #{task.scm.pr_number}
+        <a href={active.scm.pr_url ?? '#'} style={{ color: 'var(--st-live)' }}>
+          #{active.scm.pr_number}
         </a>{' '}
         is open.
       </p>
@@ -86,10 +93,26 @@ export function PrOpen({ task }: { task: TaskView }): JSX.Element {
     );
   }
 
-  const verifyBlocks = task.status === 'verify_failed';
+  const verifyBlocks = active.status === 'verify_failed';
 
   return (
     <div style={{ fontSize: 'var(--t-xs)' }}>
+      {choices.length > 1 && (
+        <label style={{ display: 'block', marginBottom: 8 }}>
+          <span style={{ color: 'var(--ink-soft)' }}>Lane</span>
+          <select
+            value={active.task.id}
+            onChange={(event) => setPicked(event.target.value)}
+            style={{ display: 'block', width: '100%', marginTop: 2 }}
+          >
+            {choices.map((lane) => (
+              <option key={lane.task.id} value={lane.task.id}>
+                {lane.agentId} · {lane.task.branch}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <p style={{ color: 'var(--ink-soft)', margin: '0 0 8px' }}>
         <span className="mono">{plan.head}</span> → <span className="mono">{plan.target}</span>:
         <span className="mono"> {plan.base}</span>
@@ -140,7 +163,7 @@ export function PrOpen({ task }: { task: TaskView }): JSX.Element {
         onClick={() => {
           setBusy(true);
           setError(null);
-          api.prOpenRequest(task.task.id, title, body, draft).then(
+          api.prOpenRequest(active.task.id, title, body, draft).then(
             () => {
               setRequested(true);
               setBusy(false);

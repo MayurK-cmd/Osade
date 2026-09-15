@@ -71,6 +71,30 @@ async function trpcQuery(path: string, input?: unknown): Promise<unknown> {
   return body.result?.data;
 }
 
+async function trpcMutation(path: string, input: unknown): Promise<unknown> {
+  const body = await trpcMutationRaw(path, input);
+  if (body.error) throw new Error(JSON.stringify(body.error));
+  return body.result?.data;
+}
+
+async function trpcMutationRaw(
+  path: string,
+  input: unknown,
+): Promise<{
+  result?: { data?: unknown };
+  error?: { message?: string; data?: { code?: string } };
+}> {
+  const res = await fetch(`http://127.0.0.1:${daemon.port}/${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return (await res.json()) as {
+    result?: { data?: unknown };
+    error?: { message?: string; data?: { code?: string } };
+  };
+}
+
 describe('daemon server', () => {
   it('binds loopback only — §2.1', () => {
     // The port file is how the CLI and Electron find us; a fixed port would collide.
@@ -108,6 +132,56 @@ describe('daemon server', () => {
 
   it('taskGet returns null for an unknown id rather than throwing', async () => {
     expect(await trpcQuery('taskGet', { taskId: 'nope' })).toBe(null);
+  });
+
+  it('taskList surfaces chatId and the resolved agentId', async () => {
+    seedTask();
+    db.prepare('UPDATE repo SET default_agent = ? WHERE id = ?').run('codex', 'r1');
+    const tasks = (await trpcQuery('taskList')) as {
+      chatId: string;
+      agentId: string;
+      task: { id: string };
+    }[];
+    expect(tasks[0]!.chatId).toBe('t1');
+    expect(tasks[0]!.agentId).toBe('codex');
+  });
+
+  it('agentCatalogList returns catalog ids and a PATH probe', async () => {
+    const agents = (await trpcQuery('agentCatalogList')) as {
+      id: string;
+      displayName: string;
+      installed: boolean;
+    }[];
+    const ids = agents.map((a) => a.id);
+    expect(ids).toEqual(['claude', 'codex', 'opencode', 'pi']);
+    expect(agents.every((a) => a.displayName.length > 0)).toBe(true);
+    expect(agents.every((a) => typeof a.installed === 'boolean')).toBe(true);
+  });
+
+  it('repoSetDefaultAgent writes the catalog id and rejects unknown ids', async () => {
+    seedTask();
+    await trpcMutation('repoSetDefaultAgent', { repoId: 'r1', agentId: 'codex' });
+    const row = db.prepare('SELECT default_agent FROM repo WHERE id = ?').get('r1') as {
+      default_agent: string;
+    };
+    expect(row.default_agent).toBe('codex');
+
+    const rejected = await trpcMutationRaw('repoSetDefaultAgent', {
+      repoId: 'r1',
+      agentId: 'not-an-agent',
+    });
+    expect(rejected.error?.data?.code).toBe('BAD_REQUEST');
+  });
+
+  it('taskCreate rejects an unknown agentId instead of falling back to claude', async () => {
+    const rejected = await trpcMutationRaw('taskCreate', {
+      repoPath: '/repo',
+      title: 'x',
+      intent: 'x',
+      agentId: 'not-an-agent',
+    });
+    expect(rejected.error?.data?.code).toBe('BAD_REQUEST');
+    expect(JSON.stringify(rejected.error)).toMatch(/unknown agent/i);
   });
 });
 

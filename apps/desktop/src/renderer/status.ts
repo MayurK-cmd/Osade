@@ -87,7 +87,7 @@ export const STATUS: Record<TaskStatus, StatusCopy> = {
   },
   idle: {
     label: 'Idle',
-    meaning: 'Nothing is happening on this task right now.',
+    meaning: 'Nothing is happening on this chat right now.',
     tone: 'rest',
   },
   stopped: {
@@ -127,6 +127,24 @@ export const TONE_COLOUR: Record<Tone, string> = {
   done: 'var(--st-rest)',
 };
 
+/** Lower is worse — same order the ledger sorts on. */
+export const SORT_RANK: Record<TaskStatus, number> = {
+  awaiting_approval: 0,
+  needs_input: 1,
+  review_changes_requested: 2,
+  awaiting_review: 3,
+  implementing: 4,
+  verifying: 5,
+  verify_failed: 6,
+  ci_failed: 7,
+  pr_open: 8,
+  queued: 9,
+  idle: 10,
+  stopped: 11,
+  merged: 12,
+  archived: 13,
+};
+
 /**
  * How long ago, in the units a person would say out loud.
  *
@@ -151,8 +169,8 @@ export function summarise(counts: { needsYou: number; working: number; total: nu
   const parts: string[] = [];
   if (counts.working > 0) parts.push(`${counts.working} working`);
   if (counts.needsYou > 0) {
-    parts.push(`${counts.needsYou} ${counts.needsYou === 1 ? 'task needs' : 'tasks need'} you`);
+    parts.push(`${counts.needsYou} ${counts.needsYou === 1 ? 'chat needs' : 'chats need'} you`);
   }
-  if (parts.length === 0) return `${counts.total} ${counts.total === 1 ? 'task' : 'tasks'} · idle`;
+  if (parts.length === 0) return `${counts.total} ${counts.total === 1 ? 'chat' : 'chats'} · idle`;
   return parts.join(' · ');
 }

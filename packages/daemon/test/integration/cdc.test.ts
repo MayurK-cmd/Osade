@@ -1,3 +1,4 @@
+import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { ServerMessage } from '@osade/contract';
@@ -6,6 +7,7 @@ import {
   CDC_TABLES,
   currentWatermark,
   migrate,
+  MIGRATIONS,
   openDb,
   pruneChangeLog,
   type Db,
@@ -71,6 +73,45 @@ describe('schema', () => {
     const after = db.prepare('SELECT COUNT(*) c FROM schema_migration').get() as { c: number };
     expect(after.c).toBe(before.c);
   });
+
+  it('backfills chat_id from the task id so old rows are one-lane chats', () => {
+    const raw = new Database(':memory:');
+    raw.pragma('foreign_keys = ON');
+    raw.exec(
+      'CREATE TABLE schema_migration (id INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)',
+    );
+    for (const migration of MIGRATIONS) {
+      if (migration.id >= 6) break;
+      raw.exec(migration.sql);
+      raw.prepare('INSERT INTO schema_migration (id, applied_at) VALUES (?, ?)').run(
+        migration.id,
+        NOW,
+      );
+    }
+    raw.prepare('INSERT INTO org (id, name, created_at) VALUES (?, ?, ?)').run('o1', 'acme', NOW);
+    raw
+      .prepare(
+        'INSERT INTO repo (id, org_id, path, default_branch, created_at) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run('r1', 'o1', '/repo', 'main', NOW);
+    raw
+      .prepare(
+        `INSERT INTO task (id, repo_id, title, intent, origin_kind, base_ref, base_sha, branch,
+                           worktree_path, created_at)
+         VALUES ('t_old', 'r1', 'fix', 'fix it', 'manual', 'main', 'h', 'b', '/wt', ?)`,
+      )
+      .run(NOW);
+
+    const next = MIGRATIONS.find((m) => m.id === 6);
+    expect(next, 'migration 6 must exist').toBeDefined();
+    raw.exec(next!.sql);
+
+    const row = raw.prepare('SELECT chat_id FROM task WHERE id = ?').get('t_old') as {
+      chat_id: string;
+    };
+    expect(row.chat_id).toBe('t_old');
+    raw.close();
+  });
 });
 
 describe('CDC — a raw SQL write reaches a subscriber', () => {
@@ -90,6 +131,8 @@ describe('CDC — a raw SQL write reaches a subscriber', () => {
     expect(push.task.task.id).toBe('t1');
     // No agent yet → §6 row 13.
     expect(push.task.status).toBe('queued');
+    expect(push.task.chatId).toBe('t1');
+    expect(push.task.agentId).toBe('claude');
   });
 
   it('a raw UPDATE of a fact table re-derives status and pushes it', () => {

@@ -30,6 +30,10 @@ export const TaskView = z.object({
   latestVerifyRuns: z.array(VerifyRun),
   /** True when `status` is in the needs-you set. Derived; here so the client need not know §6. */
   needsYou: z.boolean(),
+  /** All lanes of one chat share this. Backfilled to the task id for pre-lane rows. */
+  chatId: z.string(),
+  /** What will run / did run: task.agent_id ?? repo.default_agent ?? daemon fallback. */
+  agentId: z.string(),
 });
 export type TaskView = z.infer<typeof TaskView>;
 

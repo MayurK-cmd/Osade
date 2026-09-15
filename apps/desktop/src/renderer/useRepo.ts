@@ -20,6 +20,7 @@ export interface OpenRepo {
   name: string;
   slug: string | null;
   defaultBranch: string;
+  defaultAgent: string | null;
 }
 
 export function useRepo(): { repo: OpenRepo | null; error: string | null } {

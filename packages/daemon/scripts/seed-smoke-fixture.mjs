@@ -46,10 +46,11 @@ try {
   db.prepare(
     `INSERT OR REPLACE INTO task
        (id, repo_id, title, intent, origin_kind, base_ref, base_sha, branch, worktree_path,
-        substrate_workspace_id, created_at)
+        substrate_workspace_id, chat_id, created_at)
      VALUES ('t_smoke01', 'r_smoke', 'Retry the flaky poller test',
              'The poller test fails intermittently on slow machines.', 'manual',
-             'main', 'c820293d7c52', 'osade/retry-flaky-poller', '/wt/t_smoke01', 'w3', ?)`,
+             'main', 'c820293d7c52', 'osade/retry-flaky-poller', '/wt/t_smoke01', 'w3',
+             't_smoke01', ?)`,
   ).run(NOW);
 
   // §6 row 3 — an undecided gate outranks everything, so this task reads awaiting_approval.

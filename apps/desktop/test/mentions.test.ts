@@ -1,0 +1,147 @@
+import { describe, expect, it } from 'vitest';
+
+import type { TaskView } from '@osade/contract';
+
+import { parseMentions } from '../src/renderer/mentions.js';
+import { laneDigest, worstStatus } from '../src/renderer/lanes.js';
+
+describe('parseMentions', () => {
+  const catalog = ['claude', 'codex', 'opencode', 'pi'];
+
+  it('bare text addresses no agents — the caller sends it to the primary lane', () => {
+    expect(parseMentions('refactor the token refresh', catalog)).toEqual({
+      shared: 'refactor the token refresh',
+      targets: [],
+    });
+  });
+
+  it('mentions only count at the start of a line', () => {
+    const parsed = parseMentions(
+      ['please look at auth', '@claude refactor the token refresh', '@codex write tests for it'].join(
+        '\n',
+      ),
+      catalog,
+    );
+    expect(parsed.shared).toBe('please look at auth');
+    expect(parsed.targets).toEqual([
+      { agentId: 'claude', text: 'refactor the token refresh' },
+      { agentId: 'codex', text: 'write tests for it' },
+    ]);
+  });
+
+  it('an @ in the middle of a line is not a mention', () => {
+    expect(parseMentions('ping @claude later', catalog).targets).toEqual([]);
+  });
+
+  it('an @ in the middle of a line is not a mention', () => {
+    expect(parseMentions('ping @claude later', catalog).targets).toEqual([]);
+  });
+
+  it('unknown ids are left in the shared text', () => {
+    const parsed = parseMentions('@ghost do a thing\n@claude real work', catalog);
+    expect(parsed.shared).toBe('@ghost do a thing');
+    expect(parsed.targets).toEqual([{ agentId: 'claude', text: 'real work' }]);
+  });
+});
+
+describe('laneDigest', () => {
+  it('omits the block when there is one lane', () => {
+    expect(laneDigest(view('claude'), [view('claude')])).toBeNull();
+  });
+
+  it('facts only, capped, never a transcript', () => {
+    const self = view('claude', { lastEventAt: 100 });
+    const sibling = view('codex', {
+      id: 't2',
+      branch: 'osade/token-refresh/codex',
+      status: 'implementing',
+      lastEventAt: 200,
+      checks: 'success',
+    });
+    const block = laneDigest(self, [self, sibling]);
+    expect(block).toContain('<osade_lanes>');
+    expect(block).toContain('codex on osade/token-refresh/codex');
+    expect(block).not.toContain('full dump');
+    expect(block!.trim().split('\n').length).toBeLessThanOrEqual(8);
+  });
+});
+
+describe('worstStatus', () => {
+  it('needs-you outranks working', () => {
+    expect(worstStatus(['implementing', 'needs_input', 'queued'])).toBe('needs_input');
+  });
+});
+
+function view(
+  agentId: string,
+  over: {
+    id?: string;
+    branch?: string;
+    status?: TaskView['status'];
+    lastEventAt?: number;
+    checks?: NonNullable<TaskView['scm']>['checks_state'];
+  } = {},
+): TaskView {
+  return {
+    task: {
+      id: over.id ?? 't1',
+      repo_id: 'r1',
+      chat_id: 'c1',
+      title: 'Token refresh',
+      intent: 'x',
+      origin_kind: 'manual',
+      origin_ref: null,
+      agent_id: agentId,
+      base_ref: 'main',
+      base_sha: 'abc',
+      branch: over.branch ?? `osade/token-refresh/${agentId}`,
+      worktree_path: '/wt',
+      substrate_workspace_id: null,
+      archived_at: null,
+      created_at: 1,
+    },
+    status: over.status ?? 'queued',
+    agent:
+      over.lastEventAt == null
+        ? null
+        : {
+            task_id: over.id ?? 't1',
+            substrate_pane_id: null,
+            substrate_state: 'working',
+            last_event: 'activity',
+            last_event_at: over.lastEventAt,
+            activity_text: null,
+            tool_name: null,
+            final_message: null,
+            agent_session_id: null,
+            pane_alive: true,
+            last_probe_at: null,
+            probe_failures: 0,
+            terminated: false,
+            state_change_seq: 1,
+            controller_generation: 0,
+          },
+    scm:
+      over.checks == null
+        ? null
+        : {
+            task_id: over.id ?? 't1',
+            pr_number: null,
+            pr_url: null,
+            pr_state: null,
+            pr_head_sha: null,
+            pr_draft: null,
+            checks_state: over.checks,
+            review_state: null,
+            unresolved_threads: 0,
+            mergeable: null,
+            fetched_at: 1,
+            fetch_failed_at: null,
+          },
+    openGates: [],
+    latestVerifyRuns: [],
+    needsYou: false,
+    chatId: 'c1',
+    agentId,
+  };
+}

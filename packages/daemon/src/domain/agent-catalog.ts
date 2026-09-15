@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
+
 /**
  * The agent catalog — OSADE.md §8.1.
  *
@@ -81,4 +84,57 @@ export function agentEntry(id: string): AgentCatalogEntry | null {
 
 export function hasCapability(entry: AgentCatalogEntry, capability: AgentCapability): boolean {
   return entry.capabilities.includes(capability);
+}
+
+export const DAEMON_DEFAULT_AGENT = 'claude';
+
+const DISPLAY_NAMES: Record<string, string> = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+  opencode: 'OpenCode',
+  pi: 'Pi',
+};
+
+export function agentDisplayName(id: string): string {
+  return DISPLAY_NAMES[id] ?? id;
+}
+
+export class UnknownAgentError extends Error {
+  readonly agentId: string;
+  constructor(agentId: string) {
+    super(`unknown agent ${agentId}`);
+    this.name = 'UnknownAgentError';
+    this.agentId = agentId;
+  }
+}
+
+export function requireAgent(id: string): AgentCatalogEntry {
+  const entry = agentEntry(id);
+  if (!entry) throw new UnknownAgentError(id);
+  return entry;
+}
+
+/**
+ * Direct PATH lookup — OSADE.md §8.1. Never `which`/`where` and never a login shell.
+ */
+export function binaryOnPath(
+  binary: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (binary.includes('/') || binary.includes('\\')) return existsSync(binary);
+  const pathVar = env.PATH ?? env.Path ?? '';
+  const dirs = pathVar.split(delimiter).filter(Boolean);
+  const extensions =
+    process.platform === 'win32'
+      ? (env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean)
+      : [''];
+  for (const dir of dirs) {
+    if (existsSync(join(dir, binary))) return true;
+    for (const ext of extensions) {
+      const suffix = ext.startsWith('.') ? ext : `.${ext}`;
+      if (existsSync(join(dir, binary + suffix))) return true;
+      if (existsSync(join(dir, binary + suffix.toLowerCase()))) return true;
+    }
+  }
+  return false;
 }

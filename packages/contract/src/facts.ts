@@ -29,6 +29,7 @@ export const Task = z.object({
   origin_kind: TaskOriginKind,
   origin_ref: z.string().nullable(),
   agent_id: z.string().nullable(),
+  chat_id: z.string(),
   base_ref: z.string(),
   base_sha: z.string(),
   branch: z.string(),

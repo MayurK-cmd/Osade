@@ -22,14 +22,14 @@ export function CommandPalette({
   onClose,
   selected,
   repo,
-  onNewTask,
+  onNewChat,
   onError,
 }: {
   open: boolean;
   onClose: () => void;
   selected: TaskView | null;
   repo: PaletteRepo | null;
-  onNewTask: () => void;
+  onNewChat: () => void;
   onError: (message: string) => void;
 }): JSX.Element | null {
   const [query, setQuery] = useState('');
@@ -40,9 +40,9 @@ export function CommandPalette({
     return [
       {
         id: 'new',
-        label: 'New task',
-        chord: chord('n'),
-        run: onNewTask,
+        label: 'New chat',
+        chord: chord('t'),
+        run: onNewChat,
       },
       {
         id: 'launch',
@@ -77,7 +77,7 @@ export function CommandPalette({
         },
       },
     ];
-  }, [onNewTask, repo, selected]);
+  }, [onNewChat, repo, selected]);
 
   const filtered = items.filter((item) =>
     item.label.toLowerCase().includes(query.trim().toLowerCase()),

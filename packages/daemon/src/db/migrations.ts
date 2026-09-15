@@ -311,6 +311,16 @@ ALTER TABLE mine_run ADD COLUMN progress_done INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE mine_run ADD COLUMN progress_total INTEGER NOT NULL DEFAULT 0;
 `;
 
+/**
+ * M6 — multi-agent chats. A chat is a set of tasks sharing `chat_id`; each task is one lane.
+ * Existing rows become one-lane chats by backfilling `chat_id` from the task id.
+ */
+const M006_CHAT_LANES = `
+ALTER TABLE task ADD COLUMN chat_id TEXT;
+UPDATE task SET chat_id = id WHERE chat_id IS NULL;
+CREATE INDEX task_chat_idx ON task(chat_id);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     id: 1,
@@ -336,5 +346,10 @@ export const MIGRATIONS: readonly Migration[] = [
     id: 5,
     name: 'mining progress, for runs that take minutes',
     sql: M005_MINE_PROGRESS,
+  },
+  {
+    id: 6,
+    name: 'chat_id on task, backfilled for one-lane chats',
+    sql: M006_CHAT_LANES,
   },
 ];

@@ -43,6 +43,7 @@ function rowToTask(r: Record<string, unknown>): Task {
     origin_kind: r.origin_kind as Task['origin_kind'],
     origin_ref: (r.origin_ref as string | null) ?? null,
     agent_id: (r.agent_id as string | null) ?? null,
+    chat_id: (r.chat_id as string | null) ?? (r.id as string),
     base_ref: r.base_ref as string,
     base_sha: r.base_sha as string,
     branch: r.branch as string,
