@@ -224,13 +224,13 @@ export function Detail({
               data-lane={item.id}
               onClick={() => onLane(item.id)}
               style={{
-                background: selected ? 'var(--bg-2)' : 'transparent',
-                border: '0.5px solid',
-                borderColor: selected ? 'var(--line)' : 'transparent',
-                borderBottom: selected ? '0.5px solid var(--bg-2)' : '0.5px solid transparent',
-                borderRadius: 'var(--radius) var(--radius) 0 0',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: selected ? '1px solid var(--focus)' : '1px solid transparent',
+                borderRadius: 0,
                 marginBottom: -1,
                 color: selected ? 'var(--ink)' : 'var(--ink-2)',
+                padding: '6px 10px 8px',
               }}
             >
               {item.label}

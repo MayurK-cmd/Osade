@@ -1,29 +1,31 @@
 /*
- * Design tokens.
+ * Design tokens — OSADE.md §19.2.
  *
- * Four ground steps plus a 0.5px hairline. No shadows. IBM Plex Sans for chrome,
- * IBM Plex Mono only for machine-authored text. Sentence case everywhere.
- * --focus is a focus ring, never a state colour.
+ * Dark ground, one blue accent for selection/focus, greyscale otherwise. IBM Plex Mono
+ * throughout (system mono until Plex is bundled). 1px rules, no shadows. 3px radius on
+ * controls only. Sentence case in content; chrome stays quiet.
  */
 
 :root {
-  --bg-0: #101210;
-  --bg-1: #151815;
-  --bg-2: #1b1f1c;
-  --bg-3: #232823;
-  --line: #2c332d;
-  --ink: #e6eae4;
-  --ink-2: #98a196;
-  --ink-3: #69726a;
+  color-scheme: dark;
 
-  --st-needs: #e0a159;
-  --st-live: #63b98c;
-  --st-fail: #e0736e;
-  --st-rest: #7e887f;
-  --focus: #8fa8c4;
+  --bg-0: #0f1214;
+  --bg-1: #14181b;
+  --bg-2: #1b2025;
+  --bg-3: #22272e;
+  --line: #21262c;
+  --ink: #c9d1d9;
+  --ink-2: #7d868e;
+  --ink-3: #6e7772;
+
+  --st-needs: #d9903f;
+  --st-live: #57a773;
+  --st-fail: #cf6a67;
+  --st-rest: #6e7772;
+  --focus: #58a6ff;
 
   /* Agent colours — cousins of --st-* / --focus, never the status tokens themselves. */
-  --ag-claude: #8fa8c4;
+  --ag-claude: #6ea0d4;
   --ag-codex: #5f9e86;
   --ag-opencode: #c4a06a;
   --ag-pi: #9a8bb8;
@@ -36,16 +38,16 @@
   --ink-soft: var(--ink-2);
   --accent: var(--focus);
 
-  --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
-  --mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+  --sans: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+  --mono: var(--sans);
 
   --t-xs: 11px;
-  --t-s: 12px;
-  --t-m: 13px;
-  --t-l: 15px;
+  --t-s: 12.5px;
+  --t-m: 14px;
+  --t-l: 17px;
 
-  --radius: 5px;
-  --radius-panel: 6px;
+  --radius: 3px;
+  --radius-panel: 3px;
 }
 
 * {
@@ -62,7 +64,7 @@ body,
 body {
   background: var(--bg-0);
   color: var(--ink);
-  font-family: var(--sans);
+  font-family: var(--mono);
   font-size: var(--t-m);
   line-height: 1.45;
   font-variant-numeric: tabular-nums;
@@ -75,6 +77,10 @@ kbd {
   font-family: var(--mono);
 }
 
+::selection {
+  background: rgba(88, 166, 255, 0.28);
+}
+
 :focus-visible {
   outline: 1px solid var(--focus);
   outline-offset: 2px;
@@ -84,7 +90,7 @@ button {
   font: inherit;
   color: var(--ink);
   background: var(--bg-2);
-  border: 0.5px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 4px 11px;
   cursor: pointer;
@@ -92,6 +98,7 @@ button {
 
 button:hover:not(:disabled) {
   background: var(--bg-3);
+  border-color: #30363d;
 }
 
 button:disabled {
@@ -102,16 +109,17 @@ button:disabled {
 button.primary {
   background: var(--bg-3);
   color: var(--ink);
-  border-color: var(--line);
+  border-color: #30363d;
 }
 
 button.primary:hover:not(:disabled) {
-  background: var(--bg-3);
+  background: #2a3139;
 }
 
 button.primary:disabled {
   background: var(--bg-2);
   color: var(--ink-3);
+  border-color: var(--line);
 }
 
 input,
@@ -120,25 +128,25 @@ select {
   font: inherit;
   color: var(--ink);
   background: var(--bg-0);
-  border: 0.5px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 5px 8px;
+  padding: 6px 10px;
   width: 100%;
 }
 
 input:focus,
 textarea:focus {
   outline: 1px solid var(--focus);
-  outline-offset: 1px;
-  border-color: var(--line);
+  outline-offset: 0;
+  border-color: var(--focus);
 }
 
 kbd {
   font-size: var(--t-xs);
   color: var(--ink-3);
-  border: 0.5px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 3px;
-  padding: 0 4px;
+  padding: 0 5px;
 }
 
 summary {
@@ -183,6 +191,29 @@ textarea {
 .ledger-row[aria-pressed='true'],
 .ledger-row[aria-pressed='true']:hover {
   background: var(--bg-2);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-3);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Dark+ token colours, used only in the Files editor overlay. */
@@ -239,7 +270,7 @@ textarea {
 }
 
 .code-editor textarea::selection {
-  background: rgba(143, 168, 196, 0.35);
+  background: rgba(88, 166, 255, 0.35);
   color: transparent;
 }
 
@@ -253,7 +284,7 @@ textarea {
 }
 .diff-hunk {
   background: var(--bg-1);
-  color: #8fa8c4;
+  color: #58a6ff;
 }
 .diff-meta {
   color: var(--ink-3);

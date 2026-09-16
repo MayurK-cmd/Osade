@@ -125,20 +125,20 @@ export function CommandPalette({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(16, 18, 16, 0.72)',
+        background: 'rgba(15, 18, 20, 0.78)',
         display: 'flex',
         justifyContent: 'center',
-        paddingTop: 80,
+        paddingTop: 72,
         zIndex: 20,
       }}
     >
       <div
         onClick={(event) => event.stopPropagation()}
         style={{
-          width: 440,
+          width: 480,
           maxWidth: 'calc(100% - 32px)',
           background: 'var(--bg-1)',
-          border: '0.5px solid var(--line)',
+          border: '1px solid var(--line)',
           borderRadius: 'var(--radius-panel)',
           overflow: 'hidden',
         }}
@@ -172,10 +172,11 @@ export function CommandPalette({
           }}
           style={{
             border: 'none',
-            borderBottom: '0.5px solid var(--line)',
+            borderBottom: '1px solid var(--line)',
             borderRadius: 0,
-            padding: '10px 12px',
+            padding: '12px 14px',
             background: 'var(--bg-1)',
+            fontSize: 'var(--t-m)',
           }}
         />
         <ul style={{ listStyle: 'none', margin: 0, padding: '6px 0' }}>

@@ -66,7 +66,7 @@ export function Composer({
     const el = ref.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, 38), 128)}px`;
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 44), 140)}px`;
   }, [text]);
 
   function send(): void {
@@ -92,8 +92,8 @@ export function Composer({
   return (
     <div
       style={{
-        borderTop: '0.5px solid var(--line)',
-        padding: '8px 16px 10px',
+        borderTop: '1px solid var(--line)',
+        padding: '12px 16px 14px',
         background: 'var(--bg-1)',
       }}
     >
@@ -152,7 +152,7 @@ export function Composer({
               send();
             }
           }}
-          style={{ fontSize: 'var(--t-m)', minHeight: 38, overflow: 'hidden' }}
+          style={{ fontSize: 'var(--t-m)', minHeight: 44, overflow: 'hidden', padding: '8px 10px' }}
         />
         {suggestions.length > 0 && (
           <ul

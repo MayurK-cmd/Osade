@@ -21,6 +21,7 @@ declare global {
       openInSubstrate(): Promise<{ command: string; hint: string }>;
       openedRepo(): Promise<string | null>;
       chooseRepository(defaultPath?: string): Promise<string | null>;
+      zoom(delta: 1 | -1): Promise<number>;
       onRepoOpened(handler: (path: string) => void): () => void;
       githubStatus(): Promise<{ signedIn: boolean; login: string | null }>;
       githubLogin(

@@ -8,7 +8,7 @@ import {
   type OpenDialogOptions,
 } from 'electron';
 import type { ChildProcess } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -38,6 +38,13 @@ import {
 } from './oauth.js';
 import { githubToken, setGithubToken } from './secrets.js';
 import { adoptOrSpawnDaemon, stopDaemon } from './supervisor/daemon.js';
+import {
+  clampZoomLevel,
+  levelFromFactor,
+  parseZoomLevel,
+  zoomActionFromInput,
+  zoomFactor,
+} from './zoom.js';
 import {
   adoptOrSpawnSubstrate,
   OSADE_SESSION,
@@ -69,6 +76,45 @@ let daemonPort: number | null = null;
 let spawnedDaemon: ChildProcess | null = null;
 /** The repository this window is scoped to — `osade .`'s argument. */
 let openedRepo: string | null = null;
+
+const ZOOM_PATH = join(OSADE_ROOT, 'ui-zoom');
+
+function readZoomLevel(): number {
+  try {
+    return parseZoomLevel(readFileSync(ZOOM_PATH, 'utf8'));
+  } catch {
+    return 0;
+  }
+}
+
+function writeZoomLevel(level: number): void {
+  try {
+    mkdirSync(OSADE_ROOT, { recursive: true });
+    writeFileSync(ZOOM_PATH, `${clampZoomLevel(level)}\n`);
+  } catch {
+    // Persistence is convenience. A failed write must not take zoom down with it.
+  }
+}
+
+function currentZoomLevel(): number {
+  if (window && !window.isDestroyed()) {
+    return levelFromFactor(window.webContents.getZoomFactor());
+  }
+  return readZoomLevel();
+}
+
+function applyZoom(level: number): void {
+  const next = clampZoomLevel(level);
+  writeZoomLevel(next);
+  if (window && !window.isDestroyed()) {
+    window.webContents.setZoomFactor(zoomFactor(next));
+  }
+}
+
+function bumpZoom(delta: number): number {
+  applyZoom(currentZoomLevel() + delta);
+  return currentZoomLevel();
+}
 
 /**
  * One window, re-scoped — not one window per repository.
@@ -179,7 +225,7 @@ function createWindow(): void {
     minWidth: 900,
     center: true,
     // Match --bg-0 so the frame does not flash light before the page paints.
-    backgroundColor: '#101210',
+    backgroundColor: '#0F1214',
     icon: windowIcon(),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
@@ -211,8 +257,20 @@ function createWindow(): void {
   );
   window.webContents.on('did-finish-load', () => {
     say('renderer loaded');
+    applyZoom(readZoomLevel());
     window?.show();
     window?.focus();
+  });
+  void window.webContents.setVisualZoomLevelLimits(1, 1);
+  window.webContents.on('before-input-event', (event, input) => {
+    const action = zoomActionFromInput(input);
+    if (action == null) return;
+    event.preventDefault();
+    if (action === 'reset') applyZoom(0);
+    else bumpZoom(action === 'in' ? 1 : -1);
+  });
+  window.on('close', () => {
+    if (window && !window.isDestroyed()) writeZoomLevel(currentZoomLevel());
   });
   window.webContents.on('render-process-gone', (_event, details) =>
     say(`renderer gone: ${details.reason}${details.exitCode ? ` (exit ${details.exitCode})` : ''}`),
@@ -385,6 +443,10 @@ ipcMain.on('osade:log', (_event, message: unknown) => {
   if (typeof message === 'string' && message.length > 0) say(message);
 });
 ipcMain.handle('osade:opened-repo', () => openedRepo);
+ipcMain.handle('osade:zoom', (_event, delta: unknown) => {
+  if (delta === 1 || delta === -1) return bumpZoom(delta);
+  return currentZoomLevel();
+});
 
 ipcMain.handle('osade:github-status', async () => {
   const token = githubToken();

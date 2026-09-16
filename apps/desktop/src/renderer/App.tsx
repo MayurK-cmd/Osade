@@ -432,8 +432,13 @@ export function App(): JSX.Element {
 
   if (githubWelcome && !github.status.signedIn && !githubSkipped) {
     return (
-      <div style={{ padding: '34px 22px', maxWidth: 490 }}>
-        <p style={{ marginTop: 0, fontWeight: 600 }}>Welcome to Osade</p>
+      <div style={{ padding: '48px 28px', maxWidth: 520, height: '100%' }}>
+        <p style={{ margin: 0, fontSize: 'var(--t-l)', fontWeight: 600, letterSpacing: '-0.02em' }}>
+          Welcome to Osade
+        </p>
+        <p style={{ margin: '8px 0 22px', color: 'var(--ink-2)', lineHeight: 1.5 }}>
+          Agents work as open-source contributors. You stay on the gates.
+        </p>
         <GitHubSignIn
           status={github.status}
           onSignedIn={(login) => github.setStatus({ signedIn: true, login })}
@@ -467,6 +472,12 @@ export function App(): JSX.Element {
       >
         <Header
           repo={repo}
+          branch={
+            repo
+              ? (chats.find((t) => t.task.repo_id === repo.repoId && t.attachment === 'repo')
+                  ?.branch ?? repo.defaultBranch)
+              : null
+          }
           summary={summarise({
             needsYou: needsYou.length,
             working: working.length,
@@ -540,8 +551,14 @@ export function App(): JSX.Element {
                 const closed = collapsed.has(group.repoId);
                 const sample = group.chats[0]?.lanes[0];
                 const label = repoLabel(group.repoId, repo, sample?.cwd ?? null, aliases);
+                const hideRepoHead =
+                  repo != null && byRepo.length === 1 && group.repoId === repo.repoId;
+                const groupBranch =
+                  group.chats.flatMap((c) => c.lanes).find((t) => t.attachment === 'repo')
+                    ?.branch ?? sample?.branch;
                 return (
                   <section key={group.repoId}>
+                    {!hideRepoHead && (
                     <h2 style={groupHeadStyle('var(--ink-2)')}>
                       <button
                         onClick={() =>
@@ -621,6 +638,11 @@ export function App(): JSX.Element {
                           {label}
                         </span>
                       )}
+                      {groupBranch ? (
+                        <span className="branch-tail" title={groupBranch}>
+                          {groupBranch}
+                        </span>
+                      ) : null}
                       <button
                         title="New chat"
                         onClick={() =>
@@ -636,7 +658,8 @@ export function App(): JSX.Element {
                         +
                       </button>
                     </h2>
-                    {!closed &&
+                    )}
+                    {(hideRepoHead || !closed) &&
                       group.chats.map((chat) => (
                         <div key={chat.chatId}>
                           <ChatRow
@@ -792,7 +815,7 @@ function TabStrip({
         overflowX: 'auto',
         borderBottom: '0.5px solid var(--line)',
         background: 'var(--bg-1)',
-        padding: '4px 6px 0',
+        padding: '6px 8px 0',
       }}
     >
       {tabs.map((tab) => {
@@ -810,13 +833,13 @@ function TabStrip({
               gap: 6,
               maxWidth: 180,
               background: active ? 'var(--bg-0)' : 'transparent',
-              border: '0.5px solid',
-              borderColor: active ? 'var(--line)' : 'transparent',
-              borderBottom: active ? '0.5px solid var(--bg-0)' : '0.5px solid transparent',
-              borderRadius: 'var(--radius) var(--radius) 0 0',
-              marginBottom: -1,
-              padding: '6px 10px',
+              border: 'none',
+              borderBottom: active ? '1px solid var(--focus)' : '1px solid transparent',
+              borderRadius: 0,
+              marginBottom: 0,
+              padding: '7px 10px 8px',
               fontSize: 'var(--t-s)',
+              color: active ? 'var(--ink)' : 'var(--ink-2)',
             }}
           >
             {dirty && (
@@ -1032,6 +1055,7 @@ function RowMenu({
 
 function Header({
   repo,
+  branch,
   summary,
   view,
   onView,
@@ -1039,6 +1063,7 @@ function Header({
   settings,
 }: {
   repo: { name: string; slug: string | null } | null;
+  branch?: string | null;
   summary: string;
   view: 'list' | 'board';
   onView: (view: 'list' | 'board') => void;
@@ -1051,7 +1076,7 @@ function Header({
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        padding: '10px 12px 10px 16px',
+        padding: '12px 14px 12px 16px',
         borderBottom: '0.5px solid var(--line)',
         background: 'var(--bg-1)',
         minWidth: 0,
@@ -1060,14 +1085,28 @@ function Header({
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            fontWeight: 600,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            display: 'flex',
+            alignItems: 'baseline',
+            minWidth: 0,
           }}
-          title={repo?.slug ?? undefined}
         >
-          {repo ? repo.name : 'Osade'}
+          <div
+            style={{
+              fontWeight: 600,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0,
+            }}
+            title={repo?.slug ?? undefined}
+          >
+            {repo ? repo.name : 'Osade'}
+          </div>
+          {branch ? (
+            <span className="branch-tail" title={branch} style={{ marginLeft: 'auto', flexShrink: 0 }}>
+              {branch}
+            </span>
+          ) : null}
         </div>
         <div
           style={{
@@ -1124,7 +1163,7 @@ function SidebarFoot({
       <FootRow
         label="Daemon"
         value={connected ? 'Connected' : 'Reconnecting'}
-        tone={connected ? undefined : 'var(--st-fail)'}
+        tone={connected ? 'var(--st-live)' : 'var(--st-fail)'}
       />
       {github.signedIn ? (
         <FootRow label="GitHub" value={github.login ?? 'Signed in'} />
@@ -1209,9 +1248,9 @@ function Empty({
 }): JSX.Element {
   if (connection !== 'live') {
     return (
-      <div style={{ padding: '34px 22px', maxWidth: 460 }}>
-        <p style={{ marginTop: 0 }}>Connecting to the daemon…</p>
-        <p style={{ color: 'var(--ink-2)', lineHeight: 1.45 }}>
+      <div style={{ padding: '48px 28px', maxWidth: 480 }}>
+        <p style={{ marginTop: 0, fontSize: 'var(--t-l)', fontWeight: 600 }}>Connecting to the daemon…</p>
+        <p style={{ color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 0 }}>
           Agents keep running while this window is closed, so nothing has been lost. This should
           only take a moment.
         </p>
@@ -1220,13 +1259,15 @@ function Empty({
   }
 
   return (
-    <div style={{ padding: '34px 22px', maxWidth: 490 }}>
-      <p style={{ marginTop: 0 }}>{repo ? `No chats in ${repo.name} yet` : 'No chats yet'}</p>
-      <p style={{ color: 'var(--ink-2)', lineHeight: 1.45 }}>
+    <div style={{ padding: '48px 28px', maxWidth: 520 }}>
+      <p style={{ marginTop: 0, fontSize: 'var(--t-l)', fontWeight: 600 }}>
+        {repo ? `No chats in ${repo.name} yet` : 'No chats yet'}
+      </p>
+      <p style={{ color: 'var(--ink-2)', lineHeight: 1.5 }}>
         A new chat starts on this checkout. Branch out when you want a private copy. Osade stops
         before anything is published.
       </p>
-      <button className="primary" onClick={onNew} style={{ marginTop: 8 }}>
+      <button className="primary" onClick={onNew} style={{ marginTop: 4 }}>
         New chat
       </button>
     </div>
@@ -1235,8 +1276,8 @@ function Empty({
 
 function NothingSelected({ hasChats }: { hasChats: boolean }): JSX.Element {
   return (
-    <div style={{ padding: '34px 24px', color: 'var(--ink-2)', maxWidth: 380 }}>
-      <p style={{ marginTop: 0, lineHeight: 1.45 }}>
+    <div style={{ padding: '48px 28px', color: 'var(--ink-2)', maxWidth: 420 }}>
+      <p style={{ margin: 0, lineHeight: 1.5, fontSize: 'var(--t-m)' }}>
         {hasChats
           ? 'Pick a chat to see what it has done, and what it needs from you.'
           : 'Nothing to show yet.'}

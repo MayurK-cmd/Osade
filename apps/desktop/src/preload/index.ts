@@ -44,6 +44,12 @@ contextBridge.exposeInMainWorld('osade', {
     ipcRenderer.invoke('osade:choose-repository', defaultPath),
 
   /**
+   * VS Code zoom: +1 / −1 steps of 1.2×. Keyboard chords are handled in main;
+   * the renderer only uses this for Ctrl+wheel.
+   */
+  zoom: (delta: 1 | -1): Promise<number> => ipcRenderer.invoke('osade:zoom', delta),
+
+  /**
    * A second `osade .` in another repository re-scopes this window rather than opening another.
    * Returns an unsubscribe, because a renderer that leaks listeners across reloads leaks them
    * forever.
