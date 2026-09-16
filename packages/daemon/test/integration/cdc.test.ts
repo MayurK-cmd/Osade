@@ -232,6 +232,7 @@ describe('CDC — a raw SQL write reaches a subscriber', () => {
         text: 'hello',
         delivery: 'accepted',
         created_at: NOW,
+        error: null,
       },
     ]);
   });

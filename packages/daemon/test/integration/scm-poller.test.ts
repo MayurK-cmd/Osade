@@ -455,6 +455,29 @@ describe('§21 M2 — review feedback loops back into the agent lane', () => {
     expect(sent).toHaveLength(1);
   });
 
+  it('does not send into a fork when no lane is on the PR branch', async () => {
+    const sent: string[] = [];
+    const gh = recorded({
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}': [
+        { ...PR_OPEN, head: { sha: 'abc123', ref: 'feat/review' } },
+      ],
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews': [
+        [{ state: 'CHANGES_REQUESTED', body: 'Please add a test for the null case.' }],
+      ],
+      'GET /repos/{owner}/{repo}/commits/{ref}/check-runs': [{ check_runs: [] }],
+    });
+    await new ScmPoller(db, new ScmClient({ request: gh.request }), {
+      now: () => clock,
+      sendToAgent: async (_taskId, text) => {
+        sent.push(text);
+      },
+    }).refreshPr('t1', 7);
+
+    expect(sent).toHaveLength(0);
+    expect(getScmFact(db, 't1')!.review_state).toBe('changes_requested');
+    expect(getScmFact(db, 't1')!.pr_head_ref).toBe('feat/review');
+  });
+
   it('an undeliverable prompt degrades the loop, not the facts', async () => {
     const gh = recorded(changesRequested);
     const warnings: string[] = [];

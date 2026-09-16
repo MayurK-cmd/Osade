@@ -12,6 +12,8 @@ export const ChatTurn = z.object({
   text: z.string(),
   delivery: z.enum(['queued', 'sending', 'accepted', 'failed']),
   created_at: Timestamp,
+  /** Set when delivery is `failed` — names the agent and what it was waiting for. */
+  error: z.string().nullable().optional(),
 });
 export type ChatTurn = z.infer<typeof ChatTurn>;
 

@@ -125,6 +125,7 @@ export const api = {
     agentId?: string;
     chatId?: string;
     baseRef?: string;
+    checkoutRef?: string;
     isolate?: boolean;
     home?: boolean;
   }) =>
@@ -312,4 +313,16 @@ export const api = {
 
   repoBranchList: (repoId: string) =>
     call('query', 'repoBranchList', { repoId }) as Promise<string[]>,
+
+  repoBranchHolders: (repoId: string) =>
+    call('query', 'repoBranchHolders', { repoId }) as Promise<
+      { branch: string; path: string; holder: { taskId: string; chatId: string; title: string } | null }[]
+    >,
+
+  taskMoveBranch: (taskId: string, checkoutRef: string) =>
+    call('mutation', 'taskMoveBranch', { taskId, checkoutRef }) as Promise<{
+      taskId: string;
+      isolated: boolean;
+      isolatedBecause?: { taskId: string; chatId: string; title: string };
+    }>,
 };

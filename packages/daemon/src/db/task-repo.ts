@@ -47,6 +47,7 @@ function rowToTask(r: Record<string, unknown>): Task {
     base_ref: r.base_ref as string,
     base_sha: r.base_sha as string,
     branch: r.branch as string,
+    checkout_ref: (r.checkout_ref as string | null) ?? null,
     worktree_path: (r.worktree_path as string | null) ?? null,
     substrate_workspace_id: (r.substrate_workspace_id as string | null) ?? null,
     archived_at: (r.archived_at as number | null) ?? null,
@@ -76,6 +77,7 @@ export function getAgentFact(db: Db, taskId: string): AgentFact | null {
     external_block: (r.external_block as string | null) ?? null,
     state_change_seq: r.state_change_seq as number,
     controller_generation: r.controller_generation as number,
+    composer_ready: int2bool(r.composer_ready),
   };
 }
 
@@ -90,6 +92,7 @@ export function getScmFact(db: Db, taskId: string): ScmFact | null {
     pr_url: (r.pr_url as string | null) ?? null,
     pr_state: (r.pr_state as ScmFact['pr_state']) ?? null,
     pr_head_sha: (r.pr_head_sha as string | null) ?? null,
+    pr_head_ref: (r.pr_head_ref as string | null) ?? null,
     pr_draft: nullableBool(r.pr_draft),
     checks_state: (r.checks_state as ScmFact['checks_state']) ?? null,
     review_state: (r.review_state as ScmFact['review_state']) ?? null,

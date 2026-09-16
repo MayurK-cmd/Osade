@@ -121,7 +121,7 @@ function ScrollAnchor({ token }: { token: string }): JSX.Element {
 function Bubble({ line }: { line: ChatLine }): JSX.Element {
   const colour = agentColor(line.agentId);
   const mine = line.role === 'user';
-  const mark = line.live ? ' · working' : line.held ? ' · held' : '';
+  const mark = line.failed ? ' · failed' : line.live ? ' · working' : line.held ? ' · held' : '';
   return (
     <div
       style={{
@@ -140,8 +140,9 @@ function Bubble({ line }: { line: ChatLine }): JSX.Element {
           ...bodyStyle,
           background: mine ? 'var(--bg-2)' : 'var(--bg-1)',
           border: '0.5px solid var(--line)',
-          borderLeft: mine ? '0.5px solid var(--line)' : `2px solid ${colour}`,
+          borderLeft: mine ? '0.5px solid var(--line)' : `2px solid ${line.failed ? 'var(--st-fail)' : colour}`,
           opacity: line.held ? 0.7 : 1,
+          color: line.failed ? 'var(--st-fail)' : undefined,
           padding: '8px 12px',
           borderRadius: 'var(--radius)',
           maxWidth: 'min(100%, 32em)',

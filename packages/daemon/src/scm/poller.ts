@@ -47,7 +47,7 @@ interface PullRequestPayload {
   merged: boolean;
   draft: boolean;
   mergeable_state?: string;
-  head: { sha: string };
+  head: { sha: string; ref?: string };
 }
 
 interface ReviewPayload {
@@ -184,7 +184,7 @@ export class ScmPoller {
       this.#db
         .prepare(
           `UPDATE scm_fact
-              SET pr_url = ?, pr_state = ?, pr_head_sha = ?, pr_draft = ?,
+              SET pr_url = ?, pr_state = ?, pr_head_sha = ?, pr_head_ref = ?, pr_draft = ?,
                   checks_state = ?, review_state = ?, unresolved_threads = ?,
                   mergeable = ?, fetched_at = ?, fetch_failed_at = NULL
             WHERE task_id = ?`,
@@ -193,6 +193,7 @@ export class ScmPoller {
           pr.html_url,
           prState(pr),
           pr.head.sha,
+          pr.head.ref ?? null,
           pr.draft ? 1 : 0,
           checks,
           reviewState,
@@ -205,7 +206,7 @@ export class ScmPoller {
       // Only on the transition, not on every poll: a reviewer who asked for changes once
       // should not be re-delivered to the agent every 30 seconds.
       if (reviewState === 'changes_requested' && before?.review_state !== 'changes_requested') {
-        await this.#closeReviewLoop(taskId, target, pr.html_url);
+        await this.#closeReviewLoop(taskId, target, pr.html_url, pr.head.ref);
       }
 
       return true;
@@ -271,8 +272,12 @@ export class ScmPoller {
     taskId: string,
     target: { owner: string; repo: string; pull_number: number },
     prUrl: string,
+    headRef?: string,
   ): Promise<void> {
     if (!this.#sendToAgent) return;
+
+    const dest = this.#laneOnPrBranch(taskId, headRef);
+    if (dest == null) return;
 
     const bodies = await this.#changeRequestBodies(target);
     const prompt = [
@@ -286,12 +291,29 @@ export class ScmPoller {
     ].join('\n');
 
     try {
-      await this.#sendToAgent(taskId, prompt);
+      await this.#sendToAgent(dest, prompt);
     } catch (err) {
       // A prompt that cannot be delivered is a degraded loop, not a failed poll: the facts are
       // already durable and §6 row 5 shows `review_changes_requested` regardless.
-      this.#onWarning(`could not deliver review feedback to ${taskId}: ${(err as Error).message}`);
+      this.#onWarning(`could not deliver review feedback to ${dest}: ${(err as Error).message}`);
     }
+  }
+
+  /** Null when the chat has no lane on the PR branch — the UI offers one instead of forking. */
+  #laneOnPrBranch(taskId: string, headRef: string | undefined): string | null {
+    const task = getTask(this.#db, taskId);
+    if (!task) return null;
+    if (!headRef) return taskId;
+    if (task.branch === headRef || task.checkout_ref === headRef) return taskId;
+    const sibling = this.#db
+      .prepare(
+        `SELECT id FROM task
+          WHERE chat_id = ? AND archived_at IS NULL AND id != ?
+            AND (branch = ? OR checkout_ref = ?)
+          LIMIT 1`,
+      )
+      .get(task.chat_id, taskId, headRef, headRef) as { id: string } | undefined;
+    return sibling?.id ?? null;
   }
 
   async #changeRequestBodies(target: {

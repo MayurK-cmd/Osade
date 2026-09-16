@@ -18,7 +18,8 @@ export type AgentCapability =
   | 'system-prompt-injection'
   | 'hook-reporting'
   | 'structured-review-output'
-  | 'headless-run';
+  | 'headless-run'
+  | 'reports-final-message';
 
 export interface AgentCatalogEntry {
   /** The `kind` substrate accepts on `agent.start`, verbatim from the pinned set. */
@@ -31,6 +32,10 @@ export interface AgentCatalogEntry {
   /** How conventions get injected (§13.5). Null when the agent has no flag for it. */
   readonly systemPromptFlag: string | null;
   readonly capabilities: readonly AgentCapability[];
+  /** How long a new lane may sit without an idle composer before the send fails. */
+  readonly readyTimeoutMs?: number;
+  /** Regex sources stripped from a pane-delta reply (banner, prompt chrome, status footer). */
+  readonly transcriptTrim?: readonly string[];
 }
 
 /**
@@ -48,6 +53,7 @@ export const AGENT_CATALOG: readonly AgentCatalogEntry[] = [
     resumeArgs: ['--continue'],
     systemPromptFlag: '--append-system-prompt',
     capabilities: ['plan-mode', 'resume', 'system-prompt-injection', 'headless-run'],
+    transcriptTrim: ['^❯', '^claude(?:\\s+code)?$', 'esc to interrupt', '^╰', '^╭'],
   },
   {
     id: 'codex',
@@ -57,6 +63,7 @@ export const AGENT_CATALOG: readonly AgentCatalogEntry[] = [
     resumeArgs: ['resume', '--last'],
     systemPromptFlag: null,
     capabilities: ['resume', 'headless-run'],
+    transcriptTrim: ['^›', '^codex$', 'press enter to continue', '^token usage'],
   },
   {
     id: 'opencode',
@@ -84,6 +91,12 @@ export function agentEntry(id: string): AgentCatalogEntry | null {
 
 export function hasCapability(entry: AgentCatalogEntry, capability: AgentCapability): boolean {
   return entry.capabilities.includes(capability);
+}
+
+export const DEFAULT_READY_TIMEOUT_MS = 45_000;
+
+export function readyTimeoutMs(id: string): number {
+  return agentEntry(id)?.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
 }
 
 export const DAEMON_DEFAULT_AGENT = 'claude';

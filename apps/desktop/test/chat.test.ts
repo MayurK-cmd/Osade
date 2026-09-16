@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ChatTurn, TaskView } from '@osade/contract';
 
 import { chatLines, visibleUserText } from '../src/renderer/chat.js';
+import { lanePhase, startingLine } from '../src/renderer/delivery.js';
 
 describe('visibleUserText', () => {
   it('drops the sibling-lane digest', () => {
@@ -81,6 +82,53 @@ describe('chatLines', () => {
       }),
     );
     expect(lines.find((l) => l.text === 'also write tests')).toMatchObject({ held: true, live: false });
+  });
+
+  it('shows a starting line while the composer is not ready', () => {
+    const lines = chatLines(
+      view({
+        intent: 'write tests',
+        status: 'queued',
+        turns: [{ ...turn(1, 'user', 'write tests'), delivery: 'queued' }],
+      }),
+    );
+    expect(lines.find((l) => l.role === 'agent')?.text).toBe('starting claude');
+  });
+
+  it('surfaces a failed delivery in the transcript with the error', () => {
+    const lines = chatLines(
+      view({
+        intent: 'write tests',
+        status: 'queued',
+        turns: [
+          { ...turn(1, 'user', 'write tests'), delivery: 'failed' },
+          turn(2, 'agent', 'codex never became ready (waiting for idle composer).'),
+        ],
+      }),
+    );
+    expect(lines.find((l) => l.role === 'user')).toMatchObject({ text: 'write tests', failed: true });
+    expect(lines.find((l) => l.role === 'agent')?.text).toMatch(/never became ready/);
+  });
+});
+
+describe('lanePhase', () => {
+  it('is starting before createTask returns', () => {
+    expect(lanePhase(null, { chatId: 'c1', agentId: 'codex', prompt: 'x', phase: 'starting' })).toBe(
+      'starting',
+    );
+    expect(startingLine('codex')).toBe('starting codex');
+  });
+
+  it('is starting while a queued send waits for an idle composer', () => {
+    expect(
+      lanePhase(
+        view({
+          intent: 'write tests',
+          status: 'queued',
+          turns: [{ ...turn(1, 'user', 'write tests'), delivery: 'queued' }],
+        }),
+      ),
+    ).toBe('starting');
   });
 });
 

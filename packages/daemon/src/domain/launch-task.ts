@@ -18,8 +18,25 @@ import { Conventions } from '../knowledge/conventions.js';
 import { renderContextFile } from '../knowledge/context-file.js';
 import { osadePaths, worktreePathFor } from '../paths.js';
 import { readRepoRules, ensureRepoRules } from '../knowledge/repo-rules.js';
-import { agentEntry, DAEMON_DEFAULT_AGENT, hasCapability, requireAgent } from './agent-catalog.js';
-import { dispatchQueued, sendTurn as recordTurn } from './chat-turns.js';
+import {
+  agentEntry,
+  DAEMON_DEFAULT_AGENT,
+  DEFAULT_READY_TIMEOUT_MS,
+  hasCapability,
+  readyTimeoutMs,
+  requireAgent,
+} from './agent-catalog.js';
+import {
+  composerReady,
+  copyTurns,
+  dispatchQueued,
+  failOpenTurns,
+  failUnreadyTurns,
+  readyFailMessage,
+  sendTurn as recordTurn,
+  settleAgentReply,
+} from './chat-turns.js';
+import { paneDelta } from './pane-delta.js';
 import type { Checkpoints } from './checkpoints.js';
 import {
   DEFAULT_MIRROR_PATHS,
@@ -28,7 +45,9 @@ import {
   git,
   githubRemote,
   mirrorPaths,
+  parseAlreadyCheckedOut,
   pruneWorktrees,
+  resolveCheckoutRef,
   resolveSha,
   stashApply,
   stashDrop,
@@ -114,6 +133,8 @@ export interface CreateTaskInput {
   agentId?: string | undefined;
   chatId?: string | undefined;
   baseRef?: string | undefined;
+  /** Isolated only: check out this existing ref instead of cutting `osade/<slug>`. */
+  checkoutRef?: string | undefined;
   /** Default false — attached to the checkout. Forced true if the repo already has an attached lane. */
   isolate?: boolean | undefined;
   /** §17 — repo-root planner. Never isolated; reused if it already exists. */
@@ -137,6 +158,28 @@ export class LaneIsolatedError extends Error {
   constructor(taskId: string) {
     super(`${taskId} is already on a worktree`);
     this.name = 'LaneIsolatedError';
+  }
+}
+
+export class BranchHeldError extends Error {
+  readonly branch: string;
+  readonly path: string;
+  readonly holder: { taskId: string; chatId: string; title: string } | null;
+
+  constructor(
+    branch: string,
+    holder: { taskId: string; chatId: string; title: string } | null,
+    path: string,
+  ) {
+    super(
+      holder
+        ? `${branch} is already checked out by “${holder.title}”`
+        : `${branch} is already checked out at ${path}`,
+    );
+    this.name = 'BranchHeldError';
+    this.branch = branch;
+    this.path = path;
+    this.holder = holder;
   }
 }
 
@@ -180,6 +223,7 @@ const TRUST_PROMPT_MATCHES: readonly string[] = [
   'Is this a project you created',
   'Do you trust the files in this folder',
   'do you trust this folder',
+  'Do you trust the contents of this',
 ];
 
 /** How many times a visible trust prompt is answered before we stop and let a human see it. */
@@ -193,6 +237,8 @@ export class LaunchTask {
   readonly #defaultAgent: string;
   readonly #onWarning: (message: string) => void;
   readonly #checkpoints: Checkpoints | null;
+  readonly #readyTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  readonly #promptAt = new Map<string, string>();
 
   constructor(
     db: Db,
@@ -263,13 +309,23 @@ export class LaunchTask {
     let baseSha: string;
     let branch: string;
     let worktreePath: string | null;
+    let checkoutRef: string | null = null;
 
     if (isolated) {
-      baseRef = input.baseRef ?? sibling?.base_ref ?? repo.default_branch;
-      baseSha =
-        sibling && input.baseRef == null ? sibling.base_sha : await resolveSha(repo.path, baseRef);
-      branch = `osade/${isolatedSlug(sibling?.title ?? input.title, taskId)}/${resolvedAgent}`;
       worktreePath = worktreePathFor(basename(repo.path), taskId);
+      const existingRef = input.checkoutRef?.trim();
+      if (existingRef) {
+        const resolved = await resolveCheckoutRef(repo.path, existingRef);
+        branch = resolved.local;
+        baseRef = resolved.local;
+        baseSha = resolved.sha;
+        checkoutRef = resolved.local;
+      } else {
+        baseRef = input.baseRef ?? sibling?.base_ref ?? repo.default_branch;
+        baseSha =
+          sibling && input.baseRef == null ? sibling.base_sha : await resolveSha(repo.path, baseRef);
+        branch = `osade/${isolatedSlug(sibling?.title ?? input.title, taskId)}/${resolvedAgent}`;
+      }
     } else {
       branch = await currentBranch(repo.path);
       baseRef = input.baseRef ?? branch;
@@ -280,8 +336,8 @@ export class LaunchTask {
     this.#db
       .prepare(
         `INSERT INTO task (id, repo_id, title, intent, origin_kind, agent_id, chat_id, base_ref,
-                           base_sha, branch, worktree_path, created_at)
-         VALUES (?, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?)`,
+                           base_sha, branch, worktree_path, checkout_ref, created_at)
+         VALUES (?, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         taskId,
@@ -294,8 +350,11 @@ export class LaunchTask {
         baseSha,
         branch,
         worktreePath,
+        checkoutRef,
         this.#now(),
       );
+
+    if (checkoutRef) adoptOpenPr(this.#db, taskId, repoId, checkoutRef, this.#now());
 
     return isolatedBecause
       ? { taskId, isolated, isolatedBecause }
@@ -319,7 +378,8 @@ export class LaunchTask {
     const entry = agentEntry(agentId);
     if (!entry) throw new Error(`no catalog entry for agent ${agentId}`);
 
-    return withRepoLock(repo.path, async () => {
+    try {
+      return await withRepoLock(repo.path, async () => {
       let workspaceId: string;
 
       if (isAttached(task)) {
@@ -355,6 +415,11 @@ export class LaunchTask {
           );
           workspaceId = created.workspace.workspace_id;
         } catch (err) {
+          const held = await this.#heldBranchError(err, repo.id, repo.path, taskId);
+          if (held) {
+            this.#db.prepare('DELETE FROM task WHERE id = ?').run(taskId);
+            throw held;
+          }
           const detail = await describeWorktreeFailure(
             repo.path,
             task.worktree_path!,
@@ -449,6 +514,8 @@ export class LaunchTask {
         );
       }
       const resolvedTrustPrompt = ready.resolvedTrustPrompt;
+      this.#setComposerReady(taskId, true);
+      await this.sendQueued(taskId);
 
       // 8. Best-effort checkpoint. §9.1 — a capture failure never fails a launch.
       // §8.2 step 8 / §9.1 — best-effort, and `Checkpoints.capture` never throws.
@@ -466,6 +533,15 @@ export class LaunchTask {
         resolvedTrustPrompt,
       };
     });
+    } catch (err) {
+      failOpenTurns(
+        this.#db,
+        taskId,
+        err instanceof Error ? err.message : String(err),
+        this.#now(),
+      );
+      throw err;
+    }
   }
 
   /**
@@ -541,6 +617,37 @@ export class LaunchTask {
   }
 
   /**
+   * Isolated worktrees are disposable: close this lane and open a new one on `checkoutRef`,
+   * keeping the chat and transcript.
+   */
+  async moveToBranch(taskId: string, checkoutRef: string): Promise<CreateTaskResult> {
+    const task = getTask(this.#db, taskId);
+    if (!task) throw new Error(`unknown task ${taskId}`);
+    if (isAttached(task)) {
+      throw new Error('move the attached checkout with Switch branch, or branch out first');
+    }
+    const repo = this.#db.prepare('SELECT path FROM repo WHERE id = ?').get(task.repo_id) as
+      | { path: string }
+      | undefined;
+    if (!repo) throw new Error(`unknown repo ${task.repo_id}`);
+
+    await this.teardown(taskId, { force: true });
+    this.#db.prepare('UPDATE task SET archived_at = ? WHERE id = ?').run(this.#now(), taskId);
+
+    const created = await this.createTask({
+      repoPath: repo.path,
+      title: task.title,
+      intent: task.intent,
+      agentId: task.agent_id ?? undefined,
+      chatId: task.chat_id,
+      isolate: true,
+      checkoutRef,
+    });
+    copyTurns(this.#db, taskId, created.taskId);
+    return created;
+  }
+
+  /**
    * **Windows limitation, verified against the substrate 0.8.2-p20.** With no args, the substrate submits
    * `& claude` and the agent starts. With args it submits
    * `Start-Process -FilePath claude -ArgumentList '...' -NoNewWindow -Wait -PassThru`, and
@@ -609,24 +716,15 @@ export class LaunchTask {
     let lastOutput = '';
 
     while (this.#now() < deadline) {
-      try {
-        const info = await this.#substrate.request<
-          'agent.get',
-          { agent: { interactive_ready?: boolean; launch_pending?: boolean } }
-        >('agent.get', { target: paneId }, 5_000);
-        if (info.agent.interactive_ready === true && info.agent.launch_pending !== true) {
-          return { interactive: true, resolvedTrustPrompt, lastOutput };
-        }
-      } catch {
-        // Not yet a named agent — the substrate is still detecting. Keep waiting.
-      }
-
       lastOutput = await this.#readPane(paneId);
 
       // §8.3 — matched narrowly on purpose. Any other blocked state is §6 row 4, and
       // answering that on the user's behalf is the one thing this must not do. The live
       // selector must be on screen too: the prompt text alone can be stale scrollback from a
       // prompt that was already answered.
+      //
+      // Check *before* treating interactive_ready as done: Codex reports interactive while
+      // the trust dialog is still up, and sending into it is the @codex delivery bug.
       if (
         answerAttempts < MAX_TRUST_PROMPT_ANSWERS &&
         TRUST_PROMPT_MATCHES.some((m) => lastOutput.includes(m)) &&
@@ -634,9 +732,41 @@ export class LaunchTask {
       ) {
         answerAttempts++;
         if (await this.#answerTrustPrompt(paneId)) resolvedTrustPrompt = true;
-        // Give the TUI time to repaint before deciding whether the prompt is really gone.
         await new Promise((resolve) => setTimeout(resolve, 1_500));
         continue;
+      }
+
+      try {
+        const info = await this.#substrate.request<
+          'agent.get',
+          {
+            agent: {
+              interactive_ready?: boolean;
+              launch_pending?: boolean;
+              agent_status?: string;
+            };
+          }
+        >('agent.get', { target: paneId }, 5_000);
+        const status = info.agent.agent_status;
+        if (info.agent.launch_pending === true) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          continue;
+        }
+        if (status === 'blocked' || status === 'working') {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          continue;
+        }
+        // `done` is a settled composer. interactive_ready is false on some agents until they
+        // flip to idle, and waiting for that is how a follow-up sat "held" with no reply.
+        if (
+          info.agent.interactive_ready === true ||
+          status === 'idle' ||
+          status === 'done'
+        ) {
+          return { interactive: true, resolvedTrustPrompt, lastOutput };
+        }
+      } catch {
+        // Not yet a named agent — the substrate is still detecting. Keep waiting.
       }
 
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -849,24 +979,59 @@ export class LaunchTask {
     text: string,
     options: { wait?: boolean; origin?: 'human' | 'automation' } = {},
   ): Promise<void> {
-    await recordTurn(this.#db, (id, body, wait) => this.prompt(id, body, wait), {
+    const agentId = this.#agentIdFor(taskId);
+    const turn = await recordTurn(this.#db, (id, body, wait) => this.prompt(id, body, wait), {
       taskId,
       text,
       origin: options.origin ?? 'human',
       now: this.#now(),
       wait: options.wait,
+      agentId,
+      readyTimeoutMs: readyTimeoutMs(agentId),
     });
+    if (turn.delivery === 'queued' && !composerReady(this.#db, taskId)) this.#armReadyTimeout(taskId);
+    else this.#disarmReadyTimeout(taskId);
   }
 
   /** Dispatch the next held message after the live turn settles. */
   async sendQueued(taskId: string): Promise<void> {
+    const agentId = this.#agentIdFor(taskId);
     await dispatchQueued(
       this.#db,
       (id, body, wait) => this.prompt(id, body, wait),
       taskId,
       false,
       this.#now(),
+      { agentId, readyTimeoutMs: readyTimeoutMs(agentId) },
     );
+    this.#disarmReadyTimeoutIfClear(taskId);
+  }
+
+  /** Persist whatever the agent said when the pane went quiet. */
+  async settle(taskId: string): Promise<void> {
+    const task = getTask(this.#db, taskId);
+    const entry = agentEntry(task?.agent_id ?? this.#agentIdFor(taskId));
+    if (entry && hasCapability(entry, 'reports-final-message')) {
+      settleAgentReply(this.#db, taskId, this.#now());
+      return;
+    }
+    const before = this.#promptAt.get(taskId) ?? this.#promptSurface(taskId);
+    const after = await this.readTranscript(taskId, 80);
+    const lastUser = this.#db
+      .prepare(
+        `SELECT text FROM chat_turn
+           WHERE task_id = ? AND role = 'user' AND delivery = 'accepted'
+           ORDER BY seq DESC LIMIT 1`,
+      )
+      .get(taskId) as { text: string } | undefined;
+    settleAgentReply(this.#db, taskId, this.#now(), {
+      body: paneDelta(
+        before,
+        after?.text ?? '',
+        lastUser?.text ?? '',
+        entry?.transcriptTrim ?? [],
+      ),
+    });
   }
 
   /**
@@ -880,6 +1045,20 @@ export class LaunchTask {
   async prompt(taskId: string, text: string, wait: boolean): Promise<void> {
     const paneId = this.#paneFor(taskId);
     if (!paneId) throw new Error(`task ${taskId} has no live agent pane`);
+
+    const agentId = this.#agentIdFor(taskId);
+    const ready = await this.#awaitAgentReady(paneId, readyTimeoutMs(agentId));
+    if (!ready.interactive) {
+      throw new Error(readyFailMessage(agentId));
+    }
+    this.#setComposerReady(taskId, true);
+
+    const before = await this.readTranscript(taskId, 80);
+    const surface = before?.text ?? '';
+    this.#promptAt.set(taskId, surface);
+    this.#db
+      .prepare('UPDATE agent_fact SET prompt_surface = ? WHERE task_id = ?')
+      .run(surface, taskId);
 
     // §4.2 — prefer one blocking call over prompt-then-poll: each connection is a substrate thread.
     const params: SubstrateMethodParams['agent.prompt'] = wait
@@ -1094,6 +1273,62 @@ export class LaunchTask {
     };
     return row.id;
   }
+
+  #armReadyTimeout(taskId: string): void {
+    this.#disarmReadyTimeout(taskId);
+    const agentId = getTask(this.#db, taskId)?.agent_id ?? 'agent';
+    const ms = agentEntry(agentId)?.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
+    const timer = setTimeout(() => {
+      this.#readyTimers.delete(taskId);
+      failUnreadyTurns(this.#db, taskId, agentId, 'idle composer', this.#now());
+    }, ms);
+    this.#readyTimers.set(taskId, timer);
+  }
+
+  #disarmReadyTimeout(taskId: string): void {
+    const timer = this.#readyTimers.get(taskId);
+    if (timer) clearTimeout(timer);
+    this.#readyTimers.delete(taskId);
+  }
+
+  #disarmReadyTimeoutIfClear(taskId: string): void {
+    const queued = this.#db
+      .prepare(
+        `SELECT 1 FROM chat_turn WHERE task_id = ? AND role = 'user' AND delivery = 'queued' LIMIT 1`,
+      )
+      .get(taskId);
+    if (!queued) this.#disarmReadyTimeout(taskId);
+  }
+
+  #setComposerReady(taskId: string, ready: boolean): void {
+    this.#db
+      .prepare('UPDATE agent_fact SET composer_ready = ? WHERE task_id = ?')
+      .run(ready ? 1 : 0, taskId);
+  }
+
+  #agentIdFor(taskId: string): string {
+    return getTask(this.#db, taskId)?.agent_id ?? this.#defaultAgent;
+  }
+
+  #promptSurface(taskId: string): string {
+    const row = this.#db
+      .prepare('SELECT prompt_surface FROM agent_fact WHERE task_id = ?')
+      .get(taskId) as { prompt_surface: string | null } | undefined;
+    return row?.prompt_surface ?? '';
+  }
+
+  async #heldBranchError(
+    err: unknown,
+    repoId: string,
+    repoPath: string,
+    skipTaskId: string,
+  ): Promise<BranchHeldError | null> {
+    const text = err instanceof Error ? `${err.message}\n${execDetail(err)}` : String(err);
+    const parsed = parseAlreadyCheckedOut(text);
+    if (!parsed) return null;
+    const holder = holderAtPath(this.#db, repoId, repoPath, parsed.path, skipTaskId);
+    return new BranchHeldError(parsed.branch, holder, parsed.path);
+  }
 }
 
 function isolatedSlug(title: string, taskId: string): string {
@@ -1109,6 +1344,73 @@ function slugify(title: string): string {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 40) || 'task'
+  );
+}
+
+function normPath(path: string): string {
+  return path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
+function holderAtPath(
+  db: Db,
+  repoId: string,
+  repoPath: string,
+  checkoutPath: string,
+  skipTaskId?: string,
+): { taskId: string; chatId: string; title: string } | null {
+  const target = normPath(checkoutPath);
+  const rows = db
+    .prepare(
+      `SELECT id, chat_id, title, worktree_path FROM task
+        WHERE repo_id = ? AND archived_at IS NULL`,
+    )
+    .all(repoId) as { id: string; chat_id: string; title: string; worktree_path: string | null }[];
+  for (const row of rows) {
+    if (skipTaskId && row.id === skipTaskId) continue;
+    const cwd = row.worktree_path ?? repoPath;
+    if (normPath(cwd) === target) {
+      return { taskId: row.id, chatId: row.chat_id, title: row.title };
+    }
+  }
+  return null;
+}
+
+function adoptOpenPr(db: Db, taskId: string, repoId: string, branch: string, now: number): void {
+  const sibling = db
+    .prepare(
+      `SELECT s.pr_number, s.pr_url, s.pr_state, s.pr_head_sha, s.pr_head_ref, s.pr_draft
+         FROM scm_fact s
+         JOIN task t ON t.id = s.task_id
+        WHERE t.repo_id = ? AND t.id != ?
+          AND s.pr_number IS NOT NULL AND (s.pr_state IS NULL OR s.pr_state = 'open')
+          AND (t.branch = ? OR t.checkout_ref = ? OR s.pr_head_ref = ?)
+        ORDER BY t.archived_at IS NULL DESC
+        LIMIT 1`,
+    )
+    .get(repoId, taskId, branch, branch, branch) as
+    | {
+        pr_number: number;
+        pr_url: string | null;
+        pr_state: string | null;
+        pr_head_sha: string | null;
+        pr_head_ref: string | null;
+        pr_draft: number | null;
+      }
+    | undefined;
+  if (!sibling) return;
+  db.prepare(
+    `INSERT INTO scm_fact (task_id, pr_number, pr_url, pr_state, pr_head_sha, pr_head_ref, pr_draft,
+                           unresolved_threads, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+  ).run(
+    taskId,
+    sibling.pr_number,
+    sibling.pr_url,
+    sibling.pr_state ?? 'open',
+    sibling.pr_head_sha,
+    sibling.pr_head_ref ?? branch,
+    sibling.pr_draft,
+    now,
   );
 }
 
@@ -1135,12 +1437,12 @@ export function trustSelection(paneText: string): 'trust' | 'decline' | null {
   let selected: 'trust' | 'decline' | null = null;
 
   for (const line of paneText.split('\n')) {
-    const isTrust = /yes,\s*i trust/i.test(line);
-    const isDecline = /\bno,\s*exit\b/i.test(line);
+    const isTrust = /yes,\s*i trust/i.test(line) || /yes,\s*continue/i.test(line);
+    const isDecline = /\bno,\s*exit\b/i.test(line) || /\bno,\s*quit\b/i.test(line);
     if (!isTrust && !isDecline) continue;
 
     sawOption = true;
-    if (line.includes('❯') || line.trimStart().startsWith('>')) {
+    if (line.includes('❯') || line.includes('›') || /(^|\s)>\s+\d+\./.test(line) || line.trimStart().startsWith('>')) {
       selected = isTrust ? 'trust' : 'decline';
     }
   }

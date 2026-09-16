@@ -115,6 +115,7 @@ export function reduceAgentInput(current: AgentFact | null, input: AgentInput): 
         substrate_state: input.status,
         pane_alive: true,
         probe_failures: 0,
+        composer_ready: input.status === 'idle' || input.status === 'done',
       };
       patch.external_block = block;
       if (block) {
@@ -145,6 +146,7 @@ export function reduceAgentInput(current: AgentFact | null, input: AgentInput): 
           substrate_state: 'unknown',
           // §5.2 — `terminated` is set only by an explicit exit. A pane vanishing because the substrate
           // restarted is not a death: §8.2.1 relaunches into the restored pane.
+          composer_ready: false,
           ...(input.explicit ? { terminated: true } : {}),
         },
       };
@@ -172,5 +174,6 @@ export function emptyAgentFact(taskId: string): AgentFact {
     external_block: null,
     state_change_seq: 0,
     controller_generation: 0,
+    composer_ready: false,
   };
 }

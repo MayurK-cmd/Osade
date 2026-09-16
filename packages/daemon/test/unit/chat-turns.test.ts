@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDb, type Db } from '../../src/db/index.js';
 import {
   dispatchQueued,
+  failOpenTurns,
+  failUnreadyTurns,
   listTurns,
   sendTurn,
   settleAgentReply,
@@ -25,8 +27,8 @@ function seed(): void {
      VALUES ('t1', 'r1', 'fix', 'first prompt', 'manual', 'main', 'headsha', 'osade/fix', '/wt', ?)`,
   ).run(NOW);
   db.prepare(
-    `INSERT INTO agent_fact (task_id, substrate_pane_id, substrate_state, pane_alive, state_change_seq)
-     VALUES ('t1', 'w3:p2', 'idle', 1, 1)`,
+    `INSERT INTO agent_fact (task_id, substrate_pane_id, substrate_state, pane_alive, state_change_seq, composer_ready)
+     VALUES ('t1', 'w3:p2', 'idle', 1, 1, 1)`,
   ).run();
 }
 
@@ -112,5 +114,77 @@ describe('chat turns — typed send, not keystrokes', () => {
       }, { taskId: 't1', text: 'first prompt', origin: 'human', now: NOW }),
     ).rejects.toThrow('pane gone');
     expect(listTurns(db, 't1')[0]?.delivery).toBe('failed');
+  });
+
+  it('holds the first send as queued until the lane reports an idle composer', async () => {
+    db.prepare("UPDATE agent_fact SET substrate_state = 'blocked', composer_ready = 0 WHERE task_id = 't1'").run();
+    const held = await send('first prompt');
+    expect(held.delivery).toBe('queued');
+    expect(prompts).toEqual([]);
+  });
+
+  it('flushes the held first send once the composer is idle', async () => {
+    db.prepare("UPDATE agent_fact SET substrate_state = 'blocked', composer_ready = 0 WHERE task_id = 't1'").run();
+    await send('first prompt');
+    db.prepare(
+      "UPDATE agent_fact SET substrate_state = 'idle', composer_ready = 1 WHERE task_id = 't1'",
+    ).run();
+    await dispatchQueued(db, async (_id, body) => {
+      prompts.push(body);
+    }, 't1', false, NOW);
+    expect(prompts).toEqual(['first prompt']);
+    expect(listTurns(db, 't1')[0]?.delivery).toBe('accepted');
+  });
+
+  it('does not expire a follow-up that waited on a live turn past the ready timeout', async () => {
+    await send('first prompt');
+    db.prepare("UPDATE agent_fact SET substrate_state = 'working' WHERE task_id = 't1'").run();
+    await send('also write tests');
+    db.prepare("UPDATE agent_fact SET substrate_state = 'idle' WHERE task_id = 't1'").run();
+    await dispatchQueued(db, async (_id, body) => {
+      prompts.push(body);
+    }, 't1', false, NOW + 60_000, { readyTimeoutMs: 45_000 });
+    expect(prompts).toEqual(['first prompt', 'also write tests']);
+    expect(listTurns(db, 't1').at(-1)?.delivery).toBe('accepted');
+  });
+
+  it('fails a send that never became ready, with a reason naming the agent', () => {
+    db.prepare("UPDATE agent_fact SET substrate_state = 'blocked', composer_ready = 0 WHERE task_id = 't1'").run();
+    db.prepare(
+      `INSERT INTO chat_turn (id, task_id, seq, role, origin, text, delivery, created_at)
+       VALUES ('ct_q', 't1', 1, 'user', 'human', 'write tests', 'queued', ?)`,
+    ).run(NOW);
+    failUnreadyTurns(db, 't1', 'codex', 'idle composer', NOW);
+    const turns = listTurns(db, 't1');
+    expect(turns[0]?.delivery).toBe('failed');
+    expect(turns.some((t) => t.role === 'agent' && /codex/i.test(t.text) && /idle composer/i.test(t.text))).toBe(
+      true,
+    );
+  });
+
+  it('settles a blocked turn from the pane surface delta, not final_message', () => {
+    db.prepare(
+      `INSERT INTO chat_turn (id, task_id, seq, role, origin, text, delivery, created_at)
+       VALUES ('ct_1', 't1', 1, 'user', 'human', 'write tests', 'accepted', ?)`,
+    ).run(NOW);
+    db.prepare("UPDATE agent_fact SET substrate_state = 'blocked', final_message = NULL WHERE task_id = 't1'").run();
+    const reply = settleAgentReply(db, 't1', NOW, {
+      surface:
+        'banner\nwrite tests\nI will add coverage for auth.\n• Working (esc to interrupt)\ngpt-5 default · /work',
+    });
+    expect(reply?.text).toContain('I will add coverage for auth');
+    expect(reply?.text).not.toMatch(/Working \(esc to interrupt\)/);
+  });
+
+  it('fails an in-flight turn when the pane dies mid-turn', () => {
+    db.prepare(
+      `INSERT INTO chat_turn (id, task_id, seq, role, origin, text, delivery, created_at)
+       VALUES ('ct_1', 't1', 1, 'user', 'human', 'write tests', 'accepted', ?)`,
+    ).run(NOW);
+    failOpenTurns(db, 't1', 'codex exited before finishing', NOW);
+    const turns = listTurns(db, 't1');
+    expect(turns[0]?.delivery).toBe('failed');
+    expect(turns[0]?.error).toMatch(/exited before finishing/);
+    expect(turns.some((t) => t.role === 'agent' && /exited before finishing/.test(t.text))).toBe(true);
   });
 });

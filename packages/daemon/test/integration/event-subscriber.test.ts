@@ -140,6 +140,25 @@ describe('event subscriber — the N+1 connection manager (§7.2)', () => {
     s.stop();
   });
 
+  it('notifies onPaneExited so in-flight chat can fail', async () => {
+    seed();
+    const gone: string[] = [];
+    const s = new SubstrateEventSubscriber(db, fakeClient(), {
+      now: () => NOW,
+      onPaneExited: (taskId) => gone.push(taskId),
+      createStream: (_path, subs) => {
+        const stream = new FakeStream(subs);
+        streams.push(stream);
+        return stream as unknown as SubstrateEventStream;
+      },
+    });
+    await s.start();
+    s.watchPane('t1', 'w3:p2');
+    streams[0]!.push('pane_exited', { pane_id: 'w3:p2', workspace_id: 'w3' });
+    expect(gone).toEqual(['t1']);
+    s.stop();
+  });
+
   it('stop() closes every connection', async () => {
     seed();
     const s = subscriber();
@@ -206,7 +225,7 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
     s.stop();
   });
 
-  it('calls onAgentQuiet when the agent goes done or blocked', async () => {
+  it('calls onAgentQuiet when the agent goes idle, done, or blocked', async () => {
     seed();
     const quiet: string[] = [];
     const s = new SubstrateEventSubscriber(db, fakeClient(), {
@@ -224,10 +243,12 @@ describe('event subscriber — fact writes (§5.4.1)', () => {
 
     pane.push('pane.agent_status_changed', { agent_status: 'working' });
     expect(quiet).toEqual([]);
-    pane.push('pane.agent_status_changed', { agent_status: 'done' });
+    pane.push('pane.agent_status_changed', { agent_status: 'idle' });
     expect(quiet).toEqual(['t1']);
-    pane.push('pane.agent_status_changed', { agent_status: 'blocked' });
+    pane.push('pane.agent_status_changed', { agent_status: 'done' });
     expect(quiet).toEqual(['t1', 't1']);
+    pane.push('pane.agent_status_changed', { agent_status: 'blocked' });
+    expect(quiet).toEqual(['t1', 't1', 't1']);
     s.stop();
   });
 

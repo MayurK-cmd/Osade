@@ -3,23 +3,30 @@ import { useEffect, useState, type JSX } from 'react';
 import type { TaskView } from '@osade/contract';
 
 import { api } from './api.js';
+import { heldReason, isolatedWorktreeHint } from './branch-copy.js';
 
 export function BranchControl({
   task,
   onNewIsolatedChat,
+  onMoveToBranch,
 }: {
   task: TaskView;
-  onNewIsolatedChat: () => void;
+  onNewIsolatedChat: (opts: { checkoutRef?: string; baseRef?: string }) => void;
+  onMoveToBranch: (checkoutRef: string) => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [moving, setMoving] = useState(false);
   const [carry, setCarry] = useState(true);
   const [branchName, setBranchName] = useState('');
   const [branches, setBranches] = useState<string[]>([]);
+  const [holders, setHolders] = useState<Record<string, { title: string }>>({});
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const attached = task.attachment === 'repo';
+  const holder = holders[task.branch];
+  const onBranchDisabled = heldReason(task.branch, holder);
 
   useEffect(() => {
     if (!open) return;
@@ -27,10 +34,16 @@ export function BranchControl({
     void Promise.all([
       api.repoBranchList(task.task.repo_id),
       api.repoStatus(task.task.repo_id),
+      api.repoBranchHolders(task.task.repo_id),
     ])
-      .then(([list, status]) => {
+      .then(([list, status, occupancy]) => {
         setBranches(list);
         setDirty(status.dirty);
+        const next: Record<string, { title: string }> = {};
+        for (const row of occupancy) {
+          if (row.holder) next[row.branch] = { title: row.holder.title };
+        }
+        setHolders(next);
       })
       .catch((err: Error) => setError(err.message));
   }, [open, task.task.repo_id]);
@@ -70,7 +83,7 @@ export function BranchControl({
     <div style={{ position: 'relative', flexShrink: 0 }}>
       <button
         onClick={() => setOpen((v) => !v)}
-        title={attached ? 'On the repository checkout' : 'On an isolated worktree'}
+        title={attached ? 'On the repository checkout' : isolatedWorktreeHint()}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -139,13 +152,24 @@ export function BranchControl({
               />
             </>
           )}
-          <button
-            disabled={busy || !attached}
-            onClick={() => setSwitching((v) => !v)}
-            style={{ width: '100%', marginBottom: 6 }}
-          >
-            Switch branch
-          </button>
+          {attached ? (
+            <button
+              disabled={busy}
+              onClick={() => setSwitching((v) => !v)}
+              style={{ width: '100%', marginBottom: 6 }}
+            >
+              Switch branch
+            </button>
+          ) : (
+            <button
+              disabled={busy}
+              onClick={() => setMoving((v) => !v)}
+              title={isolatedWorktreeHint()}
+              style={{ width: '100%', marginBottom: 6 }}
+            >
+              Move to another branch
+            </button>
+          )}
           {switching && attached && dirty && (
             <p style={{ margin: '0 0 8px', fontSize: 'var(--t-xs)', color: 'var(--st-needs)' }}>
               This changes your real checkout. Branch out instead if you want to keep this tree.
@@ -171,8 +195,54 @@ export function BranchControl({
               ))}
             </div>
           )}
-          <button disabled={busy} onClick={onNewIsolatedChat} style={{ width: '100%' }}>
-            New chat on this branch
+          {moving && !attached && (
+            <div style={{ maxHeight: 160, overflow: 'auto', marginBottom: 8 }}>
+              {branches.map((name) => {
+                const reason = heldReason(name, holders[name]);
+                return (
+                  <button
+                    key={name}
+                    disabled={busy || name === task.branch || Boolean(reason)}
+                    title={reason}
+                    onClick={() => {
+                      onMoveToBranch(name);
+                      setOpen(false);
+                      setMoving(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      marginBottom: 2,
+                      fontSize: 'var(--t-xs)',
+                      background: name === task.branch ? 'var(--bg-2)' : 'transparent',
+                    }}
+                  >
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <button
+            disabled={busy || Boolean(onBranchDisabled)}
+            title={onBranchDisabled}
+            onClick={() => {
+              onNewIsolatedChat({ checkoutRef: task.branch });
+              setOpen(false);
+            }}
+            style={{ width: '100%', marginBottom: 6 }}
+          >
+            New chat on {task.branch}
+          </button>
+          <button
+            disabled={busy}
+            onClick={() => {
+              onNewIsolatedChat({ baseRef: task.branch });
+              setOpen(false);
+            }}
+            style={{ width: '100%' }}
+          >
+            New chat from this commit
           </button>
           {error && (
             <p style={{ margin: '8px 0 0', fontSize: 'var(--t-xs)', color: 'var(--st-fail)' }}>

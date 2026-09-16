@@ -44,8 +44,10 @@ export interface EventSubscriberOptions {
   /** Injected in tests so a fake substrate can be driven without a socket. */
   createStream?: (socketPath: string, subs: readonly Subscription[]) => SubstrateEventStream;
   onWarning?: (message: string) => void;
-  /** After a turn settles (`done` / `blocked`). Flush queued chat. */
+  /** After a turn settles (`done` / `blocked` / `idle`). Persist the reply and flush queued chat. */
   onAgentQuiet?: (taskId: string) => void;
+  /** After the pane process exits. Fail any turn still waiting on it. */
+  onPaneExited?: (taskId: string) => void;
 }
 
 interface PaneBinding {
@@ -60,6 +62,7 @@ export class SubstrateEventSubscriber {
   readonly #createStream: (socketPath: string, subs: readonly Subscription[]) => SubstrateEventStream;
   readonly #onWarning: (message: string) => void;
   readonly #onAgentQuiet: ((taskId: string) => void) | null;
+  readonly #onPaneExited: ((taskId: string) => void) | null;
   readonly #panes = new Map<string, PaneBinding>();
   #global: SubstrateEventStream | null = null;
 
@@ -71,6 +74,7 @@ export class SubstrateEventSubscriber {
       options.createStream ?? ((path, subs) => new SubstrateEventStream(path, subs));
     this.#onWarning = options.onWarning ?? (() => {});
     this.#onAgentQuiet = options.onAgentQuiet ?? null;
+    this.#onPaneExited = options.onPaneExited ?? null;
   }
 
   get paneCount(): number {
@@ -217,6 +221,7 @@ export class SubstrateEventSubscriber {
             at: this.#now(),
             explicit: false,
           });
+          this.#onPaneExited?.(taskId);
         }
         return;
       }
@@ -332,12 +337,14 @@ export class SubstrateEventSubscriber {
       this.#onWarning(`agent_fact write for ${taskId}: ${(err as Error).message}`);
       return;
     }
-    if (
-      wrote &&
-      input.kind === 'status' &&
-      (input.status === 'done' || input.status === 'blocked')
-    ) {
-      this.#onAgentQuiet?.(taskId);
+    if (wrote && input.kind === 'status') {
+      if (
+        input.status === 'idle' ||
+        input.status === 'done' ||
+        input.status === 'blocked'
+      ) {
+        this.#onAgentQuiet?.(taskId);
+      }
     }
   }
 

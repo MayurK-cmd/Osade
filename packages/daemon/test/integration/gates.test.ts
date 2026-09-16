@@ -251,8 +251,35 @@ describe('attached-mode gate policy', () => {
     expect(row.decision).toBeNull();
   });
 
-  it('gate.branch_switch is always human and not overridable', () => {
+  it('gate.branch_switch is human by default and downgradeable on a clean tree', () => {
     expect(gatePolicy('gate.branch_switch').def).toBe('human');
-    expect(gatePolicy('gate.branch_switch').overridable).toBe(false);
+    expect(gatePolicy('gate.branch_switch').overridable).toBe(true);
+    expect(gatePolicy('gate.force_push').overridable).toBe(false);
+
+    const id = gates({ 'gate.branch_switch': 'trusted-repo' }).request({
+      taskId: 't1',
+      gate: 'gate.branch_switch',
+      payload: { branch: 'feat', repoId: 'r1', dirty: false },
+    });
+    const row = db.prepare('SELECT decision, decided_by FROM gate_request WHERE id = ?').get(id) as {
+      decision: string | null;
+      decided_by: string | null;
+    };
+    expect(row.decision).toBe('approve');
+    expect(row.decided_by).toBe('policy:trusted-repo');
+  });
+
+  it('gate.branch_switch stays human on a dirty tree even with a policy', () => {
+    const id = gates({ 'gate.branch_switch': 'trusted-repo' }).request({
+      taskId: 't1',
+      gate: 'gate.branch_switch',
+      payload: { branch: 'feat', repoId: 'r1', dirty: true },
+    });
+    const row = db.prepare('SELECT decided_at, decision FROM gate_request WHERE id = ?').get(id) as {
+      decided_at: number | null;
+      decision: string | null;
+    };
+    expect(row.decided_at).toBeNull();
+    expect(row.decision).toBeNull();
   });
 });

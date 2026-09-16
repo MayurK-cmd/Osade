@@ -33,6 +33,11 @@ export const Task = z.object({
   base_ref: z.string(),
   base_sha: z.string(),
   branch: z.string(),
+  /**
+   * Set when the lane checked out an existing ref instead of cutting `osade/<slug>`.
+   * Null for attached lanes and for isolated lanes that cut a fresh branch.
+   */
+  checkout_ref: z.string().nullable().optional(),
   /** Null when the lane is attached to the repository checkout. */
   worktree_path: z.string().nullable(),
   /** Null until substrate has adopted the workspace. */
@@ -78,6 +83,11 @@ export const AgentFact = z.object({
    */
   state_change_seq: z.number().int().nonnegative(),
   controller_generation: z.number().int().nonnegative(),
+  /**
+   * Composer can accept a prompt. Distinct from `substrate_state`: Codex reports `idle` from an
+   * OSC title while a trust dialog is still on screen.
+   */
+  composer_ready: z.boolean().optional(),
 });
 export type AgentFact = z.infer<typeof AgentFact>;
 
@@ -118,6 +128,8 @@ export const ScmFact = z.object({
   pr_url: z.string().nullable(),
   pr_state: PrState.nullable(),
   pr_head_sha: z.string().nullable(),
+  /** GitHub `head.ref` — the branch the PR updates. */
+  pr_head_ref: z.string().nullable().optional(),
   pr_draft: z.boolean().nullable(),
   checks_state: ChecksState.nullable(),
   review_state: ReviewState.nullable(),

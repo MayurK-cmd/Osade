@@ -85,6 +85,7 @@ export const api = {
     agentId?: string;
     chatId?: string;
     baseRef?: string;
+    checkoutRef?: string;
     isolate?: boolean;
   }) =>
     call('mutation', 'taskCreate', input) as Promise<{

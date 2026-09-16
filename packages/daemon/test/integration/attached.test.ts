@@ -85,5 +85,56 @@ describe('attached lanes', () => {
     expect(created.isolatedBecause).toBeUndefined();
     expect(task.worktree_path).toBeTruthy();
     expect(task.branch).toBe('osade/token-refresh/claude');
+    expect(task.checkout_ref).toBeNull();
+  });
+
+  it('checkoutRef puts an isolated lane on that existing branch, not an osade/ fork', async () => {
+    sh(repo, ['branch', 'feat/review']);
+    const created = await launcher.createTask({
+      repoPath: repo,
+      title: 'Address review',
+      intent: 'fix the null case',
+      isolate: true,
+      checkoutRef: 'feat/review',
+    });
+    const task = getTask(db, created.taskId)!;
+    expect(created.isolated).toBe(true);
+    expect(task.branch).toBe('feat/review');
+    expect(task.checkout_ref).toBe('feat/review');
+    expect(task.branch.startsWith('osade/')).toBe(false);
+  });
+
+  it('checkoutRef on a remote-only ref creates the local name, not origin/…', async () => {
+    const origin = join(dir, 'origin.git');
+    sh(dir, ['clone', '-q', '--bare', 'repo', 'origin.git']);
+    sh(repo, ['remote', 'add', 'origin', origin]);
+    sh(repo, ['branch', 'feat/remote-only']);
+    sh(repo, ['push', '-q', '-u', 'origin', 'feat/remote-only']);
+    sh(repo, ['branch', '-D', 'feat/remote-only']);
+
+    const created = await launcher.createTask({
+      repoPath: repo,
+      title: 'Remote branch',
+      intent: 'work it',
+      isolate: true,
+      checkoutRef: 'origin/feat/remote-only',
+    });
+    const task = getTask(db, created.taskId)!;
+    expect(task.branch).toBe('feat/remote-only');
+    expect(task.checkout_ref).toBe('feat/remote-only');
+  });
+
+  it('checkoutRef is ignored on an attached lane', async () => {
+    const created = await launcher.createTask({
+      repoPath: repo,
+      title: 'Stay put',
+      intent: 'hi',
+      checkoutRef: 'feat/review',
+    });
+    const task = getTask(db, created.taskId)!;
+    expect(created.isolated).toBe(false);
+    expect(task.worktree_path).toBeNull();
+    expect(task.branch).toBe('main');
+    expect(task.checkout_ref).toBeNull();
   });
 });

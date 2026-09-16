@@ -7,6 +7,7 @@ export interface ChatLine {
   text: string;
   live: boolean;
   held?: boolean;
+  failed?: boolean;
 }
 
 /** Strip the sibling-lane digest so it never shows up as a chat bubble. */
@@ -78,31 +79,49 @@ export function chatLines(task: TaskView, followUps: readonly string[] = []): Ch
 }
 
 function lineFromTurn(turn: ChatTurn, agentId: string, text: string): ChatLine {
+  const failed = turn.delivery === 'failed';
   return {
     id: turn.id,
     role: turn.role,
     agentId,
-    text,
+    text: failed && turn.error ? `${text}\n${turn.error}` : text,
     live: turn.delivery === 'sending',
     held: turn.delivery === 'queued',
+    failed,
   };
 }
 
 function agentOverlay(task: TaskView): ChatLine | null {
+  const agentId = task.agentId || 'claude';
   const fact = task.agent;
   const final = fact?.final_message?.trim();
   if (final) {
-    return { id: `${task.task.id}-agent-live`, role: 'agent', agentId: task.agentId, text: final, live: false };
+    return { id: `${task.task.id}-agent-live`, role: 'agent', agentId, text: final, live: false };
+  }
+  const lastUser = [...(task.turns ?? [])].filter((t) => t.role === 'user').at(-1);
+  const waiting =
+    fact?.composer_ready !== true &&
+    task.status !== 'implementing' &&
+    task.status !== 'verifying' &&
+    (lastUser?.delivery === 'queued' || ((task.turns ?? []).length === 0 && task.status === 'queued'));
+  if (waiting) {
+    return {
+      id: `${task.task.id}-starting`,
+      role: 'agent',
+      agentId,
+      text: `starting ${agentId}`,
+      live: true,
+    };
   }
   const working = task.status === 'implementing' || task.status === 'verifying' || task.status === 'queued';
   if (working) {
     const tool = fact?.tool_name?.trim();
-    const activity = workingLabel(fact?.activity_text ?? '', task.agentId);
+    const activity = workingLabel(fact?.activity_text ?? '', agentId);
     const parts = [activity, tool ? `Using ${tool}` : ''].filter(Boolean);
     return {
       id: `${task.task.id}-agent-live`,
       role: 'agent',
-      agentId: task.agentId,
+      agentId,
       text: parts.join('\n'),
       live: true,
     };
@@ -111,8 +130,8 @@ function agentOverlay(task: TaskView): ChatLine | null {
     return {
       id: `${task.task.id}-agent-live`,
       role: 'agent',
-      agentId: task.agentId,
-      text: workingLabel(fact?.activity_text ?? '', task.agentId) || 'Waiting for you.',
+      agentId,
+      text: workingLabel(fact?.activity_text ?? '', agentId) || 'Waiting for you.',
       live: false,
     };
   }

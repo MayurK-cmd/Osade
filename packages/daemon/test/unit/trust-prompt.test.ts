@@ -73,3 +73,34 @@ describe('§8.3 — trustSelection', () => {
     expect(trustSelection(prose)).toBe(null);
   });
 });
+
+/** Captured from backend/src/detect/manifest/tests.rs — Codex on a fresh worktree. */
+const CODEX_TRUST_DEFAULT = `> You are in C:\\Users\\user\\project
+
+Do you trust the contents of this
+directory? Working with untrusted
+contents comes with higher risk of
+prompt injection. Trusting the
+directory allows project-local config,
+hooks, and exec policies to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+Press enter to continue
+`;
+
+const CODEX_TRUST_DECLINE = CODEX_TRUST_DEFAULT.replace(
+  '› 1. Yes, continue\n  2. No, quit',
+  '  1. Yes, continue\n› 2. No, quit',
+);
+
+describe('§8.3 — Codex trust prompt', () => {
+  it('reads the default selection as trust (Yes, continue is already highlighted)', () => {
+    expect(trustSelection(CODEX_TRUST_DEFAULT)).toBe('trust');
+  });
+
+  it('reads the moved selection as decline', () => {
+    expect(trustSelection(CODEX_TRUST_DECLINE)).toBe('decline');
+  });
+});

@@ -397,6 +397,24 @@ CREATE TABLE chat_turn (
 CREATE INDEX chat_turn_task_seq ON chat_turn (task_id, seq);
 `;
 
+const M009_COMPOSER_READY = `
+ALTER TABLE agent_fact ADD COLUMN composer_ready INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE agent_fact ADD COLUMN prompt_surface TEXT;
+ALTER TABLE chat_turn ADD COLUMN error TEXT;
+UPDATE agent_fact SET composer_ready = 1
+ WHERE pane_alive = 1 AND substrate_state IN ('idle', 'done');
+`;
+
+/**
+ * M10 — isolated lanes may check out an existing branch (`checkout_ref`) instead of cutting
+ * `osade/<slug>`. `pr_head_ref` is the GitHub head branch so a review loop can offer a lane
+ * on that branch rather than forking it.
+ */
+const M010_CHECKOUT_REF = `
+ALTER TABLE task ADD COLUMN checkout_ref TEXT;
+ALTER TABLE scm_fact ADD COLUMN pr_head_ref TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     id: 1,
@@ -437,5 +455,15 @@ export const MIGRATIONS: readonly Migration[] = [
     id: 8,
     name: 'durable chat turns — typed send, not pane scrape',
     sql: M008_CHAT_TURNS + cdcTriggers('chat_turn'),
+  },
+  {
+    id: 9,
+    name: 'composer_ready fact, pane snapshot, failed-turn error',
+    sql: M009_COMPOSER_READY,
+  },
+  {
+    id: 10,
+    name: 'checkout_ref on task, pr_head_ref on scm_fact',
+    sql: M010_CHECKOUT_REF,
   },
 ];

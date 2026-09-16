@@ -8,6 +8,7 @@ import { BranchControl } from './BranchControl.js';
 import { Changes } from './Changes.js';
 import { Composer } from './Composer.js';
 import { Conventions } from './Conventions.js';
+import { lanePhase, startingLine, type PendingLane } from './delivery.js';
 import { Files } from './Files.js';
 import { GateCard } from './GateCard.js';
 import { chatLabel, type ChatGroup } from './lanes.js';
@@ -35,8 +36,11 @@ export function Detail({
   catalog,
   optimistic,
   isolatedNotice,
+  pending = [],
   onSend,
   onNewIsolatedChat,
+  onMoveToBranch,
+  onOpenPrLane,
 }: {
   chat: ChatGroup;
   focusId: string;
@@ -46,8 +50,11 @@ export function Detail({
   catalog: CatalogAgent[];
   optimistic?: string;
   isolatedNotice?: string;
+  pending?: PendingLane[];
   onSend: (text: string) => Promise<void>;
-  onNewIsolatedChat: () => void;
+  onNewIsolatedChat: (opts: { checkoutRef?: string; baseRef?: string }) => void;
+  onMoveToBranch: (checkoutRef: string) => void;
+  onOpenPrLane: () => void;
 }): JSX.Element {
   const [filter, setFilter] = useState<string | null>(null);
   const [modHeld, setModHeld] = useState(false);
@@ -63,6 +70,14 @@ export function Detail({
   ).length;
   const showBranchOffer =
     focused.attachment === 'repo' && focused.status === 'implementing' && !branchOfferDismissed;
+  const prBranch = chat.lanes.map((l) => l.scm?.pr_head_ref).find((ref) => ref && ref.length > 0);
+  const hasLaneOnPr =
+    prBranch != null &&
+    chat.lanes.some(
+      (l) => l.task.archived_at == null && (l.branch === prBranch || l.task.checkout_ref === prBranch),
+    );
+  const showPrLaneOffer =
+    chat.status === 'review_changes_requested' && prBranch != null && !hasLaneOnPr;
 
   useEffect(() => {
     function onKey(event: KeyboardEvent): void {
@@ -131,9 +146,13 @@ export function Detail({
           >
             {copy.label}
           </span>
-          <BranchControl task={focused} onNewIsolatedChat={onNewIsolatedChat} />
+          <BranchControl
+            task={focused}
+            onNewIsolatedChat={onNewIsolatedChat}
+            onMoveToBranch={onMoveToBranch}
+          />
         </div>
-        <LaneStrip chat={chat} focusId={focused.task.id} onFocus={onFocus} />
+        <LaneStrip chat={chat} focusId={focused.task.id} onFocus={onFocus} pending={pending} />
       </header>
 
       {openGates.length > 0 ? (
@@ -170,6 +189,25 @@ export function Detail({
               : ''}
           </section>
         )
+      )}
+
+      {showPrLaneOffer && prBranch && (
+        <section
+          style={{
+            padding: '10px 16px',
+            borderBottom: '0.5px solid var(--line)',
+            background: 'var(--bg-1)',
+            fontSize: 'var(--t-s)',
+          }}
+        >
+          <p style={{ margin: '0 0 8px' }}>
+            A reviewer asked for changes on <span className="mono">{prBranch}</span>. Open a lane
+            on that branch — not a fork.
+          </p>
+          <button className="primary" onClick={onOpenPrLane}>
+            Open a lane on {prBranch}
+          </button>
+        </section>
       )}
 
       {showBranchOffer && (
@@ -275,6 +313,23 @@ export function Detail({
                 ))}
               </div>
             )}
+            {pending.map((p) => (
+              <div key={`pending-${p.agentId}`} style={{ marginBottom: 12 }}>
+                <div className="mono" style={{ fontSize: 'var(--t-xs)', color: agentColor(p.agentId) }}>
+                  {p.agentId}
+                </div>
+                <p style={{ margin: '4px 0', fontSize: 'var(--t-s)' }}>{p.prompt}</p>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 'var(--t-s)',
+                    color: p.phase === 'failed' ? 'var(--st-fail)' : 'var(--ink-2)',
+                  }}
+                >
+                  {p.phase === 'failed' ? (p.error ?? 'failed') : startingLine(p.agentId)}
+                </p>
+              </div>
+            ))}
             <Transcript
               tasks={filter ? chat.lanes.filter((t) => t.agentId === filter) : chat.lanes}
               extraUser={optimistic}
@@ -314,10 +369,12 @@ function LaneStrip({
   chat,
   focusId,
   onFocus,
+  pending,
 }: {
   chat: ChatGroup;
   focusId: string;
   onFocus: (id: string) => void;
+  pending: PendingLane[];
 }): JSX.Element {
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
@@ -325,6 +382,10 @@ function LaneStrip({
         const copy = STATUS[task.status];
         const selected = task.task.id === focusId;
         const colour = agentColor(task.agentId);
+        const phase = lanePhase(
+          task,
+          pending.find((p) => p.agentId === task.agentId),
+        );
         return (
           <button
             key={task.task.id}
@@ -343,12 +404,39 @@ function LaneStrip({
           >
             <span style={{ color: TONE_COLOUR[copy.tone] }}>{GLYPH[copy.tone]}</span>
             <span>{task.agentId}</span>
-            <span className="mono" style={{ color: 'var(--ink-3)' }}>
-              {task.task.branch}
-            </span>
+            {phase ? (
+              <span className="mono" style={{ color: phase === 'failed' ? 'var(--st-fail)' : 'var(--ink-3)' }}>
+                {phase}
+              </span>
+            ) : (
+              <span className="mono" style={{ color: 'var(--ink-3)' }}>
+                {task.task.branch}
+              </span>
+            )}
           </button>
         );
       })}
+      {pending.map((p) => (
+        <button
+          key={`pending-${p.agentId}`}
+          type="button"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '3px 8px',
+            border: '0.5px solid var(--line)',
+            background: 'var(--bg-1)',
+            color: agentColor(p.agentId),
+            fontSize: 'var(--t-xs)',
+          }}
+        >
+          <span>{p.agentId}</span>
+          <span className="mono" style={{ color: p.phase === 'failed' ? 'var(--st-fail)' : 'var(--ink-3)' }}>
+            {p.phase}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -385,11 +473,13 @@ export function DraftPane({
   optimistic,
   submitting,
   catalog,
+  pending = [],
   onSend,
 }: {
   optimistic?: string;
   submitting: boolean;
   catalog: CatalogAgent[];
+  pending?: PendingLane[];
   onSend: (text: string) => Promise<void>;
 }): JSX.Element {
   return (
@@ -405,11 +495,29 @@ export function DraftPane({
       <header style={{ padding: '14px 16px 12px', borderBottom: '0.5px solid var(--line)' }}>
         <h1 style={{ fontSize: 'var(--t-l)', fontWeight: 600, margin: 0 }}>New chat</h1>
         <p style={{ margin: '6px 0 0', color: 'var(--ink-2)', fontSize: 'var(--t-s)' }}>
-          A new chat uses this checkout. Branch out when you want a worktree. @mention an agent
-          on its own line to pick a lane.
+          A new chat uses this checkout. Branch out when you want a worktree, or open a chat on
+          an existing branch. Isolated worktrees are disposable — close the lane and open one on
+          the target branch. @mention an agent on its own line to pick a lane.
         </p>
       </header>
       <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
+        {pending.map((p) => (
+          <div key={`pending-${p.agentId}`} style={{ marginBottom: 12 }}>
+            <div className="mono" style={{ fontSize: 'var(--t-xs)', color: agentColor(p.agentId) }}>
+              {p.agentId}
+            </div>
+            <p style={{ margin: '4px 0', fontSize: 'var(--t-s)' }}>{p.prompt}</p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 'var(--t-s)',
+                color: p.phase === 'failed' ? 'var(--st-fail)' : 'var(--ink-2)',
+              }}
+            >
+              {p.phase === 'failed' ? (p.error ?? 'failed') : startingLine(p.agentId)}
+            </p>
+          </div>
+        ))}
         <Transcript tasks={[]} extraUser={optimistic} />
       </div>
       <Composer

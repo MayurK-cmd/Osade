@@ -4,21 +4,53 @@ import type { ChatTurn } from '@osade/contract';
 
 import type { Db } from '../db/index.js';
 import { getAgentFact } from '../db/task-repo.js';
+import { DEFAULT_READY_TIMEOUT_MS } from './agent-catalog.js';
+import { paneDelta } from './pane-delta.js';
 
 export type TurnPrompt = (taskId: string, text: string, wait: boolean) => Promise<void>;
 
 const INSERT = `INSERT INTO chat_turn (id, task_id, seq, role, origin, text, delivery, created_at)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
 
+const TURN_COLS = `id, task_id, seq, role, origin, text, delivery, created_at, error`;
+
+const SURFACE_STRIP = [
+  'esc to interrupt',
+  'press enter to continue',
+  '^•',
+  'token usage',
+  'gpt-\\d',
+  '^❯',
+  '^›',
+];
+
 export function listTurns(db: Db, taskId: string): ChatTurn[] {
   return (
     db
       .prepare(
-        `SELECT id, task_id, seq, role, origin, text, delivery, created_at
+        `SELECT ${TURN_COLS}
            FROM chat_turn WHERE task_id = ? ORDER BY seq ASC`,
       )
       .all(taskId) as ChatTurn[]
-  );
+  ).map(normalizeTurn);
+}
+
+export function copyTurns(db: Db, fromTaskId: string, toTaskId: string): void {
+  for (const turn of listTurns(db, fromTaskId)) {
+    insertRow(db, {
+      taskId: toTaskId,
+      seq: turn.seq,
+      role: turn.role,
+      origin: turn.origin,
+      text: turn.text,
+      delivery: turn.delivery === 'sending' ? 'accepted' : turn.delivery,
+      now: turn.created_at,
+    });
+  }
+}
+
+export function composerReady(db: Db, taskId: string): boolean {
+  return getAgentFact(db, taskId)?.composer_ready === true;
 }
 
 export function turnInFlight(db: Db, taskId: string): boolean {
@@ -26,9 +58,16 @@ export function turnInFlight(db: Db, taskId: string): boolean {
     .prepare(`SELECT 1 FROM chat_turn WHERE task_id = ? AND delivery = 'sending' LIMIT 1`)
     .get(taskId);
   if (sending) return true;
-  // Mid-turn hold — AO queues while the live turn is working, then flushes on quiet.
   const fact = getAgentFact(db, taskId);
-  return fact?.substrate_state === 'working';
+  return fact?.substrate_state === 'working' || fact?.substrate_state === 'blocked';
+}
+
+export function readyFailMessage(agentId: string, waitingFor = 'an idle composer'): string {
+  return `${agentId} never became ready — waiting for ${waitingFor}`;
+}
+
+export function surfaceAfter(before: string, after: string): string {
+  return paneDelta(before, after, '');
 }
 
 export function enqueueTurn(
@@ -86,23 +125,35 @@ export async function dispatchQueued(
   taskId: string,
   wait = false,
   now = Date.now(),
+  options: { readyTimeoutMs?: number; agentId?: string } = {},
 ): Promise<void> {
+  const timeoutMs = options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
+  const agentId = options.agentId ?? 'agent';
+
   for (;;) {
-    if (turnInFlight(db, taskId)) return;
-    const next = db
-      .prepare(
-        `SELECT id, text FROM chat_turn
-           WHERE task_id = ? AND role = 'user' AND delivery = 'queued'
-           ORDER BY seq ASC LIMIT 1`,
-      )
-      .get(taskId) as { id: string; text: string } | undefined;
+    const next = db.transaction(() => {
+      if (!composerReady(db, taskId)) {
+        failStaleQueued(db, taskId, now, timeoutMs, readyFailMessage(agentId));
+        return null;
+      }
+      if (turnInFlight(db, taskId)) return null;
+      const row = db
+        .prepare(
+          `SELECT id, text FROM chat_turn
+             WHERE task_id = ? AND role = 'user' AND delivery = 'queued'
+             ORDER BY seq ASC LIMIT 1`,
+        )
+        .get(taskId) as { id: string; text: string } | undefined;
+      if (!row) return null;
+      setDelivery(db, row.id, 'sending');
+      return row;
+    })();
     if (!next) return;
-    setDelivery(db, next.id, 'sending');
     try {
       await prompt(taskId, next.text, wait);
       setDelivery(db, next.id, 'accepted');
     } catch (err) {
-      setDelivery(db, next.id, 'failed');
+      setDelivery(db, next.id, 'failed', err instanceof Error ? err.message : String(err));
       throw err;
     }
     const fact = getAgentFact(db, taskId);
@@ -117,27 +168,41 @@ export async function dispatchQueued(
 export async function sendTurn(
   db: Db,
   prompt: TurnPrompt,
-  input: { taskId: string; text: string; origin: ChatTurn['origin']; now: number; wait?: boolean },
+  input: {
+    taskId: string;
+    text: string;
+    origin: ChatTurn['origin'];
+    now: number;
+    wait?: boolean;
+    readyTimeoutMs?: number;
+    agentId?: string;
+  },
 ): Promise<ChatTurn> {
   const turn = enqueueTurn(db, input);
-  await dispatchQueued(db, prompt, input.taskId, input.wait === true, input.now);
+  await dispatchQueued(db, prompt, input.taskId, input.wait === true, input.now, {
+    readyTimeoutMs: input.readyTimeoutMs,
+    agentId: input.agentId,
+  });
   const stored = db
-    .prepare(
-      `SELECT id, task_id, seq, role, origin, text, delivery, created_at FROM chat_turn WHERE id = ?`,
-    )
+    .prepare(`SELECT ${TURN_COLS} FROM chat_turn WHERE id = ?`)
     .get(turn.id) as ChatTurn;
-  return stored;
+  return normalizeTurn(stored);
 }
 
-/** After a turn settles (`done` / `blocked`), persist the agent's last words if we have them. */
-export function settleAgentReply(db: Db, taskId: string, now: number): ChatTurn | null {
+/** After a turn settles (`done` / `blocked` / `idle`), persist the agent's last words. */
+export function settleAgentReply(
+  db: Db,
+  taskId: string,
+  now: number,
+  opts?: { surface?: string | null; body?: string | null },
+): ChatTurn | null {
   const lastUser = db
     .prepare(
-      `SELECT seq FROM chat_turn
+      `SELECT seq, text FROM chat_turn
          WHERE task_id = ? AND role = 'user' AND delivery = 'accepted'
          ORDER BY seq DESC LIMIT 1`,
     )
-    .get(taskId) as { seq: number } | undefined;
+    .get(taskId) as { seq: number; text: string } | undefined;
   if (!lastUser) return null;
 
   const laterAgent = db
@@ -148,7 +213,7 @@ export function settleAgentReply(db: Db, taskId: string, now: number): ChatTurn 
   if (laterAgent) return null;
 
   const fact = getAgentFact(db, taskId);
-  const text = settleText(fact?.final_message ?? null, fact?.activity_text ?? null);
+  const text = settleBody(opts, fact?.final_message ?? null, fact?.activity_text ?? null, lastUser.text);
   if (text.length === 0) return null;
 
   const lastAgent = db
@@ -179,6 +244,88 @@ export function settleAgentReply(db: Db, taskId: string, now: number): ChatTurn 
   })();
 }
 
+export function failUnreadyTurns(
+  db: Db,
+  taskId: string,
+  agentId: string,
+  waitingFor: string,
+  now: number,
+): void {
+  failOpenTurns(db, taskId, readyFailMessage(agentId, waitingFor), now);
+}
+
+/** Fail queued/sending turns, and the last accepted user turn that never got a reply. */
+export function failOpenTurns(db: Db, taskId: string, message: string, now: number): void {
+  const open = db
+    .prepare(
+      `SELECT id FROM chat_turn WHERE task_id = ? AND role = 'user' AND delivery IN ('queued', 'sending')`,
+    )
+    .all(taskId) as { id: string }[];
+  const ids = new Set(open.map((row) => row.id));
+  const lastUser = db
+    .prepare(
+      `SELECT id, seq, delivery FROM chat_turn
+         WHERE task_id = ? AND role = 'user' ORDER BY seq DESC LIMIT 1`,
+    )
+    .get(taskId) as { id: string; seq: number; delivery: string } | undefined;
+  if (lastUser?.delivery === 'accepted') {
+    const laterAgent = db
+      .prepare(`SELECT 1 FROM chat_turn WHERE task_id = ? AND role = 'agent' AND seq > ? LIMIT 1`)
+      .get(taskId, lastUser.seq);
+    if (!laterAgent) ids.add(lastUser.id);
+  }
+  if (ids.size === 0) return;
+  db.transaction(() => {
+    for (const id of ids) setDelivery(db, id, 'failed', message);
+    const seq =
+      (
+        db.prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM chat_turn WHERE task_id = ?').get(taskId) as {
+          seq: number;
+        }
+      ).seq + 1;
+    insertRow(db, {
+      taskId,
+      seq,
+      role: 'agent',
+      origin: 'provider',
+      text: message,
+      delivery: 'accepted',
+      now,
+    });
+  })();
+}
+
+export function failStaleQueued(
+  db: Db,
+  taskId: string,
+  now: number,
+  timeoutMs: number,
+  message: string,
+): void {
+  const rows = db
+    .prepare(
+      `SELECT id, created_at FROM chat_turn
+         WHERE task_id = ? AND role = 'user' AND delivery = 'queued'`,
+    )
+    .all(taskId) as { id: string; created_at: number }[];
+  for (const row of rows) {
+    if (now - row.created_at >= timeoutMs) setDelivery(db, row.id, 'failed', message);
+  }
+}
+
+function settleBody(
+  opts: { surface?: string | null; body?: string | null } | undefined,
+  finalMessage: string | null,
+  activityText: string | null,
+  userText: string,
+): string {
+  if (opts?.body != null) return opts.body.trim();
+  if (opts?.surface != null) {
+    return paneDelta('', opts.surface, userText, SURFACE_STRIP);
+  }
+  return settleText(finalMessage, activityText);
+}
+
 function settleText(finalMessage: string | null, activityText: string | null): string {
   const final = finalMessage?.trim() ?? '';
   if (final.length > 0) return final;
@@ -188,8 +335,12 @@ function settleText(finalMessage: string | null, activityText: string | null): s
   return activity;
 }
 
-function setDelivery(db: Db, id: string, delivery: ChatTurn['delivery']): void {
-  db.prepare('UPDATE chat_turn SET delivery = ? WHERE id = ?').run(delivery, id);
+function setDelivery(db: Db, id: string, delivery: ChatTurn['delivery'], error?: string | null): void {
+  db.prepare('UPDATE chat_turn SET delivery = ?, error = ? WHERE id = ?').run(
+    delivery,
+    error ?? null,
+    id,
+  );
 }
 
 function insertRow(
@@ -215,5 +366,10 @@ function insertRow(
     text: row.text,
     delivery: row.delivery,
     created_at: row.now,
+    error: null,
   };
+}
+
+function normalizeTurn(row: ChatTurn): ChatTurn {
+  return { ...row, error: row.error ?? null };
 }

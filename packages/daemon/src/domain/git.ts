@@ -254,6 +254,65 @@ export async function checkoutBranch(cwd: string, branch: string): Promise<void>
   await git(cwd, ['checkout', branch]);
 }
 
+/** Local branch name the worktree should hold — `origin/feat` becomes `feat`. */
+export function localCheckoutName(ref: string): string {
+  return ref
+    .replace(/^refs\/heads\//, '')
+    .replace(/^refs\/remotes\/[^/]+\//, '')
+    .replace(/^origin\//, '');
+}
+
+/** Git's exclusivity error. Null for any other worktree failure. */
+export function parseAlreadyCheckedOut(message: string): { branch: string; path: string } | null {
+  const match = message.match(/'([^']+)' is already checked out at '([^']+)'/i);
+  return match ? { branch: match[1]!, path: match[2]! } : null;
+}
+
+/** Resolve a checkout ref, including a remote-tracking name with no local branch. */
+export async function resolveCheckoutRef(
+  repoPath: string,
+  ref: string,
+): Promise<{ local: string; sha: string }> {
+  const attempts =
+    ref.startsWith('origin/') || ref.startsWith('refs/') ? [ref] : [ref, `origin/${ref}`];
+  let last: unknown;
+  for (const candidate of attempts) {
+    try {
+      const sha = await resolveSha(repoPath, candidate);
+      return { local: localCheckoutName(candidate), sha };
+    } catch (err) {
+      last = err;
+    }
+  }
+  throw last instanceof Error ? last : new Error(`unknown ref ${ref}`);
+}
+
+export async function listWorktreeCheckouts(
+  repoPath: string,
+): Promise<{ path: string; branch: string | null }[]> {
+  const out = await git(repoPath, ['worktree', 'list', '--porcelain']);
+  const rows: { path: string; branch: string | null }[] = [];
+  let path = '';
+  let branch: string | null = null;
+  const flush = (): void => {
+    if (path) rows.push({ path, branch });
+    path = '';
+    branch = null;
+  };
+  for (const line of out.split('\n')) {
+    if (line.startsWith('worktree ')) {
+      flush();
+      path = line.slice('worktree '.length).trim();
+    } else if (line.startsWith('branch ')) {
+      branch = localCheckoutName(line.slice('branch '.length).trim());
+    } else if (line.trim() === '') {
+      flush();
+    }
+  }
+  flush();
+  return rows;
+}
+
 export async function stashPush(cwd: string, message: string): Promise<void> {
   await git(cwd, ['stash', 'push', '-u', '-m', message]);
 }

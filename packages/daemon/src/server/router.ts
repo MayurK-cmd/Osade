@@ -22,8 +22,14 @@ import {
   UnknownAgentError,
 } from '../domain/agent-catalog.js';
 import type { Gates } from '../domain/gates.js';
-import { AgentLiveError, LaneIsolatedError, type LaunchTask } from '../domain/launch-task.js';
-import { repoRoot, checkoutBranch, listLocalBranches, repoWorkingStatus } from '../domain/git.js';
+import { AgentLiveError, BranchHeldError, LaneIsolatedError, type LaunchTask } from '../domain/launch-task.js';
+import {
+  repoRoot,
+  checkoutBranch,
+  listLocalBranches,
+  listWorktreeCheckouts,
+  repoWorkingStatus,
+} from '../domain/git.js';
 import { toTaskView } from '../domain/task-view.js';
 import { deriveVerifyPlan, type VerifyStep } from '../domain/verify-plan.js';
 import { isAttached, taskCwd } from '../domain/cwd.js';
@@ -141,6 +147,7 @@ export const appRouter = t.router({
         agentId: z.string().optional(),
         chatId: z.string().optional(),
         baseRef: z.string().optional(),
+        checkoutRef: z.string().optional(),
         isolate: z.boolean().optional(),
         home: z.boolean().optional(),
       }),
@@ -189,8 +196,15 @@ export const appRouter = t.router({
     .input(z.object({ taskId: TaskId }))
     .output(z.object({ taskId: TaskId, paneId: z.string(), workspaceId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.launcher.launch(input.taskId);
-      return { taskId: input.taskId, paneId: result.paneId, workspaceId: result.workspaceId };
+      try {
+        const result = await ctx.launcher.launch(input.taskId);
+        return { taskId: input.taskId, paneId: result.paneId, workspaceId: result.workspaceId };
+      } catch (err) {
+        if (err instanceof BranchHeldError) {
+          throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message });
+        }
+        throw err;
+      }
     }),
 
   /** Sends a prompt into the task's agent lane. */
@@ -388,7 +402,7 @@ export const appRouter = t.router({
   taskSwitchBranch: t.procedure
     .input(z.object({ taskId: TaskId, branch: z.string().min(1) }))
     .output(z.object({ gateId: z.string() }))
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const task = getTask(ctx.db, input.taskId);
       if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown task' });
       if (!isAttached(task)) {
@@ -397,10 +411,15 @@ export const appRouter = t.router({
           message: 'only an attached lane can switch the checkout',
         });
       }
+      const repo = ctx.db.prepare('SELECT path FROM repo WHERE id = ?').get(task.repo_id) as
+        | { path: string }
+        | undefined;
+      if (!repo) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown repo' });
+      const status = await repoWorkingStatus(repo.path);
       const gateId = ctx.gates.request({
         taskId: input.taskId,
         gate: 'gate.branch_switch',
-        payload: { branch: input.branch, repoId: task.repo_id },
+        payload: { branch: input.branch, repoId: task.repo_id, dirty: status.dirty },
       });
       return { gateId };
     }),
@@ -432,6 +451,74 @@ export const appRouter = t.router({
         | undefined;
       if (!repo) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown repo' });
       return listLocalBranches(repo.path);
+    }),
+
+  repoBranchHolders: t.procedure
+    .input(z.object({ repoId: z.string().min(1) }))
+    .output(
+      z.array(
+        z.object({
+          branch: z.string(),
+          path: z.string(),
+          holder: z
+            .object({ taskId: z.string(), chatId: z.string(), title: z.string() })
+            .nullable(),
+        }),
+      ),
+    )
+    .query(async ({ ctx, input }) => {
+      const repo = ctx.db.prepare('SELECT path FROM repo WHERE id = ?').get(input.repoId) as
+        | { path: string }
+        | undefined;
+      if (!repo) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown repo' });
+      const checkouts = await listWorktreeCheckouts(repo.path);
+      const tasks = ctx.db
+        .prepare(
+          `SELECT id, chat_id, title, worktree_path FROM task
+            WHERE repo_id = ? AND archived_at IS NULL`,
+        )
+        .all(input.repoId) as {
+        id: string;
+        chat_id: string;
+        title: string;
+        worktree_path: string | null;
+      }[];
+      const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+      return checkouts
+        .filter((row) => row.branch != null)
+        .map((row) => {
+          const target = norm(row.path);
+          const match = tasks.find((t) => norm(t.worktree_path ?? repo.path) === target);
+          return {
+            branch: row.branch!,
+            path: row.path,
+            holder: match
+              ? { taskId: match.id, chatId: match.chat_id, title: match.title }
+              : null,
+          };
+        });
+    }),
+
+  taskMoveBranch: t.procedure
+    .input(z.object({ taskId: TaskId, checkoutRef: z.string().min(1) }))
+    .output(
+      z.object({
+        taskId: TaskId,
+        isolated: z.boolean(),
+        isolatedBecause: z
+          .object({ taskId: z.string(), chatId: z.string(), title: z.string() })
+          .optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await ctx.launcher.moveToBranch(input.taskId, input.checkoutRef);
+      } catch (err) {
+        if (err instanceof BranchHeldError) {
+          throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message });
+        }
+        throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
+      }
     }),
 
   /**

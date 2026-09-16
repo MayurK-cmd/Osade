@@ -80,8 +80,8 @@ export const GATES: readonly GatePolicy[] = [
   {
     gate: 'gate.branch_switch',
     def: 'human',
-    overridable: false,
-    note: 'changes the user\'s real checked-out branch',
+    overridable: true,
+    note: 'human on a dirty tree; a policy may downgrade a clean switch',
   },
 ];
 
@@ -166,9 +166,12 @@ export class Gates {
         return task != null && isAttached(task);
       })();
 
+    const dirtySwitch = input.gate === 'gate.branch_switch' && payloadIsDirty(input.payload);
+
     const policyName = this.#policies[input.gate];
     const autoDecided =
       !attached &&
+      !dirtySwitch &&
       policy.overridable &&
       (policy.def === 'auto' || policyName != null)
         ? (policyName ?? 'default')
@@ -303,4 +306,11 @@ export class Gates {
 /** §9.1 — undo_turn is conditional: a human decides once the diff is large. */
 export function undoTurnNeedsHuman(filesChanged: number): boolean {
   return filesChanged > UNDO_TURN_FILE_THRESHOLD;
+}
+
+/** Dirty, or cleanliness unknown — both stay human. */
+function payloadIsDirty(payload: unknown): boolean {
+  if (payload == null || typeof payload !== 'object') return true;
+  const dirty = (payload as { dirty?: unknown }).dirty;
+  return dirty !== false;
 }

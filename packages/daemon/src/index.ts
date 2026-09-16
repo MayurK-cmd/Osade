@@ -1,8 +1,9 @@
 import { mkdirSync } from 'node:fs';
 
 import { openDb } from './db/index.js';
+import { getAgentFact, getTask } from './db/task-repo.js';
+import { failOpenTurns } from './domain/chat-turns.js';
 import { Checkpoints } from './domain/checkpoints.js';
-import { settleAgentReply } from './domain/chat-turns.js';
 import { Gates } from './domain/gates.js';
 import { LaunchTask } from './domain/launch-task.js';
 import { Triage } from './domain/triage.js';
@@ -72,10 +73,22 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
     now: options.now,
     onWarning,
     onAgentQuiet: (taskId) => {
-      settleAgentReply(db, taskId, options.now?.() ?? Date.now());
-      void launch?.sendQueued(taskId).catch((err: Error) => {
-        onWarning(`queued chat for ${taskId}: ${err.message}`);
+      void (async () => {
+        await launch?.settle(taskId);
+        if (getAgentFact(db, taskId)?.substrate_state === 'blocked') return;
+        await launch?.sendQueued(taskId);
+      })().catch((err: Error) => {
+        onWarning(`settle chat for ${taskId}: ${err.message}`);
       });
+    },
+    onPaneExited: (taskId) => {
+      const agentId = getTask(db, taskId)?.agent_id ?? 'agent';
+      failOpenTurns(
+        db,
+        taskId,
+        `${agentId} exited before finishing`,
+        options.now?.() ?? Date.now(),
+      );
     },
   });
   const checkpoints = new Checkpoints(db, { now: options.now, onWarning });

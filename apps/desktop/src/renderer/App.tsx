@@ -8,6 +8,7 @@ import { CommandPalette } from './CommandPalette.js';
 import { Detail, DraftPane, type Lane } from './Detail.js';
 import { api } from './api.js';
 import { chord } from './chords.js';
+import { type PendingLane } from './delivery.js';
 import { GitHubSignIn, useGithub } from './GitHubSignIn.js';
 import { groupChats, laneDigest, primaryLane, showPinnedNeedsYou, withDigest, chatLabel, type ChatGroup } from './lanes.js';
 import { lanePrompt, parseMentions } from './mentions.js';
@@ -31,6 +32,7 @@ type Tab =
       repoPath: string | null;
       defaultBranch: string | null;
       isolate?: boolean;
+      checkoutRef?: string;
       optimistic?: string;
       submitting?: boolean;
     }
@@ -67,6 +69,7 @@ export function App(): JSX.Element {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => loadCollapsed());
   const [aliases, setAliases] = useState<Record<string, string>>(() => loadAliases());
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [pendingLanes, setPendingLanes] = useState<PendingLane[]>([]);
 
   const defaultAgent = agentOverride ?? repo?.defaultAgent ?? null;
   const scoped = repo ? allTasks.filter((t) => t.task.repo_id === repo.repoId) : allTasks;
@@ -116,6 +119,15 @@ export function App(): JSX.Element {
       setGithubWelcome(true);
     }
   }, [github.ready, github.status.signedIn, githubSkipped, connection, emptyLedger]);
+
+  useEffect(() => {
+    setPendingLanes((current) =>
+      current.filter((pending) => {
+        const chat = groups.find((g) => g.chatId === pending.chatId);
+        return !chat?.lanes.some((l) => l.agentId === pending.agentId);
+      }),
+    );
+  }, [groups]);
 
   useEffect(() => {
     for (const group of groups) {
@@ -227,6 +239,7 @@ export function App(): JSX.Element {
     path?: string;
     defaultBranch?: string;
     isolate?: boolean;
+    checkoutRef?: string;
   }): Promise<void> {
     let repoId = from?.repoId ?? repo?.repoId ?? null;
     let repoPath = from?.path ?? repo?.path ?? null;
@@ -244,7 +257,7 @@ export function App(): JSX.Element {
     const id = crypto.randomUUID();
     setTabs((current) => [
       ...current,
-      { kind: 'draft', id, repoId, repoPath, defaultBranch, isolate: from?.isolate },
+      { kind: 'draft', id, repoId, repoPath, defaultBranch, isolate: from?.isolate, checkoutRef: from?.checkoutRef },
     ]);
     setActiveId(id);
     setLane('transcript');
@@ -311,6 +324,12 @@ export function App(): JSX.Element {
         message,
       );
       if (firstPrompt.length === 0) throw new Error('Write something to send');
+      for (const target of targets) {
+        const agentId = target.agentId ?? defaultAgent ?? 'claude';
+        const prompt = lanePrompt(parsed, { agentId, text: target.text }, message);
+        if (prompt.length === 0) continue;
+        markPending(tab.id, agentId, prompt, 'starting');
+      }
       const created = await api.taskCreate({
         repoPath: tab.repoPath,
         title: titleFrom(message),
@@ -318,6 +337,7 @@ export function App(): JSX.Element {
         ...(first.agentId ? { agentId: first.agentId } : {}),
         ...(tab.defaultBranch ? { baseRef: tab.defaultBranch } : {}),
         ...(tab.isolate ? { isolate: true } : {}),
+        ...(tab.checkoutRef ? { checkoutRef: tab.checkoutRef, isolate: true } : {}),
       });
       const notice =
         created.isolatedBecause != null
@@ -337,7 +357,10 @@ export function App(): JSX.Element {
         ),
       );
       setActiveId(created.taskId);
-      await launchAndSend(created.taskId, firstPrompt);
+      setPendingLanes((current) =>
+        current.map((p) => (p.chatId === tab.id ? { ...p, chatId: created.taskId } : p)),
+      );
+      void launchAndSend(created.taskId, firstPrompt).catch((err: Error) => setActionError(err.message));
       for (const extra of targets.slice(1)) {
         if (!extra.agentId) continue;
         const extraPrompt = lanePrompt(parsed, extra, message);
@@ -353,9 +376,18 @@ export function App(): JSX.Element {
             isolate: true,
           });
           await launchAndSend(lane.taskId, extraPrompt);
-        })().catch((err: Error) => setActionError(err.message));
+        })().catch((err: Error) => {
+          markPending(created.taskId, extra.agentId, extraPrompt, 'failed', err.message);
+          setActionError(err.message);
+        });
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setPendingLanes((current) =>
+        current.map((p) =>
+          p.chatId === tab.id ? { ...p, phase: 'failed' as const, error: message } : p,
+        ),
+      );
       setTabs((current) =>
         current.map((t) =>
           t.id === tab.id && t.kind === 'draft' ? { ...t, submitting: false } : t,
@@ -405,16 +437,22 @@ export function App(): JSX.Element {
     const lane = chat.lanes.find((l) => l.agentId === agentId);
     if (lane == null) {
       if (repoPath == null) throw new Error('Open this repository to add a lane');
-      const created = await api.taskCreate({
-        repoPath,
-        title: chat.title,
-        intent: text,
-        chatId: chat.chatId,
-        agentId,
-        baseRef: chat.lanes[0]?.task.base_ref,
-        isolate: true,
-      });
-      await launchAndSend(created.taskId, text);
+      markPending(chat.chatId, agentId, text, 'starting');
+      try {
+        const created = await api.taskCreate({
+          repoPath,
+          title: chat.title,
+          intent: text,
+          chatId: chat.chatId,
+          agentId,
+          baseRef: chat.lanes[0]?.task.base_ref,
+          isolate: true,
+        });
+        await launchAndSend(created.taskId, text);
+      } catch (err) {
+        markPending(chat.chatId, agentId, text, 'failed', (err as Error).message);
+        throw err;
+      }
       return;
     }
     const digest = laneDigest(lane, chat.lanes);
@@ -426,8 +464,25 @@ export function App(): JSX.Element {
     if (payload.length === 0) throw new Error('Write something to send');
     const view = chats.find((t) => t.task.id === taskId);
     const live = view?.agent?.pane_alive === true && view.agent.terminated !== true;
-    if (!live) await api.taskLaunch(taskId);
-    await api.taskSend(taskId, payload);
+    const sending = api.taskSend(taskId, payload);
+    if (live) {
+      await sending;
+      return;
+    }
+    await Promise.all([api.taskLaunch(taskId), sending]);
+  }
+
+  function markPending(
+    chatId: string,
+    agentId: string,
+    prompt: string,
+    phase: PendingLane['phase'],
+    error?: string,
+  ): void {
+    setPendingLanes((current) => {
+      const rest = current.filter((p) => !(p.chatId === chatId && p.agentId === agentId));
+      return [...rest, { chatId, agentId, prompt, phase, error }];
+    });
   }
 
   if (githubWelcome && !github.status.signedIn && !githubSkipped) {
@@ -714,6 +769,7 @@ export function App(): JSX.Element {
               optimistic={activeTab.optimistic}
               submitting={Boolean(activeTab.submitting)}
               catalog={catalog}
+              pending={pendingLanes.filter((p) => p.chatId === activeTab.id)}
               onSend={(text) => submitDraft(activeTab, text)}
             />
           ) : selectedChat && selected ? (
@@ -729,16 +785,59 @@ export function App(): JSX.Element {
               catalog={catalog}
               optimistic={activeTab?.kind === 'chat' ? activeTab.optimistic : undefined}
               isolatedNotice={activeTab?.kind === 'chat' ? activeTab.isolatedNotice : undefined}
+              pending={pendingLanes.filter((p) => p.chatId === selectedChat.chatId)}
               onSend={(text) => sendOnChat(selectedChat, text)}
-              onNewIsolatedChat={() => {
+              onNewIsolatedChat={(opts) => {
                 const lane = primaryLane(selectedChat);
                 const repoPath = repoPaths[lane.task.repo_id] ?? repo?.path ?? undefined;
                 void openDraftTab({
                   repoId: lane.task.repo_id,
                   path: repoPath,
-                  defaultBranch: lane.branch,
+                  defaultBranch: opts.baseRef ?? (opts.checkoutRef ? undefined : lane.branch),
                   isolate: true,
+                  checkoutRef: opts.checkoutRef,
                 });
+              }}
+              onMoveToBranch={(checkoutRef) => {
+                const id = selected.task.id;
+                void api.taskMoveBranch(id, checkoutRef).then(
+                  (created) => {
+                    void api.taskLaunch(created.taskId).catch((err: Error) => setActionError(err.message));
+                    const chatId = selectedChat.chatId;
+                    setTabs((current) =>
+                      current.map((t) =>
+                        t.kind === 'chat' && t.id === chatId
+                          ? { ...t, focusId: created.taskId }
+                          : t,
+                      ),
+                    );
+                  },
+                  (err: Error) => setActionError(err.message),
+                );
+              }}
+              onOpenPrLane={() => {
+                const lane = primaryLane(selectedChat);
+                const prBranch =
+                  selectedChat.lanes.map((l) => l.scm?.pr_head_ref).find((ref) => ref && ref.length > 0) ??
+                  lane.scm?.pr_head_ref;
+                if (!prBranch) return;
+                const repoPath = repoPaths[lane.task.repo_id] ?? repo?.path ?? null;
+                if (repoPath == null) return;
+                void (async () => {
+                  const created = await api.taskCreate({
+                    repoPath,
+                    title: selectedChat.title,
+                    intent: `Address review comments on ${prBranch}`,
+                    chatId: selectedChat.chatId,
+                    agentId: lane.agentId,
+                    isolate: true,
+                    checkoutRef: prBranch,
+                  });
+                  await launchAndSend(
+                    created.taskId,
+                    `Address the reviewer's requested changes on ${prBranch}.`,
+                  );
+                })().catch((err: Error) => setActionError(err.message));
               }}
             />
           ) : (
@@ -1264,8 +1363,9 @@ function Empty({
         {repo ? `No chats in ${repo.name} yet` : 'No chats yet'}
       </p>
       <p style={{ color: 'var(--ink-2)', lineHeight: 1.5 }}>
-        A new chat starts on this checkout. Branch out when you want a private copy. Osade stops
-        before anything is published.
+        A new chat starts on this checkout. Branch out when you want a private copy, or open a
+        chat on an existing branch. Isolated worktrees are disposable — close the lane and open
+        one on the target branch. Osade stops before anything is published.
       </p>
       <button className="primary" onClick={onNew} style={{ marginTop: 4 }}>
         New chat

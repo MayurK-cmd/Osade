@@ -44,7 +44,7 @@ export const STATUS: Record<TaskStatus, StatusCopy> = {
   review_changes_requested: {
     label: 'Changes requested',
     meaning: 'A reviewer asked for changes on the pull request. The agent has been given their exact words.',
-    next: 'Watch, or write in the composer to steer it.',
+    next: 'Open a lane on the PR branch if there is not already one, or write in the composer to steer it.',
     tone: 'needs',
   },
   awaiting_review: {
