@@ -215,6 +215,51 @@ the organization.
 
 ---
 
+## Run it on a laptop
+
+There is no hosted Osade. You run it from a checkout on this machine. macOS, Linux, and Windows
+are supported. You do not build the terminal substrate — a pinned binary is fetched for this
+laptop.
+
+### What you need
+
+- **Node.js 22+** and **pnpm** (`corepack enable` is enough; this repo pins `pnpm@10.29.2`)
+- **Git**, and **curl** (Windows 10+ already has `curl.exe`)
+- At least one agent CLI on `PATH` (`claude`, `codex`, …). Osade starts those processes; it
+  does not ship the models.
+- Optional: [GitHub CLI](https://cli.github.com/) (`gh auth login`) so the app can reuse that
+  login for issues and PRs.
+
+### From source
+
+```bash
+git clone https://github.com/OsadeOSS/Osade.git
+cd Osade
+pnpm install
+node scripts/fetch-substrate-binaries.mjs
+pnpm --filter @osade/desktop start
+```
+
+That builds the daemon and the Electron shell, then opens the window. Open a repository from
+there. Sign in to GitHub in the app when you want issues and pull requests; a machine that
+already has `gh` logged in does not need a second OAuth app. Mining conventions also needs
+`OSADE_ANTHROPIC_API_KEY` in the environment.
+
+Everything Osade writes is under `~/.osade` (`%USERPROFILE%\.osade` on Windows). Wipe it to
+reset.
+
+### Windows shortcut
+
+After a successful start (so `apps/desktop/dist` exists):
+
+```powershell
+powershell -File scripts/install-desktop-shortcut.ps1
+```
+
+That puts **Osade** on the Desktop. It still launches the checkout, not a packaged installer.
+
+---
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -2,12 +2,6 @@
 
 Thanks for helping build **Osade** — a local-first desktop workspace for running coding agents
 as open-source contributors.
-
-> Rewritten 2026-09-04. This guide previously described Osade as an IDE built on VS Code, with
-> a `vscode` upstream-tracking branch. That plan was abandoned: Osade is an Electron shell over
-> the substrate runtime, and there is no `vscode` branch. If you are following
-> an older copy of this file, none of it applies.
-
 ---
 
 ## Before you start
@@ -65,7 +59,7 @@ cd osade
 git checkout -b feature/<short-description>
 ```
 
-Build instructions land with M0; there is nothing to compile yet.
+Laptop setup — clone, fetch the pinned runtime, run the Electron app — is in the README.
 
 You do **not** need to build the substrate. Osade ships a prebuilt binary, deliberately: the substrate requires
 Zig 0.15.2 to build its vendored `libghostty-vt`, which is not an acceptable contributor
