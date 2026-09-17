@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
-import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { createHTTPHandler } from '@trpc/server/adapters/standalone';
@@ -17,6 +18,7 @@ import type { VerifyRunner } from '../domain/verify-run.js';
 import type { ScmPoller } from '../scm/poller.js';
 import type { ScmWrites } from '../scm/writes.js';
 import { osadePaths } from '../paths.js';
+import { TaskShells } from '../domain/task-shell.js';
 import { CdcBroadcaster } from './cdc-broadcaster.js';
 import { appRouter, type DaemonContext } from './router.js';
 
@@ -60,6 +62,7 @@ export async function startDaemonServer(options: DaemonServerOptions): Promise<R
   const { db, launcher } = options;
   const now = options.now ?? Date.now;
   const onWarning = options.onWarning ?? (() => {});
+  const shells = new TaskShells();
 
   const broadcaster = new CdcBroadcaster(db, { now });
   broadcaster.start();
@@ -72,6 +75,7 @@ export async function startDaemonServer(options: DaemonServerOptions): Promise<R
     triage: options.triage,
     scmWrites: options.scmWrites,
     poller: options.poller,
+    shells,
     knowledge: options.knowledge ?? null,
     now,
   };
@@ -90,7 +94,9 @@ export async function startDaemonServer(options: DaemonServerOptions): Promise<R
       return;
     }
     if (req.url === '/health') {
-      res.writeHead(200, { 'content-type': 'application/json' }).end('{"ok":true}');
+      res.writeHead(200, { 'content-type': 'application/json' }).end(
+        JSON.stringify({ ok: true, build: runningBuildId() }),
+      );
       return;
     }
     trpcHandler(req, res);
@@ -145,6 +151,7 @@ export async function startDaemonServer(options: DaemonServerOptions): Promise<R
       if (closed) return;
       closed = true;
       clearInterval(pruneTimer);
+      shells.closeAll();
       broadcaster.stop();
       for (const client of wss.clients) client.terminate();
       await new Promise<void>((resolve) => wss.close(() => resolve()));
@@ -167,6 +174,19 @@ function listen(server: Server, port: number): Promise<number> {
       resolve(address.port);
     });
   });
+}
+
+/** Contents of the running entry (`dist/cli.js` when spawned). Desktop refuses to adopt a mismatch. */
+function runningBuildId(): string {
+  const fromEnv = process.env.OSADE_DAEMON_BUILD;
+  if (fromEnv && fromEnv.length > 0) return fromEnv;
+  try {
+    const path = process.argv[1];
+    if (!path) return '';
+    return createHash('sha256').update(readFileSync(path)).digest('hex').slice(0, 16);
+  } catch {
+    return '';
+  }
 }
 
 function safeJson(text: string): unknown {

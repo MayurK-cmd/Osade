@@ -47,7 +47,8 @@ const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
  */
 // better-sqlite3's JavaScript bundles fine; only its `.node` addon cannot. The addon is loaded
 // by a runtime path (`OSADE_SQLITE_BINDING`), which esbuild leaves alone.
-const UNBUNDLABLE = new Set([]);
+// node-pty loads conpty.dll / spawn-helper from its own package tree and cannot be inlined.
+const UNBUNDLABLE = new Set(['node-pty']);
 
 const external = Object.keys(manifest.dependencies ?? {}).filter((name) => UNBUNDLABLE.has(name));
 

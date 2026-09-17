@@ -47,7 +47,8 @@
     "onlyBuiltDependencies": [
       "better-sqlite3",
       "electron",
-      "esbuild"
+      "esbuild",
+      "node-pty"
     ]
   },
   "description": "Run coding agents as open-source contributors",

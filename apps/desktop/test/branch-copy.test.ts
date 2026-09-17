@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { heldReason, isolatedWorktreeHint } from '../src/renderer/branch-copy.js';
+import { heldReason, isolatedWorktreeHint, attachCheckoutHint } from '../src/renderer/branch-copy.js';
 
 describe('branch copy', () => {
   it('names the holder when a branch is already checked out', () => {
@@ -10,6 +10,10 @@ describe('branch copy', () => {
   });
 
   it('tells the truth about moving an isolated worktree', () => {
-    expect(isolatedWorktreeHint()).toMatch(/close the lane and open one on the target branch/i);
+    expect(isolatedWorktreeHint()).toMatch(/close this lane and open one on the target branch/i);
+  });
+
+  it('does not promise a silent checkout of main', () => {
+    expect(attachCheckoutHint()).toMatch(/does not switch you to main/i);
   });
 });

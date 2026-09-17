@@ -3,7 +3,7 @@ import { useEffect, useState, type JSX } from 'react';
 import type { TaskView } from '@osade/contract';
 
 import { api } from './api.js';
-import { heldReason, isolatedWorktreeHint } from './branch-copy.js';
+import { attachCheckoutHint, heldReason, isolatedWorktreeHint } from './branch-copy.js';
 
 export function BranchControl({
   task,
@@ -83,7 +83,7 @@ export function BranchControl({
     <div style={{ position: 'relative', flexShrink: 0 }}>
       <button
         onClick={() => setOpen((v) => !v)}
-        title={attached ? 'On the repository checkout' : isolatedWorktreeHint()}
+        title={attached ? attachCheckoutHint() : isolatedWorktreeHint()}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -124,7 +124,7 @@ export function BranchControl({
                 onClick={() => void branchOut()}
                 style={{ width: '100%', marginBottom: 8 }}
               >
-                Work on a branch
+                Use a worktree
               </button>
               <label
                 style={{

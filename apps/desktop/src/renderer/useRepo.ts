@@ -20,6 +20,7 @@ export interface OpenRepo {
   name: string;
   slug: string | null;
   defaultBranch: string;
+  currentBranch: string;
   defaultAgent: string | null;
 }
 

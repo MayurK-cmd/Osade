@@ -15,6 +15,7 @@ import { homedir } from 'node:os';
 import { runtimeEnv, substrateBinary } from './substrate.js';
 import { githubToken } from '../secrets.js';
 import { delimiter, dirname, join } from 'node:path';
+import { daemonBuildId, healthMatchesBuild } from './daemon-build.js';
 
 /**
  * Spawn and adopt the Osade daemon — OSADE.md §18.1.
@@ -32,14 +33,16 @@ function portFile(): string {
   return join(osadeRoot(), 'daemon.port');
 }
 
-async function health(port: number, timeoutMs = 1_500): Promise<boolean> {
+async function health(port: number, timeoutMs = 1_500, build?: string): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     // §2.1 — loopback only. There is no remote mode.
     const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: controller.signal });
     clearTimeout(timer);
-    return res.ok;
+    if (!res.ok) return false;
+    if (build == null) return true;
+    return healthMatchesBuild(await res.json(), build);
   } catch {
     return false;
   }
@@ -127,6 +130,7 @@ export function daemonCommand(entry: string): {
 
   const token = githubToken();
   if (token) env.OSADE_GITHUB_TOKEN = token;
+  env.OSADE_DAEMON_BUILD = daemonBuildId(entry);
 
   // Point better-sqlite3 straight at its addon, packaged or not.
   //
@@ -317,15 +321,17 @@ export interface AdoptedDaemon {
  *
  * The handshake is the port file plus a `/health` round trip — **never a fixed sleep** (§18.1).
  * A stale port file from a crashed daemon is removed rather than trusted.
+ * A healthy daemon from a different `cli.js` is also stale: that is how `taskShellOpen` 404s.
  */
 export async function adoptOrSpawnDaemon(
   options: DaemonSupervisorOptions,
 ): Promise<AdoptedDaemon> {
   const onInfo = options.onInfo ?? (() => {});
   followDaemonLog(onInfo);
+  const build = daemonBuildId(options.entry);
 
   const existing = readPort();
-  if (existing != null && (await health(existing))) {
+  if (existing != null && (await health(existing, 1_500, build))) {
     onInfo(`adopted the running osade daemon on 127.0.0.1:${existing}`);
     return { port: existing, child: null };
   }
@@ -348,7 +354,7 @@ export async function adoptOrSpawnDaemon(
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     const port = readPort();
-    if (port != null && (await health(port))) {
+    if (port != null && (await health(port, 1_500, build))) {
       onInfo(`spawned the osade daemon on 127.0.0.1:${port}`);
       return { port, child };
     }

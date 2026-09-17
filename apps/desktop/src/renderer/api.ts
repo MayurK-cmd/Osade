@@ -105,6 +105,7 @@ export const api = {
       name: string;
       slug: string | null;
       defaultBranch: string;
+      currentBranch: string;
       defaultAgent: string | null;
       taskCount: number;
     }>,
@@ -231,6 +232,15 @@ export const api = {
       revision: number;
       truncated: boolean;
     }>,
+
+  taskShellOpen: (taskId: string, size?: { cols: number; rows: number }) =>
+    call('mutation', 'taskShellOpen', { taskId, ...size }) as Promise<{ cwd: string }>,
+  taskShellRead: (taskId: string) =>
+    call('query', 'taskShellRead', { taskId }) as Promise<{ text: string }>,
+  taskShellWrite: (taskId: string, data: string) =>
+    call('mutation', 'taskShellWrite', { taskId, data }) as Promise<{ ok: true }>,
+  taskShellResize: (taskId: string, cols: number, rows: number) =>
+    call('mutation', 'taskShellResize', { taskId, cols, rows }) as Promise<{ ok: true }>,
 
   taskFsList: (taskId: string, dirs?: string[]) =>
     call('query', 'taskFsList', { taskId, dirs }) as Promise<{

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -313,9 +314,11 @@ describe('osade task send', () => {
 
   it('treats a leading task id as an id, not as the first word of the message', async () => {
     seedTask('t_one', 'one');
-    // The daemon's launcher is a stub here, so reaching it at all proves the parse: an id that
-    // was read as message text would have thrown about a missing task id first.
-    await expect(main(['task', 'send', 't_one', 'hello there'], capture())).rejects.toThrow();
+    expect(await main(['task', 'send', 't_one', 'hello there'], capture())).toBe(0);
+    const sent = db
+      .prepare(`SELECT task_id, text FROM chat_turn WHERE text = 'hello there'`)
+      .all() as { task_id: string; text: string }[];
+    expect(sent).toEqual([{ task_id: 't_one', text: 'hello there' }]);
   });
 });
 
@@ -389,6 +392,20 @@ describe('osade . — opening a repository', () => {
     const result = await trpc('repoOpen', { path: join(root, 'docs') });
 
     expect(slashes((result as { path: string }).path)).toBe(slashes(root));
+  });
+
+  it('reports the checkout HEAD as currentBranch, not origin/HEAD', async () => {
+    const root = resolve(join(import.meta.dirname, '..', '..', '..'));
+    const head = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      cwd: root,
+      encoding: 'utf8',
+      windowsHide: true,
+    }).trim();
+    const result = (await trpc('repoOpen', { path: root })) as {
+      currentBranch: string;
+      defaultBranch: string;
+    };
+    expect(result.currentBranch).toBe(head);
   });
 
   it('refuses a directory that is not in a git repository', async () => {

@@ -71,6 +71,7 @@ export const api = {
       name: string;
       slug: string | null;
       defaultBranch: string;
+      currentBranch: string;
       defaultAgent: string | null;
       taskCount: number;
     }>,

@@ -23,9 +23,11 @@ import {
 } from '../domain/agent-catalog.js';
 import type { Gates } from '../domain/gates.js';
 import { AgentLiveError, BranchHeldError, LaneIsolatedError, type LaunchTask } from '../domain/launch-task.js';
+import { TaskShells } from '../domain/task-shell.js';
 import {
   repoRoot,
   checkoutBranch,
+  currentBranch,
   listLocalBranches,
   listWorktreeCheckouts,
   repoWorkingStatus,
@@ -63,6 +65,7 @@ export interface DaemonContext {
   triage: Triage;
   scmWrites: ScmWrites;
   poller: ScmPoller;
+  shells: TaskShells;
   /** §13 — absent when no model is configured. Mining is optional; everything else is not. */
   knowledge?: Knowledge | null;
   now: () => number;
@@ -229,6 +232,62 @@ export const appRouter = t.router({
       return result;
     }),
 
+  /** A cmd/PowerShell (or $SHELL) PTY in this lane's cwd. Not the agent pane. */
+  taskShellOpen: t.procedure
+    .input(
+      z.object({
+        taskId: TaskId,
+        cols: z.number().int().min(2).max(500).optional(),
+        rows: z.number().int().min(2).max(200).optional(),
+      }),
+    )
+    .output(z.object({ cwd: z.string() }))
+    .mutation(({ ctx, input }) => {
+      const located = locateTaskCwd(ctx, input.taskId);
+      const size =
+        input.cols != null && input.rows != null ? { cols: input.cols, rows: input.rows } : undefined;
+      return { cwd: ctx.shells.open(input.taskId, located.cwd, size) };
+    }),
+
+  taskShellRead: t.procedure
+    .input(z.object({ taskId: TaskId }))
+    .output(z.object({ text: z.string() }))
+    .query(({ ctx, input }) => ({ text: ctx.shells.read(input.taskId) })),
+
+  taskShellWrite: t.procedure
+    .input(z.object({ taskId: TaskId, data: z.string().min(1) }))
+    .output(z.object({ ok: z.literal(true) }))
+    .mutation(({ ctx, input }) => {
+      try {
+        ctx.shells.write(input.taskId, input.data);
+      } catch (err) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: (err as Error).message });
+      }
+      return { ok: true as const };
+    }),
+
+  taskShellResize: t.procedure
+    .input(
+      z.object({
+        taskId: TaskId,
+        cols: z.number().int().min(2).max(500),
+        rows: z.number().int().min(2).max(200),
+      }),
+    )
+    .output(z.object({ ok: z.literal(true) }))
+    .mutation(({ ctx, input }) => {
+      ctx.shells.resize(input.taskId, { cols: input.cols, rows: input.rows });
+      return { ok: true as const };
+    }),
+
+  taskShellClose: t.procedure
+    .input(z.object({ taskId: TaskId }))
+    .output(z.object({ ok: z.literal(true) }))
+    .mutation(({ ctx, input }) => {
+      ctx.shells.close(input.taskId);
+      return { ok: true as const };
+    }),
+
   taskFsList: t.procedure
     .input(z.object({ taskId: TaskId, dirs: z.array(z.string()).optional() }))
     .output(
@@ -361,6 +420,7 @@ export const appRouter = t.router({
     .input(z.object({ taskId: TaskId }))
     .output(z.object({ ok: z.literal(true) }))
     .mutation(({ ctx, input }) => {
+      ctx.shells.close(input.taskId);
       ctx.db.prepare('UPDATE task SET archived_at = ? WHERE id = ?').run(ctx.now(), input.taskId);
       return { ok: true as const };
     }),
@@ -539,6 +599,7 @@ export const appRouter = t.router({
         /** `owner/name` when there is a GitHub remote; null for a local-only repo. */
         slug: z.string().nullable(),
         defaultBranch: z.string(),
+        currentBranch: z.string(),
         defaultAgent: z.string().nullable(),
         taskCount: z.number().int(),
       }),
@@ -570,6 +631,7 @@ export const appRouter = t.router({
         name: basename(repo.path) || repo.path,
         slug: repo.gh_owner && repo.gh_name ? `${repo.gh_owner}/${repo.gh_name}` : null,
         defaultBranch: repo.default_branch,
+        currentBranch: await currentBranch(repo.path),
         defaultAgent: repo.default_agent,
         taskCount: counted.n,
       };

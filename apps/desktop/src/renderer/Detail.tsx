@@ -4,6 +4,7 @@ import type { VerifyRun } from '@osade/contract';
 
 import { agentColor } from './agent-color.js';
 import { api } from './api.js';
+import { attachCheckoutHint, isolatedWorktreeHint } from './branch-copy.js';
 import { BranchControl } from './BranchControl.js';
 import { Changes } from './Changes.js';
 import { Composer } from './Composer.js';
@@ -11,6 +12,7 @@ import { Conventions } from './Conventions.js';
 import { lanePhase, startingLine, type PendingLane } from './delivery.js';
 import { Files } from './Files.js';
 import { GateCard } from './GateCard.js';
+import { LaneTerminal } from './LaneTerminal.js';
 import { chatLabel, type ChatGroup } from './lanes.js';
 import type { CatalogAgent } from './RepoSettings.js';
 import { GLYPH, STATUS, TONE_COLOUR, ago, statusCopyFor } from './status.js';
@@ -57,6 +59,7 @@ export function Detail({
   onOpenPrLane: () => void;
 }): JSX.Element {
   const [filter, setFilter] = useState<string | null>(null);
+  const [chatSurface, setChatSurface] = useState<'chat' | 'terminal'>('chat');
   const [modHeld, setModHeld] = useState(false);
   const [branchOfferDismissed, setBranchOfferDismissed] = useState(false);
   const focused = chat.lanes.find((t) => t.task.id === focusId) ?? chat.lanes[0]!;
@@ -220,8 +223,8 @@ export function Detail({
           }}
         >
           <p style={{ margin: '0 0 8px' }}>
-            This chat is on your real checkout. Branch out before the agent writes, or it will
-            edit files in place.
+            This chat is on your real checkout. Move it to a worktree before the agent writes, or
+            it will edit files in place.
           </p>
           <button
             className="primary"
@@ -232,7 +235,7 @@ export function Detail({
                 .catch(() => setBranchOfferDismissed(true));
             }}
           >
-            Work on a branch
+            Use a worktree
           </button>
           <button onClick={() => setBranchOfferDismissed(true)} style={{ marginLeft: 8 }}>
             Keep working here
@@ -289,16 +292,40 @@ export function Detail({
       </nav>
 
       <div
-        data-chat-scroll={lane === 'transcript' ? '' : undefined}
+        data-chat-scroll={lane === 'transcript' && chatSurface === 'chat' ? '' : undefined}
         style={{
           flex: 1,
           minHeight: 0,
-          overflow: lane === 'files' || lane === 'diff' ? 'hidden' : 'auto',
-          padding: lane === 'files' || lane === 'diff' ? 0 : '14px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: lane === 'files' || lane === 'diff' || (lane === 'transcript' && chatSurface === 'terminal') ? 'hidden' : 'auto',
+          padding: lane === 'files' || lane === 'diff' || (lane === 'transcript' && chatSurface === 'terminal') ? 0 : '14px 16px',
         }}
       >
         {lane === 'transcript' && (
           <>
+            <div
+              style={{
+                display: 'flex',
+                gap: 6,
+                flexShrink: 0,
+                padding: chatSurface === 'terminal' ? '8px 12px 0' : 0,
+                marginBottom: 12,
+              }}
+            >
+              <FilterChip label="Chat" active={chatSurface === 'chat'} onClick={() => setChatSurface('chat')} />
+              <FilterChip
+                label="Terminal"
+                active={chatSurface === 'terminal'}
+                onClick={() => setChatSurface('terminal')}
+              />
+            </div>
+            {chatSurface === 'terminal' ? (
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <LaneTerminal key={focused.task.id} taskId={focused.task.id} />
+              </div>
+            ) : (
+              <>
             {chat.lanes.length > 1 && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                 <FilterChip label="All" active={filter == null} onClick={() => setFilter(null)} />
@@ -336,6 +363,8 @@ export function Detail({
               followTaskId={focused.task.id}
               isolatedNotice={isolatedNotice}
             />
+              </>
+            )}
           </>
         )}
         {lane === 'files' && <Files key={focused.task.id} task={focused} />}
@@ -349,6 +378,7 @@ export function Detail({
         {lane === 'rules' && <Conventions repoId={focused.task.repo_id} />}
       </div>
 
+      {!(lane === 'transcript' && chatSurface === 'terminal') && (
       <Composer
         key={chat.chatId}
         autoFocus={lane === 'transcript'}
@@ -361,6 +391,7 @@ export function Detail({
         placeholder="Message. Enter to send, Shift+Enter for a new line. @name to pick a lane."
         onSend={handleSend}
       />
+      )}
     </div>
   );
 }
@@ -495,9 +526,8 @@ export function DraftPane({
       <header style={{ padding: '14px 16px 12px', borderBottom: '0.5px solid var(--line)' }}>
         <h1 style={{ fontSize: 'var(--t-l)', fontWeight: 600, margin: 0 }}>New chat</h1>
         <p style={{ margin: '6px 0 0', color: 'var(--ink-2)', fontSize: 'var(--t-s)' }}>
-          A new chat uses this checkout. Branch out when you want a worktree, or open a chat on
-          an existing branch. Isolated worktrees are disposable — close the lane and open one on
-          the target branch. @mention an agent on its own line to pick a lane.
+          {attachCheckoutHint()} {isolatedWorktreeHint()} @mention an agent on its own line to
+          pick a lane.
         </p>
       </header>
       <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
