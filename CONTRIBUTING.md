@@ -2,25 +2,29 @@
 
 Thanks for helping build **Osade** — a local-first desktop workspace for running coding agents
 as open-source contributors.
+
 ---
 
 ## Before you start
 
-Osade is **pre-M0**. The specification is complete and the substrate integration surface has been
-verified against a live server, but product code has not started. Right now the highest-value
-contributions are to the spec, the verified contract, and the M0 scaffolding — not features.
+M0–M3 are built. What is left is on [`docs/todo.md`](docs/todo.md) — live GitHub/model
+acceptance, plus a short list of product follow-ups. Spec work still matters, but
+scaffolding the product does not.
 
 Read, in this order:
 
 1. [`README.md`](README.md) — what Osade is and why.
-2. [`docs/OSADE.md`](docs/OSADE.md) — the product requirements and build spec. Long, and worth
-   it. **Sections marked INVARIANT are load-bearing** and sections marked **DECISION** were
-   settled deliberately. Implement them; do not relitigate them in a PR. If you think one is
-   wrong, open an issue that says which one and what evidence changed.
-3. [`docs/SUBSTRATE-CONTRACT.md`](docs/SUBSTRATE-CONTRACT.md) — the verified the substrate surface. **Where
-   OSADE.md and this file disagree, this file is right.** Code against it.
-4. [`docs/PRD-DELTA.md`](docs/PRD-DELTA.md) — where the spec was wrong about the substrate, and why.
-   Useful context for why some sections read the way they do.
+2. [`docs/architechture/OSADE.md`](docs/architechture/OSADE.md) — the product requirements and
+   build spec. Long, and worth it. **Sections marked INVARIANT are load-bearing** and sections
+   marked **DECISION** were settled deliberately. Implement them; do not relitigate them in a
+   PR. If you think one is wrong, open an issue that says which one and what evidence changed.
+3. [`SECURITY.md`](SECURITY.md) — what counts as a vulnerability here, and how to report one.
+
+The substrate surface Osade codes against is the pinned schema under
+`vendor/runtime/<version>-p<protocol>/api-schema.json` and the generated client in
+`packages/daemon/src/substrate/generated/`. There is no separate `SUBSTRATE-CONTRACT.md` or
+`PRD-DELTA.md` in this tree; corrections from that recon live in OSADE.md itself (look for
+*"Corrected … per PRD-DELTA"* markers).
 
 There is one branch, `main`. Work from it.
 
@@ -29,7 +33,7 @@ There is one branch, `main`. Work from it.
 ## Rules this project enforces
 
 These will send a PR back regardless of how good the code is. Most are lint-enforced
-(`docs/OSADE.md` §20.1) rather than review comments.
+(`docs/architechture/OSADE.md` §20.1) rather than review comments.
 
 - **Never hand-edit anything under `backend/`.** It is the substrate source, kept as reference.
   Its one change is the rename applied by `scripts/rebrand-source.mjs`; re-run that script rather
@@ -97,8 +101,8 @@ evidence justified it. A spec that drifts from the code is worse than no spec.
 ```text
 packages/daemon/test/unit/         pure reducers, derive-status, verify-plan. No I/O.
 packages/daemon/test/integration/  real sqlite, fake substrate, recorded GitHub fixtures
-apps/desktop/tests/                vitest + playwright on the renderer
-test/e2e/                          real substrate binary, real git repo fixture, one full task
+apps/desktop/test/                 vitest + playwright on the renderer
+packages/daemon/test/e2e/          real substrate binary, real git repo fixture, one full task
 ```
 
 Pre-commit runs unit + integration. E2E runs in CI. If CI hangs after tests appear to finish,
@@ -127,7 +131,7 @@ anything involving the substrate, add the output of `the substrate status` and `
 Osade's logs live in `~/.osade/logs/<date>.log`. the substrate's are in its session data directory —
 `the substrate status` prints the path.
 
-**Security issues do not go in public issues.** See [`docs/SECURITY.md`](docs/SECURITY.md).
+**Security issues do not go in public issues.** See [`SECURITY.md`](SECURITY.md).
 
 ---
 

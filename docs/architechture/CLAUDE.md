@@ -7,13 +7,13 @@ The bigger trap: hand Claude Code a 1400-line PRD and it will scaffold 40 files 
 ```markdown
 # Osade
 
-Osade runs coding agents as open-source contributors. Full spec: @docs/OSADE.md
+Osade runs coding agents as open-source contributors. Full spec: @docs/architechture/OSADE.md
 
 ## Layout
 - `backend/` — substrate (Rust). **Never hand-edit.** Its only change is the rename applied by `scripts/rebrand-source.mjs`. Reference implementation + API source of truth.
 - `apps/desktop/` — Electron shell
 - `packages/` — daemon, contract, cli, skill-assets
-- `docs/` — OSADE.md is the spec. AOagents.txt / cline.txt are research inputs, not requirements.
+- `docs/` — `architechture/OSADE.md` is the spec. AOagents.txt / cline.txt are research inputs, not requirements.
 
 ## Standing rules
 - Never hand-edit anything under `backend/`. Re-run `scripts/rebrand-source.mjs` instead of editing a file.
@@ -31,7 +31,7 @@ Read the relevant OSADE.md section in full. Sections marked INVARIANT or DECISIO
 ## Prompt 1 — recon, no product code
 
 ```
-Read docs/OSADE.md in full. Then verify its assumptions against the real substrate
+Read docs/architechture/OSADE.md in full. Then verify its assumptions against the real substrate
 source in backend/. Write NO product code in this task.
 
 backend/ is read-only. You are reading it to find out what is actually true.
@@ -73,7 +73,7 @@ Stop after those two files. Do not scaffold anything.
 ## Prompt 2 — M0, only after you've read the delta
 
 ```
-Read docs/OSADE.md §21 (M0), docs/SUBSTRATE-CONTRACT.md, and docs/PRD-DELTA.md.
+Read docs/architechture/OSADE.md §21 (M0), docs/SUBSTRATE-CONTRACT.md, and docs/PRD-DELTA.md.
 
 Build M0 only. Scope is the six checkboxes under M0 — nothing from M1+.
 No GitHub, no conventions miner, no memory, no gates.

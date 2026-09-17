@@ -6,10 +6,10 @@ photographs the window.
 
 ## Needs you
 
-- [ ] **Run `docs/architechture/M2-ACCEPTANCE.md`** against a real repo with your own GitHub token. Everything
+- [ ] **Run `docs/M2-ACCEPTANCE.md`** against a real repo with your own GitHub token. Everything
       Osade owns is proved against a recorded GitHub; what that cannot prove is that GitHub
       behaves as recorded.
-- [ ] **Run `docs/architechture/M3-ACCEPTANCE.md`** on a repo with a real review history, with your own GitHub
+- [ ] **Run `docs/M3-ACCEPTANCE.md`** on a repo with a real review history, with your own GitHub
       and Anthropic keys. Also the first time mining runs against a live GitHub and a live model
       at all — every pass is currently proved against fixtures.
       **The criterion (§13.6):** N ≥ 10 comparable tasks with and without injected conventions on
