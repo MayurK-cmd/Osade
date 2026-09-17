@@ -463,7 +463,10 @@ export function App(): JSX.Element {
     const payload = text.trim();
     if (payload.length === 0) throw new Error('Write something to send');
     const view = chats.find((t) => t.task.id === taskId);
-    const live = view?.agent?.pane_alive === true && view.agent.terminated !== true;
+    const live =
+      view?.agent?.pane_alive === true &&
+      view.agent.terminated !== true &&
+      view.agent.substrate_pane_id != null;
     const sending = api.taskSend(taskId, payload);
     if (live) {
       await sending;

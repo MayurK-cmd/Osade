@@ -50,7 +50,8 @@ export function copyTurns(db: Db, fromTaskId: string, toTaskId: string): void {
 }
 
 export function composerReady(db: Db, taskId: string): boolean {
-  return getAgentFact(db, taskId)?.composer_ready === true;
+  const fact = getAgentFact(db, taskId);
+  return fact?.composer_ready === true && fact.substrate_pane_id != null;
 }
 
 export function turnInFlight(db: Db, taskId: string): boolean {

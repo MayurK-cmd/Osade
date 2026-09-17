@@ -123,6 +123,30 @@ describe('chat turns — typed send, not keystrokes', () => {
     expect(prompts).toEqual([]);
   });
 
+  it('holds a send as queued when the composer is ready but no pane is bound yet', async () => {
+    db.prepare(
+      "UPDATE agent_fact SET substrate_pane_id = NULL, composer_ready = 1, substrate_state = 'idle' WHERE task_id = 't1'",
+    ).run();
+    const held = await send('first prompt');
+    expect(held.delivery).toBe('queued');
+    expect(prompts).toEqual([]);
+  });
+
+  it('flushes the held send once a pane is bound to the ready composer', async () => {
+    db.prepare(
+      "UPDATE agent_fact SET substrate_pane_id = NULL, composer_ready = 1, substrate_state = 'idle' WHERE task_id = 't1'",
+    ).run();
+    const held = await send('first prompt');
+    expect(held.delivery).toBe('queued');
+    expect(prompts).toEqual([]);
+    db.prepare("UPDATE agent_fact SET substrate_pane_id = 'w3:p2' WHERE task_id = 't1'").run();
+    await dispatchQueued(db, async (_id, body) => {
+      prompts.push(body);
+    }, 't1', false, NOW);
+    expect(prompts).toEqual(['first prompt']);
+    expect(listTurns(db, 't1')[0]?.delivery).toBe('accepted');
+  });
+
   it('flushes the held first send once the composer is idle', async () => {
     db.prepare("UPDATE agent_fact SET substrate_state = 'blocked', composer_ready = 0 WHERE task_id = 't1'").run();
     await send('first prompt');

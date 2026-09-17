@@ -163,6 +163,9 @@ export class SubstrateEventSubscriber {
    * not know about. Idempotent.
    */
   watchPane(taskId: string, paneId: string): void {
+    this.#db
+      .prepare('UPDATE agent_fact SET substrate_pane_id = ? WHERE task_id = ?')
+      .run(paneId, taskId);
     if (this.#panes.has(paneId)) return;
 
     const stream = this.#createStream(this.#client.socketPath, [
@@ -176,13 +179,8 @@ export class SubstrateEventSubscriber {
       }
     });
     stream.on('error', (err) => this.#onWarning(`pane ${paneId} status stream: ${err.message}`));
-    stream.start();
-
     this.#panes.set(paneId, { taskId, stream });
-
-    this.#db
-      .prepare('UPDATE agent_fact SET substrate_pane_id = ? WHERE task_id = ?')
-      .run(paneId, taskId);
+    stream.start();
   }
 
   unwatchPane(paneId: string): void {

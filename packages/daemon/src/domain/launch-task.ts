@@ -876,7 +876,9 @@ export class LaunchTask {
 
     this.#db.prepare('UPDATE task SET substrate_workspace_id = NULL WHERE id = ?').run(taskId);
     this.#db
-      .prepare('UPDATE agent_fact SET pane_alive = 0, substrate_pane_id = NULL WHERE task_id = ?')
+      .prepare(
+        'UPDATE agent_fact SET pane_alive = 0, substrate_pane_id = NULL, composer_ready = 0 WHERE task_id = ?',
+      )
       .run(taskId);
   }
 
