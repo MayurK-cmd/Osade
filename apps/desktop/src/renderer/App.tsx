@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type JSX } from 'reac
 
 import type { TaskView } from '@osade/contract';
 
-import { agentColor } from './agent-color.js';
+import { AgentMark } from './agent-icon.js';
 import { Board } from './Board.js';
 import { CommandPalette } from './CommandPalette.js';
 import { Detail, DraftPane, type Lane } from './Detail.js';
@@ -11,10 +11,19 @@ import { attachCheckoutHint, isolatedWorktreeHint } from './branch-copy.js';
 import { chord } from './chords.js';
 import { type PendingLane } from './delivery.js';
 import { GitHubSignIn, useGithub } from './GitHubSignIn.js';
-import { groupChats, laneDigest, primaryLane, showPinnedNeedsYou, withDigest, chatLabel, type ChatGroup } from './lanes.js';
+import {
+  chatLabel,
+  displayBranch,
+  groupChats,
+  laneDigest,
+  primaryLane,
+  showPinnedNeedsYou,
+  withDigest,
+  type ChatGroup,
+} from './lanes.js';
 import { lanePrompt, parseMentions } from './mentions.js';
 import { RepoSettings, useAgentCatalog } from './RepoSettings.js';
-import { GLYPH, STATUS, TONE_COLOUR, summarise } from './status.js';
+import { STATUS, TONE_COLOUR, ago, summarise } from './status.js';
 import { titleFrom } from './title.js';
 import { useLedger } from './useLedger.js';
 import { useRepo, type OpenRepo } from './useRepo.js';
@@ -716,25 +725,15 @@ export function App(): JSX.Element {
                     )}
                     {(hideRepoHead || !closed) &&
                       group.chats.map((chat) => (
-                        <div key={chat.chatId}>
-                          <ChatRow
-                            chat={chat}
-                            selected={selectedChat?.chatId === chat.chatId}
-                            onSelect={() => openLane(primaryLane(chat))}
-                            onMenu={(x, y) =>
-                              setMenu({ id: primaryLane(chat).task.id, x, y })
-                            }
-                          />
-                          {chat.lanes.map((task) => (
-                            <LaneRow
-                              key={task.task.id}
-                              task={task}
-                              selected={selected?.task.id === task.task.id}
-                              onSelect={() => openLane(task)}
-                              onMenu={(x, y) => setMenu({ id: task.task.id, x, y })}
-                            />
-                          ))}
-                        </div>
+                        <ChatRow
+                          key={chat.chatId}
+                          chat={chat}
+                          selected={selectedChat?.chatId === chat.chatId}
+                          onSelect={() => openLane(primaryLane(chat))}
+                          onMenu={(x, y) =>
+                            setMenu({ id: primaryLane(chat).task.id, x, y })
+                          }
+                        />
                       ))}
                   </section>
                 );
@@ -991,7 +990,12 @@ function ChatRow({
 }): JSX.Element {
   const copy = STATUS[chat.status];
   const colour = TONE_COLOUR[copy.tone];
-  const primary = chat.lanes[0]!;
+  const primary = primaryLane(chat);
+  const stacked = chat.lanes.length > 1;
+  const behind = stacked ? chat.lanes[1] : null;
+  const branch = displayBranch(primary.branch);
+  const age = ago(chatActivity(chat));
+  const extraLanes = chat.lanes.length - 3;
 
   return (
     <div
@@ -1013,87 +1017,151 @@ function ChatRow({
       }}
       style={{
         display: 'grid',
-        gridTemplateColumns: '2px 18px 1fr auto',
-        alignItems: 'center',
+        gridTemplateColumns: '2px 22px minmax(0, 1fr)',
+        gridTemplateRows: 'auto auto',
         columnGap: 8,
-        padding: '6px 16px 6px 0',
+        rowGap: 2,
+        alignItems: 'center',
+        minHeight: 52,
+        padding: '8px 14px 8px 0',
         borderBottom: '0.5px solid var(--line)',
         cursor: 'default',
       }}
     >
-      <span style={{ background: colour, alignSelf: 'stretch', borderRadius: 1 }} aria-hidden="true" />
-      <span className="mono" style={{ color: colour, fontSize: 'var(--t-s)' }} aria-hidden="true">
-        {GLYPH[copy.tone]}
+      <span
+        style={{
+          gridColumn: 1,
+          gridRow: '1 / 3',
+          background: colour,
+          alignSelf: 'stretch',
+          borderRadius: 1,
+        }}
+        aria-hidden="true"
+      />
+      <span
+        style={{
+          gridColumn: 2,
+          gridRow: '1 / 3',
+          position: 'relative',
+          width: 22,
+          height: 22,
+          flexShrink: 0,
+        }}
+        aria-hidden="true"
+      >
+        {behind && (
+          <span
+            style={{
+              position: 'absolute',
+              right: 0,
+              bottom: 0,
+              width: 16,
+              height: 16,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'var(--bg-2)',
+              borderRadius: 2,
+            }}
+          >
+            <AgentMark name={behind.agentId} size={14} />
+          </span>
+        )}
+        <span
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: 16,
+            height: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--bg-2)',
+            borderRadius: 2,
+            boxShadow: stacked ? '0 0 0 1px var(--bg-0)' : undefined,
+          }}
+        >
+          <AgentMark name={primary.agentId} size={14} />
+        </span>
       </span>
       <div
         style={{
-          fontSize: 'var(--t-m)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          gridColumn: 3,
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 8,
           minWidth: 0,
         }}
       >
-        {chatLabel(chat)}
+        <div
+          title={chatLabel(chat)}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontSize: 'var(--t-m)',
+            lineHeight: 1.3,
+            fontFamily: "ui-sans-serif, system-ui, 'Segoe UI', sans-serif",
+          }}
+        >
+          {chatLabel(chat)}
+        </div>
+        {age && (
+          <span
+            className="mono"
+            style={{
+              flexShrink: 0,
+              fontSize: 'var(--t-xs)',
+              color: 'var(--ink-3)',
+              lineHeight: 1.3,
+            }}
+          >
+            {age}
+          </span>
+        )}
       </div>
-      {chat.lanes.length > 1 && (
-        <span className="mono" style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-3)' }}>
-          {chat.lanes.length}
+      <div
+        style={{
+          gridColumn: 3,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          minWidth: 0,
+        }}
+      >
+        <span className="branch-clip" title={primary.branch}>
+          <span>{branch}</span>
         </span>
-      )}
-    </div>
-  );
-}
-
-function LaneRow({
-  task,
-  selected,
-  onSelect,
-  onMenu,
-}: {
-  task: TaskView;
-  selected: boolean;
-  onSelect: () => void;
-  onMenu: (x: number, y: number) => void;
-}): JSX.Element {
-  const copy = STATUS[task.status];
-  const colour = TONE_COLOUR[copy.tone];
-  return (
-    <div
-      data-task-id={task.task.id}
-      role="button"
-      tabIndex={0}
-      aria-pressed={selected}
-      className="ledger-row"
-      onClick={onSelect}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        onMenu(event.clientX, event.clientY);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '2px 18px 1fr minmax(4em, 50%)',
-        alignItems: 'center',
-        columnGap: 8,
-        padding: '4px 16px 4px 18px',
-        borderBottom: '0.5px solid var(--line)',
-        cursor: 'default',
-      }}
-    >
-      <span style={{ background: agentColor(task.agentId), alignSelf: 'stretch', borderRadius: 1 }} />
-      <span className="mono" style={{ color: colour, fontSize: 'var(--t-s)' }}>
-        {GLYPH[copy.tone]}
-      </span>
-      <span style={{ fontSize: 'var(--t-s)', color: agentColor(task.agentId) }}>{task.agentId}</span>
-      <span className="branch-tail" title={task.task.branch}>
-        {task.task.branch}
-      </span>
+        {stacked && (
+          <span
+            style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}
+            title={chat.lanes.map((lane) => lane.agentId).join(', ')}
+          >
+            {chat.lanes.slice(0, 3).map((lane) => (
+              <span
+                key={lane.task.id}
+                style={{
+                  width: 12,
+                  height: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <AgentMark name={lane.agentId} size={12} />
+              </span>
+            ))}
+            {extraLanes > 0 && (
+              <span className="mono" style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-3)' }}>
+                {chat.lanes.length}
+              </span>
+            )}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

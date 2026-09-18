@@ -43,6 +43,27 @@ export function chatLabel(chat: Pick<ChatGroup, 'chatId' | 'title'>): string {
   return isOrchestratorId(chat.chatId) ? 'Plan' : chat.title;
 }
 
+/**
+ * Sidebar branch label. Isolated lanes are `osade/<slug>/<agent>`; the prefix is the same on
+ * every row, so only the tail is shown. Attached checkouts (`main`, `feat/…`) pass through.
+ */
+export function displayBranch(branch: string): string {
+  const nested = /^osade\/[^/]+\/(.+)$/.exec(branch);
+  if (nested?.[1]) return nested[1];
+  if (branch.startsWith('osade/')) return branch.slice('osade/'.length);
+  return branch;
+}
+
+/** Two-letter mark for a sidebar avatar. */
+export function agentInitials(agentId: string): string {
+  const parts = agentId.split(/[-_\s]+/u).filter((part) => part.length > 0);
+  if (parts.length >= 2) {
+    return `${parts[0]![0] ?? ''}${parts[1]![0] ?? ''}`.toUpperCase();
+  }
+  const compact = agentId.replace(/[^a-z0-9]/giu, '');
+  return (compact.slice(0, 2) || '?').toUpperCase();
+}
+
 export type BoardColumnId = 'needs' | 'working' | 'review' | 'ready' | 'rest';
 
 export const BOARD_COLUMNS: { id: BoardColumnId; label: string }[] = [

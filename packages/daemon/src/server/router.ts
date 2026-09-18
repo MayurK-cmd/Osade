@@ -41,6 +41,7 @@ import {
   repoWorkingStatus,
 } from '../domain/git.js';
 import { toTaskView } from '../domain/task-view.js';
+import { saveChatPhotos } from '../domain/chat-photos.js';
 import { deriveVerifyPlan, type VerifyStep } from '../domain/verify-plan.js';
 import { isAttached, taskCwd } from '../domain/cwd.js';
 import {
@@ -235,6 +236,35 @@ export const appRouter = t.router({
         });
       }
       return { ok: true as const };
+    }),
+
+  /** Writes pasted photos under ~/.osade/inbox/<task>/ so the agent can open them. */
+  taskDropImages: t.procedure
+    .input(
+      z.object({
+        taskId: TaskId,
+        files: z
+          .array(
+            z.object({
+              name: z.string().min(1),
+              mime: z.string().min(1),
+              data: z.string().min(1),
+            }),
+          )
+          .min(1)
+          .max(8),
+      }),
+    )
+    .output(z.object({ paths: z.array(z.string()) }))
+    .mutation(({ ctx, input }) => {
+      if (!getTask(ctx.db, input.taskId)) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown task' });
+      }
+      try {
+        return saveChatPhotos(input.taskId, input.files);
+      } catch (err) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
+      }
     }),
 
   /** Reads the agent pane transcript — §4.4.1. On demand, never a render loop. */
