@@ -1315,11 +1315,11 @@ function Header({
       </div>
       <button
         type="button"
-        title={view === 'board' ? 'List' : 'Board'}
+        title={view === 'board' ? 'List' : 'Kanban'}
         onClick={() => onView(view === 'board' ? 'list' : 'board')}
         style={{ flexShrink: 0, fontSize: 'var(--t-xs)' }}
       >
-        {view === 'board' ? 'List' : 'Board'}
+        {view === 'board' ? 'List' : 'Kanban'}
       </button>
       {settings ? <div style={{ flexShrink: 0 }}>{settings}</div> : null}
       <button data-new-task onClick={onNew} style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
