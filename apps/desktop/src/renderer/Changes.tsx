@@ -10,6 +10,7 @@ import {
 import type { TaskView } from '@osade/contract';
 
 import { api } from './api.js';
+import { hunkAttach, type ComposerAttach } from './compose-attach.js';
 import { composeAppend } from './compose-event.js';
 import { flagColour, parseUnified } from './highlight.js';
 import { PrOpen } from './PrOpen.js';
@@ -34,7 +35,15 @@ interface Pick {
 /**
  * Diff lane — VS Code Source Control shape: working-tree changes, then commits not yet pushed.
  */
-export function Changes({ task, lanes }: { task: TaskView; lanes?: TaskView[] }): JSX.Element {
+export function Changes({
+  task,
+  lanes,
+  onAttach,
+}: {
+  task: TaskView;
+  lanes?: TaskView[];
+  onAttach?: (attach: ComposerAttach | null) => void;
+}): JSX.Element {
   const [width, setWidth] = useState(() => loadWidth());
   const [files, setFiles] = useState<ChangeFile[]>([]);
   const [outgoing, setOutgoing] = useState<{
@@ -46,6 +55,7 @@ export function Changes({ task, lanes }: { task: TaskView; lanes?: TaskView[] })
   const [diff, setDiff] = useState<string | null>(null);
   const [marked, setMarked] = useState<Set<number>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
+  const [cursor, setCursor] = useState(0);
   const drag = useRef<{ start: number; width: number } | null>(null);
   const stamp = `${task.task.id}:${task.cwd}:${task.agent?.last_event_at ?? 0}:${task.status}`;
 
@@ -99,6 +109,7 @@ export function Changes({ task, lanes }: { task: TaskView; lanes?: TaskView[] })
 
   useEffect(() => {
     setMarked(new Set());
+    setCursor(0);
   }, [picked?.path, picked?.vs, diff]);
 
   function onDragStart(event: ReactMouseEvent<HTMLDivElement>): void {
@@ -127,6 +138,15 @@ export function Changes({ task, lanes }: { task: TaskView; lanes?: TaskView[] })
   }
 
   const lines = parseUnified(diff ?? '');
+
+  useEffect(() => {
+    if (!onAttach) return;
+    if (picked == null) {
+      onAttach(null);
+      return;
+    }
+    onAttach(hunkAttach(picked.path, lines, cursor));
+  }, [onAttach, picked, cursor, diff]);
 
   function toggleLine(index: number): void {
     setMarked((current) => {
@@ -264,7 +284,10 @@ export function Changes({ task, lanes }: { task: TaskView; lanes?: TaskView[] })
                   <div
                     key={i}
                     className={`diff-${line.kind}`}
-                    onClick={() => toggleLine(i)}
+                    onClick={() => {
+                      setCursor(i);
+                      toggleLine(i);
+                    }}
                     style={{
                       padding: '0 12px',
                       whiteSpace: 'pre',

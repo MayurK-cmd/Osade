@@ -8,6 +8,8 @@ import { Conventions, type ConventionWithEvidence } from './conventions.js';
 import { compareInjection, type Comparison } from './measure.js';
 import { Miner, type MineResult, type MinePhase } from './miner.js';
 import type { ModelPort } from './model.js';
+import { HeadlessModel } from './headless-model.js';
+import type { HeadlessRuns } from '../domain/headless-run.js';
 
 /**
  * The mining service — OSADE.md §13.
@@ -52,6 +54,7 @@ export class Knowledge {
   readonly #db: Db;
   readonly #scm: ScmClient | null;
   readonly #model: ModelPort | null;
+  readonly #headless: HeadlessRuns | null;
   readonly #now: () => number;
   readonly #onWarning: (message: string) => void;
   readonly #conventions: Conventions;
@@ -62,11 +65,12 @@ export class Knowledge {
     db: Db,
     scm: ScmClient | null,
     model: ModelPort | null,
-    options: KnowledgeOptions = {},
+    options: KnowledgeOptions & { headless?: HeadlessRuns | null } = {},
   ) {
     this.#db = db;
     this.#scm = scm;
     this.#model = model;
+    this.#headless = options.headless ?? null;
     this.#now = options.now ?? Date.now;
     this.#onWarning = options.onWarning ?? (() => {});
     this.#conventions = new Conventions(db, { now: this.#now });
@@ -111,12 +115,11 @@ export class Knowledge {
    * work is worse than one that is disabled with a reason next to it.
    */
   availability(repoId: string): MiningAvailability {
-    if (!this.#model) {
+    if (!this.#model && !this.#headless?.available(repoId)) {
       return {
         available: false,
         reason:
-          'no model configured. Set OSADE_ANTHROPIC_API_KEY in the daemon’s environment; ' +
-          'Osade never writes it to disk.',
+          'no installed agent can run headless. Install Claude Code or Codex; Osade does not take an API key for mining.',
       };
     }
     if (!this.#scm) {
@@ -260,7 +263,8 @@ export class Knowledge {
     try {
       const repo = this.#repo(repoId);
       const scm = this.#scm;
-      const model = this.#model;
+      const model =
+        this.#model ?? (this.#headless ? new HeadlessModel(this.#headless, repoId) : null);
       if (!repo?.gh_owner || !repo.gh_name || !scm || !model) {
         return fail('mining unavailable');
       }

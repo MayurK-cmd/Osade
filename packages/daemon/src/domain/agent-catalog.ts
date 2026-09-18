@@ -32,6 +32,8 @@ export interface AgentCatalogEntry {
   /** How conventions get injected (§13.5). Null when the agent has no flag for it. */
   readonly systemPromptFlag: string | null;
   readonly capabilities: readonly AgentCapability[];
+  /** Non-interactive print mode. Prompt is written to stdin. */
+  readonly headlessArgs: readonly string[];
   /** How long a new lane may sit without an idle composer before the send fails. */
   readonly readyTimeoutMs?: number;
   /** Regex sources stripped from a pane-delta reply (banner, prompt chrome, status footer). */
@@ -53,6 +55,7 @@ export const AGENT_CATALOG: readonly AgentCatalogEntry[] = [
     resumeArgs: ['--continue'],
     systemPromptFlag: '--append-system-prompt',
     capabilities: ['plan-mode', 'resume', 'system-prompt-injection', 'headless-run'],
+    headlessArgs: ['-p', '--output-format', 'text'],
     transcriptTrim: ['^❯', '^claude(?:\\s+code)?$', 'esc to interrupt', '^╰', '^╭'],
   },
   {
@@ -63,6 +66,7 @@ export const AGENT_CATALOG: readonly AgentCatalogEntry[] = [
     resumeArgs: ['resume', '--last'],
     systemPromptFlag: null,
     capabilities: ['resume', 'headless-run'],
+    headlessArgs: ['exec', '--skip-git-repo-check', '--ephemeral'],
     transcriptTrim: ['^›', '^codex$', 'press enter to continue', '^token usage'],
   },
   {
@@ -73,6 +77,7 @@ export const AGENT_CATALOG: readonly AgentCatalogEntry[] = [
     resumeArgs: [],
     systemPromptFlag: null,
     capabilities: ['hook-reporting'],
+    headlessArgs: [],
   },
   {
     id: 'pi',
@@ -82,6 +87,7 @@ export const AGENT_CATALOG: readonly AgentCatalogEntry[] = [
     resumeArgs: [],
     systemPromptFlag: null,
     capabilities: ['hook-reporting'],
+    headlessArgs: [],
   },
 ];
 

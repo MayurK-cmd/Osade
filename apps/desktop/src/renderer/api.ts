@@ -92,7 +92,7 @@ export interface PlanStep {
   cwd: string;
   timeoutSec: number;
   required: boolean;
-  source: 'ci' | 'manifest' | 'doc' | 'user';
+  source: 'ci' | 'manifest' | 'doc' | 'user' | 'agent';
   evidence: string;
 }
 
@@ -200,6 +200,9 @@ export const api = {
   verifyRun: (taskId: string) =>
     call('mutation', 'verifyRun', { taskId }) as Promise<{ passed: boolean; headSha: string }>,
 
+  verifyRunLog: (runId: string) =>
+    call('query', 'verifyRunLog', { runId }) as Promise<{ text: string }>,
+
   issueList: (repoId: string) => call('query', 'issueList', { repoId }) as Promise<Issue[]>,
 
   issueImport: (repoPath: string, issue: Issue, triage?: TriageKind) =>
@@ -211,6 +214,8 @@ export const api = {
       head: string;
       target: string;
       base: string;
+      title: string;
+      body: string;
     }>,
 
   prOpenRequest: (taskId: string, title: string, body: string, draft?: boolean) =>

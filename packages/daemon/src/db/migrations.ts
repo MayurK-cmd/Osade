@@ -415,6 +415,35 @@ ALTER TABLE task ADD COLUMN checkout_ref TEXT;
 ALTER TABLE scm_fact ADD COLUMN pr_head_ref TEXT;
 `;
 
+const M011_MEMORY_FTS = `
+CREATE TABLE memory (
+  id             TEXT PRIMARY KEY,
+  scope          TEXT NOT NULL,
+  scope_id       TEXT,
+  kind           TEXT NOT NULL,
+  text           TEXT NOT NULL,
+  source_task_id TEXT,
+  source_agent   TEXT,
+  verified_by    TEXT,
+  confidence     REAL NOT NULL,
+  ecosystem_tag  TEXT,
+  created_at     INTEGER NOT NULL,
+  expires_at     INTEGER,
+  superseded_by  TEXT
+);
+CREATE VIRTUAL TABLE memory_fts USING fts5(text, content='memory', content_rowid='rowid');
+CREATE TRIGGER memory_ai AFTER INSERT ON memory BEGIN
+  INSERT INTO memory_fts(rowid, text) VALUES (new.rowid, new.text);
+END;
+CREATE TRIGGER memory_ad AFTER DELETE ON memory BEGIN
+  INSERT INTO memory_fts(memory_fts, rowid, text) VALUES('delete', old.rowid, old.text);
+END;
+CREATE TRIGGER memory_au AFTER UPDATE ON memory BEGIN
+  INSERT INTO memory_fts(memory_fts, rowid, text) VALUES('delete', old.rowid, old.text);
+  INSERT INTO memory_fts(rowid, text) VALUES (new.rowid, new.text);
+END;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     id: 1,
@@ -465,5 +494,10 @@ export const MIGRATIONS: readonly Migration[] = [
     id: 10,
     name: 'checkout_ref on task, pr_head_ref on scm_fact',
     sql: M010_CHECKOUT_REF,
+  },
+  {
+    id: 11,
+    name: 'memory with FTS5 retrieval, no vector store',
+    sql: M011_MEMORY_FTS,
   },
 ];

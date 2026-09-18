@@ -15,7 +15,7 @@ import { ciVerifySteps, readWorkflows } from './ci-workflows.js';
  * explicit that an inferred command is never run silently the first time.
  */
 
-export type VerifyStepSource = 'ci' | 'manifest' | 'doc' | 'user';
+export type VerifyStepSource = 'ci' | 'manifest' | 'doc' | 'user' | 'agent';
 
 export interface VerifyStep {
   name: string;

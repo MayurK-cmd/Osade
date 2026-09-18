@@ -13,6 +13,7 @@ import { pruneChangeLog } from '../db/index.js';
 import type { Gates } from '../domain/gates.js';
 import type { LaunchTask } from '../domain/launch-task.js';
 import type { Knowledge } from '../knowledge/service.js';
+import type { HeadlessRuns } from '../domain/headless-run.js';
 import type { Triage } from '../domain/triage.js';
 import type { VerifyRunner } from '../domain/verify-run.js';
 import type { ScmPoller } from '../scm/poller.js';
@@ -46,6 +47,7 @@ export interface DaemonServerOptions {
   poller: ScmPoller;
   /** §13 — absent when no model is configured. Mining is optional; everything else is not. */
   knowledge?: Knowledge | null;
+  headless?: HeadlessRuns | null;
   /** 0 asks the OS for a free port, which is the default and what the port file is for. */
   port?: number;
   now?: () => number;
@@ -77,6 +79,7 @@ export async function startDaemonServer(options: DaemonServerOptions): Promise<R
     poller: options.poller,
     shells,
     knowledge: options.knowledge ?? null,
+    headless: options.headless ?? null,
     now,
   };
   const trpcHandler = createHTTPHandler({

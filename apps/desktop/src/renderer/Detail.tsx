@@ -8,6 +8,7 @@ import { attachCheckoutHint, isolatedWorktreeHint } from './branch-copy.js';
 import { BranchControl } from './BranchControl.js';
 import { Changes } from './Changes.js';
 import { Composer } from './Composer.js';
+import { prependAttach, type ComposerAttach } from './compose-attach.js';
 import { Conventions } from './Conventions.js';
 import { lanePhase, startingLine, type PendingLane } from './delivery.js';
 import { Files } from './Files.js';
@@ -60,6 +61,8 @@ export function Detail({
 }): JSX.Element {
   const [filter, setFilter] = useState<string | null>(null);
   const [chatSurface, setChatSurface] = useState<'chat' | 'terminal'>('chat');
+  const [laneAttach, setLaneAttach] = useState<ComposerAttach | null>(null);
+  const [attachDismissed, setAttachDismissed] = useState(false);
   const [modHeld, setModHeld] = useState(false);
   const [branchOfferDismissed, setBranchOfferDismissed] = useState(false);
   const focused = chat.lanes.find((t) => t.task.id === focusId) ?? chat.lanes[0]!;
@@ -98,6 +101,11 @@ export function Detail({
     };
   }, []);
 
+  useEffect(() => {
+    setAttachDismissed(false);
+    setLaneAttach(null);
+  }, [lane, focused.task.id]);
+
   async function handleSend(text: string): Promise<void> {
     const match = text.match(/^\/branch(?:\s+(.*))?$/iu);
     if (match) {
@@ -109,7 +117,9 @@ export function Detail({
       });
       return;
     }
-    await onSend(text);
+    const payload =
+      lane === 'transcript' || attachDismissed ? text : prependAttach(text, laneAttach);
+    await onSend(payload);
   }
 
   return (
@@ -367,15 +377,25 @@ export function Detail({
             )}
           </>
         )}
-        {lane === 'files' && <Files key={focused.task.id} task={focused} />}
+        {lane === 'files' && (
+          <Files key={focused.task.id} task={focused} onAttach={setLaneAttach} />
+        )}
         {lane === 'checks' && (
           <>
-            <VerifyPlanReview taskId={focused.task.id} />
+            <VerifyPlanReview
+              taskId={focused.task.id}
+              runs={focused.latestVerifyRuns}
+              onAttach={setLaneAttach}
+            />
             <VerifyRuns runs={focused.latestVerifyRuns} />
           </>
         )}
-        {lane === 'diff' && <Changes key={focused.task.id} task={focused} lanes={chat.lanes} />}
-        {lane === 'rules' && <Conventions repoId={focused.task.repo_id} />}
+        {lane === 'diff' && (
+          <Changes key={focused.task.id} task={focused} lanes={chat.lanes} onAttach={setLaneAttach} />
+        )}
+        {lane === 'rules' && (
+          <Conventions repoId={focused.task.repo_id} onAttach={setLaneAttach} />
+        )}
       </div>
 
       {!(lane === 'transcript' && chatSurface === 'terminal') && (
@@ -383,6 +403,8 @@ export function Detail({
         key={chat.chatId}
         autoFocus={lane === 'transcript'}
         catalog={catalog}
+        attach={!attachDismissed && lane !== 'transcript' ? laneAttach : null}
+        onDismissAttach={() => setAttachDismissed(true)}
         held={
           focused.status === 'implementing' ||
           focused.status === 'verifying' ||
