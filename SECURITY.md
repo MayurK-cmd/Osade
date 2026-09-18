@@ -30,16 +30,16 @@ Osade server to attack. That shapes what counts as a vulnerability here.
 In scope:
 
 - Anything reachable off `127.0.0.1`. The daemon must bind loopback only
-  (`docs/OSADE.md` §2.1); a listener on `0.0.0.0` is a vulnerability.
+  (`docs/architechture/OSADE.md` §2.1); a listener on `0.0.0.0` is a vulnerability.
 - Credential exposure. GitHub tokens and model API keys live in Electron `safeStorage` and are
   passed to the daemon in memory. A token reaching a config file, a log, a crash report, or
   the filesystem is a vulnerability.
 - **Gate bypass.** Every write that leaves the machine — push, PR, comment, review — requires
-  human approval (`docs/OSADE.md` §14). Any path that performs one of these without an
+  human approval (`docs/architechture/OSADE.md` §14). Any path that performs one of these without an
   approved, hash-matched `gate_request` is a vulnerability, and the most serious class of one
   in this project.
 - Agent escape from its worktree, or an agent obtaining credentials the reviewer gateway is
-  meant to withhold (`docs/OSADE.md` §16).
+  meant to withhold (`docs/architechture/OSADE.md` §16).
 - Prompt injection from repository content — an issue body, a README, a PR comment — that
   causes an agent to take a gated action or exfiltrate data. Osade's threat model assumes
   repository content is untrusted.
@@ -58,5 +58,5 @@ Out of scope:
 
 ## Supported versions
 
-Osade is pre-release (`docs/OSADE.md` §21). There are no supported versions and no security
+Osade is pre-release (`docs/architechture/OSADE.md` §21). There are no supported versions and no security
 backports yet. This section gets rewritten at the first tagged release.

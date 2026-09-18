@@ -54,7 +54,7 @@ The crate graph is not enumerated in this file yet.
 ## Osade's own dependencies
 
 **None yet.** Osade has no `package.json` and no source tree as of 2026-09-04; product code
-starts at M0 (`docs/OSADE.md` §21).
+starts at M0 (`docs/architechture/OSADE.md` §21).
 
 When M0 lands, this section must list the runtime and bundled dependencies of
 `apps/desktop/`, `packages/daemon/`, `packages/contract/`, `packages/cli/` and
@@ -70,6 +70,6 @@ file cannot drift the way the one it replaced did.
 
 `assets/osade.png`, `assets/logo.jpg` and `assets/readme-logo.png` are Osade's own, covered by `LICENSE`.
 
-IBM Plex Sans and IBM Plex Mono (`docs/OSADE.md` §19.2) are licensed under the SIL Open Font
+IBM Plex Sans and IBM Plex Mono (`docs/architechture/OSADE.md` §19.2) are licensed under the SIL Open Font
 License 1.1. Add the OFL text here when the fonts are actually bundled; if they are loaded
 from a font CDN instead, say so and drop this entry.
