@@ -102,9 +102,13 @@ export class ScmClient {
    * Returns `NOT_MODIFIED` when GitHub answers 304 — which does not count against the rate
    * limit, and is why ETags are not optional at a 30-second cadence.
    */
-  async get<T>(route: string, params: Record<string, unknown> = {}): Promise<T | typeof NOT_MODIFIED> {
+  async get<T>(
+    route: string,
+    params: Record<string, unknown> = {},
+    options: { conditional?: boolean } = {},
+  ): Promise<T | typeof NOT_MODIFIED> {
     const key = cacheKey(route, params);
-    const etag = this.#etags.get(key);
+    const etag = options.conditional === false ? undefined : this.#etags.get(key);
 
     try {
       const response = await this.#request(route, {

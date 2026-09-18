@@ -8,6 +8,7 @@ import {
   agentEntry,
   binaryOnPath,
   hasCapability,
+  resolveBinaryOnPath,
   type AgentCatalogEntry,
 } from './agent-catalog.js';
 
@@ -80,10 +81,13 @@ export async function defaultHeadlessExec(opts: {
   timeoutMs: number;
 }): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(opts.command, [...opts.args], {
+    const command = resolveBinaryOnPath(opts.command) ?? opts.command;
+    const windowsScript = process.platform === 'win32' && /\.(cmd|bat)$/i.test(command);
+    const child = spawn(command, [...opts.args], {
       cwd: opts.cwd,
       env: process.env,
       windowsHide: true,
+      shell: windowsScript,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let out = '';

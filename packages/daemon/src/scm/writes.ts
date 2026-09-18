@@ -216,6 +216,7 @@ export class ScmWrites {
       const repo = await this.#scm.get<{ permissions?: { push?: boolean } }>(
         'GET /repos/{owner}/{repo}',
         { owner, repo: name },
+        { conditional: false },
       );
       if (typeof repo === 'symbol') return false;
       return repo.permissions?.push === true;

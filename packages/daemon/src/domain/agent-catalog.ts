@@ -135,25 +135,42 @@ export function requireAgent(id: string): AgentCatalogEntry {
 
 /**
  * Direct PATH lookup — OSADE.md §8.1. Never `which`/`where` and never a login shell.
+ *
+ * On Windows, PATHEXT wins over an extensionless shim. npm puts both `claude` (a bash script)
+ * and `claude.cmd` on PATH; Node's spawn without a shell cannot run the script, which is how
+ * a live mine reported "available" and then died with `spawn claude ENOENT`.
  */
-export function binaryOnPath(
+export function resolveBinaryOnPath(
   binary: string,
   env: NodeJS.ProcessEnv = process.env,
-): boolean {
-  if (binary.includes('/') || binary.includes('\\')) return existsSync(binary);
+): string | null {
+  if (binary.includes('/') || binary.includes('\\')) {
+    return existsSync(binary) ? binary : null;
+  }
   const pathVar = env.PATH ?? env.Path ?? '';
   const dirs = pathVar.split(delimiter).filter(Boolean);
   const extensions =
     process.platform === 'win32'
       ? (env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean)
       : [''];
+
   for (const dir of dirs) {
-    if (existsSync(join(dir, binary))) return true;
     for (const ext of extensions) {
       const suffix = ext.startsWith('.') ? ext : `.${ext}`;
-      if (existsSync(join(dir, binary + suffix))) return true;
-      if (existsSync(join(dir, binary + suffix.toLowerCase()))) return true;
+      const withExt = join(dir, binary + suffix);
+      if (existsSync(withExt)) return withExt;
+      const lower = join(dir, binary + suffix.toLowerCase());
+      if (existsSync(lower)) return lower;
     }
+    const bare = join(dir, binary);
+    if (existsSync(bare)) return bare;
   }
-  return false;
+  return null;
+}
+
+export function binaryOnPath(
+  binary: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return resolveBinaryOnPath(binary, env) != null;
 }

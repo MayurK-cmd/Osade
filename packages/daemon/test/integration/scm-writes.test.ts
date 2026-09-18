@@ -192,6 +192,35 @@ describe('§11.3 — fork awareness', () => {
     expect(plan.prBase).toBe('main');
   });
 
+  it('a 304 on the permission probe is not "no push access"', async () => {
+    seed();
+    const request: ScmRequest = async (_route, params) => {
+      const headers = params.headers as { 'if-none-match'?: string } | undefined;
+      if (headers?.['if-none-match']) {
+        return {
+          status: 304,
+          headers: { 'x-ratelimit-limit': '5000', 'x-ratelimit-remaining': '4899' },
+          data: undefined,
+        };
+      }
+      return {
+        status: 200,
+        headers: {
+          etag: '"abc"',
+          'x-ratelimit-limit': '5000',
+          'x-ratelimit-remaining': '4900',
+        },
+        data: { permissions: { push: true } },
+      };
+    };
+    const writer = new ScmWrites(db, new ScmClient({ request }), new Gates(db, { now: () => NOW }), {
+      now: () => NOW,
+    });
+
+    await expect(writer.planFork('t1')).resolves.toMatchObject({ viaFork: false });
+    await expect(writer.planFork('t1')).resolves.toMatchObject({ viaFork: false });
+  });
+
   it('pushes to the fork and targets upstream when this checkout is a fork', async () => {
     seed({ fork_of: 'upstream-org/widget' });
     const { writer, calls } = writes({});
