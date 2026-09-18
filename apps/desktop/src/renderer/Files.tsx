@@ -11,6 +11,7 @@ import type { TaskView } from '@osade/contract';
 
 import { api } from './api.js';
 import { composeAppend } from './compose-event.js';
+import { fileAttach, lineRangeFromOffsets, type ComposerAttach } from './compose-attach.js';
 import { fuzzyPath } from './files-search.js';
 import { flagColour, highlight } from './highlight.js';
 
@@ -34,7 +35,13 @@ export interface FsEntry {
  * Refresh is tied to agent facts (CDC already pushed those) plus a 2s tick while this lane is
  * open. Open-file contents are not overwritten while the buffer is dirty.
  */
-export function Files({ task }: { task: TaskView }): JSX.Element {
+export function Files({
+  task,
+  onAttach,
+}: {
+  task: TaskView;
+  onAttach?: (attach: ComposerAttach | null) => void;
+}): JSX.Element {
   const [width, setWidth] = useState(() => loadWidth());
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['']));
   const [listed, setListed] = useState<Record<string, FsEntry[]>>({});
@@ -58,6 +65,19 @@ export function Files({ task }: { task: TaskView }): JSX.Element {
   const stamp = `${task.task.id}:${task.cwd}:${task.agent?.last_event_at ?? 0}:${task.status}`;
   const drafts = useRef(new Map<string, string>());
   const tabs = preview && !pinned.includes(preview) ? [...pinned, preview] : pinned;
+  const [range, setRange] = useState<{ from: number; to: number } | null>(null);
+  useEffect(() => {
+    setRange(null);
+  }, [preview]);
+
+  useEffect(() => {
+    if (!onAttach) return;
+    if (preview == null) {
+      onAttach(null);
+      return;
+    }
+    onAttach(fileAttach(preview, text, range));
+  }, [onAttach, preview, text, range]);
 
   useEffect(() => {
     let cancelled = false;
@@ -336,6 +356,7 @@ export function Files({ task }: { task: TaskView }): JSX.Element {
           onAsk={() => {
             if (selected) composeAppend(selected);
           }}
+          onSelectRange={(start, end) => setRange(lineRangeFromOffsets(text, start, end))}
         />
       </div>
     </div>
@@ -479,6 +500,7 @@ function FileBody({
   onChange,
   onSave,
   onAsk,
+  onSelectRange,
 }: {
   file: { path: string; text: string | null; binary: boolean; truncated: boolean } | null;
   selected: string | null;
@@ -490,6 +512,7 @@ function FileBody({
   onChange: (next: string) => void;
   onSave: () => void;
   onAsk: () => void;
+  onSelectRange?: (start: number, end: number) => void;
 }): JSX.Element {
   if (selected == null) {
     return (
@@ -555,7 +578,12 @@ function FileBody({
       {markdown && mdPreview ? (
         <MarkdownView text={text} />
       ) : (
-        <CodeEditor path={file.path} value={text} onChange={onChange} />
+        <CodeEditor
+          path={file.path}
+          value={text}
+          onChange={onChange}
+          onSelectRange={(start, end) => onSelectRange?.(start, end)}
+        />
       )}
     </>
   );
@@ -565,10 +593,12 @@ function CodeEditor({
   path,
   value,
   onChange,
+  onSelectRange,
 }: {
   path: string;
   value: string;
   onChange: (next: string) => void;
+  onSelectRange?: (start: number, end: number) => void;
 }): JSX.Element {
   const preRef = useRef<HTMLPreElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -622,6 +652,8 @@ function CodeEditor({
         spellCheck={false}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onSelect={(event) => onSelectRange?.(event.currentTarget.selectionStart, event.currentTarget.selectionEnd)}
+        onKeyUp={(event) => onSelectRange?.(event.currentTarget.selectionStart, event.currentTarget.selectionEnd)}
         onScroll={syncScroll}
         onKeyDown={onKeyDown}
         style={{

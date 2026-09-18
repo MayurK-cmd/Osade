@@ -7,5 +7,9 @@ export function heldReason(
 }
 
 export function isolatedWorktreeHint(): string {
-  return 'Isolated worktrees are disposable — close the lane and open one on the target branch.';
+  return 'Each extra branch is its own git worktree. Close this lane and open one on the target branch.';
+}
+
+export function attachCheckoutHint(): string {
+  return 'A new chat attaches to whatever is checked out. It does not switch you to main.';
 }

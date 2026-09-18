@@ -111,7 +111,9 @@ describe('daemon server', () => {
 
   it('answers /health', async () => {
     const res = await fetch(`http://127.0.0.1:${daemon.port}/health`);
-    expect(await res.json()).toEqual({ ok: true });
+    const body = (await res.json()) as { ok: boolean; build: string };
+    expect(body.ok).toBe(true);
+    expect(body.build).toMatch(/^[a-f0-9]{16}$/);
   });
 
   it('serves taskList over tRPC with derived status', async () => {

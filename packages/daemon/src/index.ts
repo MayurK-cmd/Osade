@@ -11,7 +11,7 @@ import { VerifyRunner } from './domain/verify-run.js';
 import { ScmClient } from './scm/client.js';
 import { ScmPoller } from './scm/poller.js';
 import { ScmWrites } from './scm/writes.js';
-import { AnthropicModel, hasApiKey } from './knowledge/anthropic-model.js';
+import { HeadlessRuns, pickHeadlessAgent } from './domain/headless-run.js';
 import { Knowledge } from './knowledge/service.js';
 import { SubstrateClient } from './substrate/client.js';
 import { assertNoDrift, SubstrateDriftError } from './substrate/drift-check.js';
@@ -126,13 +126,18 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
   });
   poller.start();
 
-  // §13 — the conventions miner. Optional by construction: no model key means no mining, and a
-  // daemon without one serves everything else normally rather than failing to boot.
-  const model = hasApiKey() ? new AnthropicModel({ onWarning }) : null;
-  if (!model) {
-    onInfo('mining is unavailable: no OSADE_ANTHROPIC_API_KEY in the environment');
+  const headless = new HeadlessRuns((repoId) => {
+    const row = db.prepare('SELECT default_agent FROM repo WHERE id = ?').get(repoId) as
+      | { default_agent: string | null }
+      | undefined;
+    return row?.default_agent ?? null;
+  });
+  try {
+    pickHeadlessAgent({});
+  } catch {
+    onInfo('mining is unavailable: no headless agent on PATH');
   }
-  const knowledge = new Knowledge(db, scm, model, { now: options.now, onWarning });
+  const knowledge = new Knowledge(db, scm, null, { now: options.now, onWarning, headless });
 
   const server = await startDaemonServer({
     db,
@@ -143,6 +148,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
     scmWrites,
     poller,
     knowledge,
+    headless,
     port: options.port,
     now: options.now,
     onWarning,

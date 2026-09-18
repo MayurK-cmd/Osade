@@ -20,6 +20,8 @@ interface Plan {
   head: string;
   target: string;
   base: string;
+  title: string;
+  body: string;
 }
 
 export function PrOpen({ task, lanes }: { task: TaskView; lanes?: TaskView[] }): JSX.Element {
@@ -46,7 +48,11 @@ export function PrOpen({ task, lanes }: { task: TaskView; lanes?: TaskView[] }):
     setRequested(false);
     api.prPlan(active.task.id).then(
       (p) => {
-        if (!cancelled) setPlan(p);
+        if (!cancelled) {
+          setPlan(p);
+          if (p.title) setTitle(p.title);
+          if (p.body) setBody(p.body);
+        }
       },
       (err: Error) => {
         if (!cancelled) setPlanError(err.message);

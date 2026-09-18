@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { openDb, type Db } from '../../src/db/index.js';
+import { HeadlessRuns } from '../../src/domain/headless-run.js';
 import { Miner } from '../../src/knowledge/miner.js';
 import { Knowledge } from '../../src/knowledge/service.js';
 import type { ModelPort, ModelRequest } from '../../src/knowledge/model.js';
@@ -95,7 +96,13 @@ describe('mining availability is reported, not discovered halfway through', () =
     const availability = knowledge.availability('r1');
 
     expect(availability.available).toBe(false);
-    expect(availability.reason).toContain('OSADE_ANTHROPIC_API_KEY');
+    expect(availability.reason).toContain('headless');
+  });
+
+  it('is available through a local headless agent, without an API key', () => {
+    const headless = new HeadlessRuns(() => null, async () => '{}', () => true);
+    const knowledge = new Knowledge(db, scmClient(), null, { now: () => NOW, headless });
+    expect(knowledge.availability('r1').available).toBe(true);
   });
 
   it('says so when there is no GitHub token', () => {
@@ -114,7 +121,7 @@ describe('mining availability is reported, not discovered halfway through', () =
 
   it('refuses to mine when it is unavailable, rather than half-running', async () => {
     const knowledge = new Knowledge(db, scmClient(), null, { now: () => NOW });
-    await expect(knowledge.mine('r1')).rejects.toThrow(/OSADE_ANTHROPIC_API_KEY/);
+    await expect(knowledge.mine('r1')).rejects.toThrow(/headless/);
     expect(db.prepare('SELECT COUNT(*) AS n FROM mine_run').get()).toEqual({ n: 0 });
   });
 });

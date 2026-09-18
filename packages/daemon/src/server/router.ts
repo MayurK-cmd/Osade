@@ -23,9 +23,19 @@ import {
 } from '../domain/agent-catalog.js';
 import type { Gates } from '../domain/gates.js';
 import { AgentLiveError, BranchHeldError, LaneIsolatedError, type LaunchTask } from '../domain/launch-task.js';
+import { TaskShells } from '../domain/task-shell.js';
+import { NoHeadlessAgentError, type HeadlessRuns } from '../domain/headless-run.js';
+import {
+  agentPrCopy,
+  agentSlug,
+  agentTitle,
+  stepsFromAgentText,
+  tailFile,
+} from '../domain/headless-copy.js';
 import {
   repoRoot,
   checkoutBranch,
+  currentBranch,
   listLocalBranches,
   listWorktreeCheckouts,
   repoWorkingStatus,
@@ -63,6 +73,8 @@ export interface DaemonContext {
   triage: Triage;
   scmWrites: ScmWrites;
   poller: ScmPoller;
+  shells: TaskShells;
+  headless?: HeadlessRuns | null;
   /** §13 — absent when no model is configured. Mining is optional; everything else is not. */
   knowledge?: Knowledge | null;
   now: () => number;
@@ -216,6 +228,12 @@ export const appRouter = t.router({
         wait: input.wait ?? false,
         origin: 'human',
       });
+      const task = getTask(ctx.db, input.taskId);
+      if (task && task.title === 'New chat' && ctx.headless) {
+        void agentTitle(ctx.headless, task.repo_id, input.text).then((title) => {
+          if (title) ctx.db.prepare('UPDATE task SET title = ? WHERE id = ?').run(title, input.taskId);
+        });
+      }
       return { ok: true as const };
     }),
 
@@ -227,6 +245,62 @@ export const appRouter = t.router({
       const result = await ctx.launcher.readTranscript(input.taskId, input.lines ?? 200);
       if (!result) throw new TRPCError({ code: 'NOT_FOUND', message: 'task has no live pane' });
       return result;
+    }),
+
+  /** A cmd/PowerShell (or $SHELL) PTY in this lane's cwd. Not the agent pane. */
+  taskShellOpen: t.procedure
+    .input(
+      z.object({
+        taskId: TaskId,
+        cols: z.number().int().min(2).max(500).optional(),
+        rows: z.number().int().min(2).max(200).optional(),
+      }),
+    )
+    .output(z.object({ cwd: z.string() }))
+    .mutation(({ ctx, input }) => {
+      const located = locateTaskCwd(ctx, input.taskId);
+      const size =
+        input.cols != null && input.rows != null ? { cols: input.cols, rows: input.rows } : undefined;
+      return { cwd: ctx.shells.open(input.taskId, located.cwd, size) };
+    }),
+
+  taskShellRead: t.procedure
+    .input(z.object({ taskId: TaskId }))
+    .output(z.object({ text: z.string() }))
+    .query(({ ctx, input }) => ({ text: ctx.shells.read(input.taskId) })),
+
+  taskShellWrite: t.procedure
+    .input(z.object({ taskId: TaskId, data: z.string().min(1) }))
+    .output(z.object({ ok: z.literal(true) }))
+    .mutation(({ ctx, input }) => {
+      try {
+        ctx.shells.write(input.taskId, input.data);
+      } catch (err) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: (err as Error).message });
+      }
+      return { ok: true as const };
+    }),
+
+  taskShellResize: t.procedure
+    .input(
+      z.object({
+        taskId: TaskId,
+        cols: z.number().int().min(2).max(500),
+        rows: z.number().int().min(2).max(200),
+      }),
+    )
+    .output(z.object({ ok: z.literal(true) }))
+    .mutation(({ ctx, input }) => {
+      ctx.shells.resize(input.taskId, { cols: input.cols, rows: input.rows });
+      return { ok: true as const };
+    }),
+
+  taskShellClose: t.procedure
+    .input(z.object({ taskId: TaskId }))
+    .output(z.object({ ok: z.literal(true) }))
+    .mutation(({ ctx, input }) => {
+      ctx.shells.close(input.taskId);
+      return { ok: true as const };
     }),
 
   taskFsList: t.procedure
@@ -361,6 +435,7 @@ export const appRouter = t.router({
     .input(z.object({ taskId: TaskId }))
     .output(z.object({ ok: z.literal(true) }))
     .mutation(({ ctx, input }) => {
+      ctx.shells.close(input.taskId);
       ctx.db.prepare('UPDATE task SET archived_at = ? WHERE id = ?').run(ctx.now(), input.taskId);
       return { ok: true as const };
     }),
@@ -387,8 +462,16 @@ export const appRouter = t.router({
     .output(z.object({ worktreePath: z.string(), branch: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {
+        let branch = input.branch;
+        if (!branch && ctx.headless) {
+          const task = getTask(ctx.db, input.taskId);
+          if (task) {
+            const fallback = task.id.replace(/^t_/, '');
+            branch = await agentSlug(ctx.headless, task.repo_id, task.title, fallback);
+          }
+        }
         return await ctx.launcher.branchOut(input.taskId, {
-          branch: input.branch,
+          branch,
           carryChanges: input.carryChanges,
         });
       } catch (err) {
@@ -539,6 +622,7 @@ export const appRouter = t.router({
         /** `owner/name` when there is a GitHub remote; null for a local-only repo. */
         slug: z.string().nullable(),
         defaultBranch: z.string(),
+        currentBranch: z.string(),
         defaultAgent: z.string().nullable(),
         taskCount: z.number().int(),
       }),
@@ -570,6 +654,7 @@ export const appRouter = t.router({
         name: basename(repo.path) || repo.path,
         slug: repo.gh_owner && repo.gh_name ? `${repo.gh_owner}/${repo.gh_name}` : null,
         defaultBranch: repo.default_branch,
+        currentBranch: await currentBranch(repo.path),
         defaultAgent: repo.default_agent,
         taskCount: counted.n,
       };
@@ -641,7 +726,7 @@ export const appRouter = t.router({
             cwd: z.string(),
             timeoutSec: z.number(),
             required: z.boolean(),
-            source: z.enum(['ci', 'manifest', 'doc', 'user']),
+            source: z.enum(['ci', 'manifest', 'doc', 'user', 'agent']),
             evidence: z.string(),
           }),
         ),
@@ -656,6 +741,23 @@ export const appRouter = t.router({
       };
 
       const plan = await deriveVerifyPlan(repo.path);
+      if (plan.steps.length === 0 && ctx.headless) {
+        try {
+          const { text } = await ctx.headless.run({
+            repoId: task.repo_id,
+            prompt:
+              'This repository has no CI, package.json scripts, or docs Osade could parse into checks. Reply with JSON {"steps":[{"name":"...","cmd":"...","cwd":".","timeoutSec":600}]} of guessed local verification commands. No markdown.',
+            timeoutSec: 60,
+          });
+          const guessed = stepsFromAgentText(text);
+          if (guessed.length > 0) {
+            plan.steps = guessed;
+            plan.needsReview = true;
+          }
+        } catch {
+          // leave empty; the UI still offers Add
+        }
+      }
       ctx.db
         .prepare(
           `INSERT INTO verify_plan (repo_id, steps_json, needs_review, derived_at)
@@ -706,7 +808,7 @@ export const appRouter = t.router({
               cwd: z.string(),
               timeoutSec: z.number(),
               required: z.boolean(),
-              source: z.enum(['ci', 'manifest', 'doc', 'user']),
+              source: z.enum(['ci', 'manifest', 'doc', 'user', 'agent']),
               evidence: z.string(),
             }),
           ),
@@ -752,6 +854,44 @@ export const appRouter = t.router({
 
       const report = await ctx.verifier.run(input.taskId, plan, head);
       return { passed: report.passed, headSha: report.headSha };
+    }),
+
+  verifyRunLog: t.procedure
+    .input(z.object({ runId: z.string().min(1) }))
+    .output(z.object({ text: z.string() }))
+    .query(({ ctx, input }) => {
+      const row = ctx.db.prepare('SELECT log_path FROM verify_run WHERE id = ?').get(input.runId) as
+        | { log_path: string }
+        | undefined;
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown verify run' });
+      return { text: tailFile(row.log_path, 40) };
+    }),
+
+  runHeadless: t.procedure
+    .input(
+      z.object({
+        repoId: z.string().min(1),
+        agentId: z.string().optional(),
+        prompt: z.string().min(1),
+        timeoutSec: z.number().int().min(5).max(600).optional(),
+      }),
+    )
+    .output(z.object({ text: z.string(), agentId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.headless) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'no installed agent can run headless',
+        });
+      }
+      try {
+        return await ctx.headless.run(input);
+      } catch (err) {
+        if (err instanceof NoHeadlessAgentError) {
+          throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message });
+        }
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: (err as Error).message });
+      }
     }),
 
   // ── gates (§14) ──────────────────────────────────────────────────────────
@@ -871,16 +1011,30 @@ export const appRouter = t.router({
   prPlan: t.procedure
     .input(z.object({ taskId: TaskId }))
     .output(
-      z.object({ viaFork: z.boolean(), head: z.string(), target: z.string(), base: z.string() }),
+      z.object({
+        viaFork: z.boolean(),
+        head: z.string(),
+        target: z.string(),
+        base: z.string(),
+        title: z.string(),
+        body: z.string(),
+      }),
     )
     .query(async ({ ctx, input }) => {
       try {
         const plan = await ctx.scmWrites.planFork(input.taskId);
+        const task = getTask(ctx.db, input.taskId);
+        const fallbackTitle = task?.title ?? 'Update';
+        const copy = ctx.headless
+          ? await agentPrCopy(ctx.headless, task?.repo_id ?? '', fallbackTitle)
+          : { title: fallbackTitle, body: '' };
         return {
           viaFork: plan.viaFork,
           head: plan.head,
           target: `${plan.prOwner}/${plan.prRepo}`,
           base: plan.prBase,
+          title: copy.title,
+          body: copy.body,
         };
       } catch (err) {
         throw new TRPCError({ code: 'PRECONDITION_FAILED', message: (err as Error).message });

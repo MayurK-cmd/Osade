@@ -7,6 +7,7 @@ import { Board } from './Board.js';
 import { CommandPalette } from './CommandPalette.js';
 import { Detail, DraftPane, type Lane } from './Detail.js';
 import { api } from './api.js';
+import { attachCheckoutHint, isolatedWorktreeHint } from './branch-copy.js';
 import { chord } from './chords.js';
 import { type PendingLane } from './delivery.js';
 import { GitHubSignIn, useGithub } from './GitHubSignIn.js';
@@ -30,9 +31,9 @@ type Tab =
       id: string;
       repoId: string | null;
       repoPath: string | null;
-      defaultBranch: string | null;
       isolate?: boolean;
       checkoutRef?: string;
+      baseRef?: string;
       optimistic?: string;
       submitting?: boolean;
     }
@@ -237,27 +238,25 @@ export function App(): JSX.Element {
   async function openDraftTab(from?: {
     repoId: string;
     path?: string;
-    defaultBranch?: string;
     isolate?: boolean;
     checkoutRef?: string;
+    baseRef?: string;
   }): Promise<void> {
     let repoId = from?.repoId ?? repo?.repoId ?? null;
     let repoPath = from?.path ?? repo?.path ?? null;
-    let defaultBranch = from?.defaultBranch ?? repo?.defaultBranch ?? null;
 
     if (repoPath == null) {
       const picked = await pickRepo();
       if (!picked) return;
       repoId = picked.repoId;
       repoPath = picked.path;
-      defaultBranch = picked.defaultBranch;
       setRepoPaths((current) => ({ ...current, [picked.repoId]: picked.path }));
     }
 
     const id = crypto.randomUUID();
     setTabs((current) => [
       ...current,
-      { kind: 'draft', id, repoId, repoPath, defaultBranch, isolate: from?.isolate, checkoutRef: from?.checkoutRef },
+      { kind: 'draft', id, repoId, repoPath, isolate: from?.isolate, checkoutRef: from?.checkoutRef, baseRef: from?.baseRef },
     ]);
     setActiveId(id);
     setLane('transcript');
@@ -335,7 +334,7 @@ export function App(): JSX.Element {
         title: titleFrom(message),
         intent: firstPrompt,
         ...(first.agentId ? { agentId: first.agentId } : {}),
-        ...(tab.defaultBranch ? { baseRef: tab.defaultBranch } : {}),
+        ...(tab.baseRef ? { baseRef: tab.baseRef } : {}),
         ...(tab.isolate ? { isolate: true } : {}),
         ...(tab.checkoutRef ? { checkoutRef: tab.checkoutRef, isolate: true } : {}),
       });
@@ -372,7 +371,7 @@ export function App(): JSX.Element {
             intent: extraPrompt,
             chatId: created.taskId,
             agentId: extra.agentId,
-            ...(tab.defaultBranch ? { baseRef: tab.defaultBranch } : {}),
+            ...(tab.baseRef ? { baseRef: tab.baseRef } : {}),
             isolate: true,
           });
           await launchAndSend(lane.taskId, extraPrompt);
@@ -533,7 +532,7 @@ export function App(): JSX.Element {
           branch={
             repo
               ? (chats.find((t) => t.task.repo_id === repo.repoId && t.attachment === 'repo')
-                  ?.branch ?? repo.defaultBranch)
+                  ?.branch ?? repo.currentBranch)
               : null
           }
           summary={summarise({
@@ -707,8 +706,6 @@ export function App(): JSX.Element {
                           void openDraftTab({
                             repoId: group.repoId,
                             path: repo?.repoId === group.repoId ? repo.path : undefined,
-                            defaultBranch:
-                              repo?.repoId === group.repoId ? repo.defaultBranch : undefined,
                           })
                         }
                         style={{ marginLeft: 'auto', padding: '2px 8px' }}
@@ -796,9 +793,9 @@ export function App(): JSX.Element {
                 void openDraftTab({
                   repoId: lane.task.repo_id,
                   path: repoPath,
-                  defaultBranch: opts.baseRef ?? (opts.checkoutRef ? undefined : lane.branch),
                   isolate: true,
                   checkoutRef: opts.checkoutRef,
+                  baseRef: opts.baseRef,
                 });
               }}
               onMoveToBranch={(checkoutRef) => {
@@ -1366,9 +1363,7 @@ function Empty({
         {repo ? `No chats in ${repo.name} yet` : 'No chats yet'}
       </p>
       <p style={{ color: 'var(--ink-2)', lineHeight: 1.5 }}>
-        A new chat starts on this checkout. Branch out when you want a private copy, or open a
-        chat on an existing branch. Isolated worktrees are disposable — close the lane and open
-        one on the target branch. Osade stops before anything is published.
+        {attachCheckoutHint()} {isolatedWorktreeHint()} Osade stops before anything is published.
       </p>
       <button className="primary" onClick={onNew} style={{ marginTop: 4 }}>
         New chat

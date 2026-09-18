@@ -138,3 +138,126 @@ describe('attached lanes', () => {
     expect(task.checkout_ref).toBeNull();
   });
 });
+
+describe('the checkout you opened is the default', () => {
+  it('attaches to feat/foo and does not check out main', async () => {
+    sh(repo, ['checkout', '-q', '-b', 'feat/foo']);
+    const created = await launcher.createTask({
+      repoPath: repo,
+      title: 'New chat',
+      intent: 'hi',
+      baseRef: 'main',
+    });
+    const task = getTask(db, created.taskId)!;
+    expect(created.isolated).toBe(false);
+    expect(task.worktree_path).toBeNull();
+    expect(task.branch).toBe('feat/foo');
+    expect(task.base_ref).toBe('feat/foo');
+    expect(task.base_sha).toBe(sh(repo, ['rev-parse', 'HEAD']));
+    expect(sh(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('feat/foo');
+  });
+
+  it('an isolated lane without checkoutRef forks from HEAD, not the stored default branch', async () => {
+    await launcher.createTask({ repoPath: repo, title: 'On main', intent: 'hold the checkout' });
+    sh(repo, ['checkout', '-q', '-b', 'feat/foo']);
+    const created = await launcher.createTask({
+      repoPath: repo,
+      title: 'Token refresh',
+      intent: 'fix it',
+      isolate: true,
+    });
+    const task = getTask(db, created.taskId)!;
+    expect(task.branch).toMatch(/^osade\//);
+    expect(task.base_ref).toBe('feat/foo');
+    expect(task.base_sha).toBe(sh(repo, ['rev-parse', 'HEAD']));
+    expect(sh(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('feat/foo');
+  });
+});
+
+describe('multiple branches via worktrees', () => {
+  it('two isolated lanes on two existing branches get two worktree.create calls', async () => {
+    sh(repo, ['branch', 'feat/a']);
+    sh(repo, ['branch', 'feat/b']);
+    const creates: unknown[] = [];
+    const client = {
+      async request(method: string, params?: unknown): Promise<unknown> {
+        if (method === 'worktree.create') {
+          creates.push(params);
+          const n = creates.length;
+          return {
+            workspace: { workspace_id: `w${n}` },
+            root_pane: { pane_id: `w${n}:p1` },
+          };
+        }
+        if (method === 'tab.create') {
+          return { tab: { tab_id: 't' }, root_pane: { pane_id: 'p2' } };
+        }
+        if (method === 'agent.start') return { agent: {}, argv: [] };
+        if (method === 'agent.get') {
+          return { agent: { interactive_ready: true, launch_pending: false } };
+        }
+        if (method === 'pane.read') {
+          return { read: { text: '', revision: 1, truncated: false } };
+        }
+        return {};
+      },
+    } as unknown as SubstrateClient;
+    const launching = new LaunchTask(
+      db,
+      client,
+      { watchPane() {}, unwatchPane() {} } as unknown as SubstrateEventSubscriber,
+      { now: () => NOW },
+    );
+    const a = await launching.createTask({
+      repoPath: repo,
+      title: 'On A',
+      intent: 'a',
+      isolate: true,
+      checkoutRef: 'feat/a',
+    });
+    const b = await launching.createTask({
+      repoPath: repo,
+      title: 'On B',
+      intent: 'b',
+      isolate: true,
+      checkoutRef: 'feat/b',
+    });
+    await launching.launch(a.taskId);
+    await launching.launch(b.taskId);
+    expect(creates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ branch: 'feat/a' }),
+        expect.objectContaining({ branch: 'feat/b' }),
+      ]),
+    );
+    expect(creates).toHaveLength(2);
+    expect(sh(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('main');
+  });
+
+  it('two isolated lanes on two existing branches get two worktree paths', async () => {
+    sh(repo, ['branch', 'feat/a']);
+    sh(repo, ['branch', 'feat/b']);
+    const a = await launcher.createTask({
+      repoPath: repo,
+      title: 'On A',
+      intent: 'a',
+      isolate: true,
+      checkoutRef: 'feat/a',
+    });
+    const b = await launcher.createTask({
+      repoPath: repo,
+      title: 'On B',
+      intent: 'b',
+      isolate: true,
+      checkoutRef: 'feat/b',
+    });
+    const ta = getTask(db, a.taskId)!;
+    const tb = getTask(db, b.taskId)!;
+    expect(ta.branch).toBe('feat/a');
+    expect(tb.branch).toBe('feat/b');
+    expect(ta.worktree_path).toBeTruthy();
+    expect(tb.worktree_path).toBeTruthy();
+    expect(ta.worktree_path).not.toBe(tb.worktree_path);
+    expect(sh(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('main');
+  });
+});

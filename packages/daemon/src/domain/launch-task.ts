@@ -262,7 +262,6 @@ export class LaunchTask {
     const repoId = await this.ensureRepo(input.repoPath);
     const repo = this.#db.prepare('SELECT * FROM repo WHERE id = ?').get(repoId) as {
       path: string;
-      default_branch: string;
       default_agent: string | null;
     };
 
@@ -321,14 +320,15 @@ export class LaunchTask {
         baseSha = resolved.sha;
         checkoutRef = resolved.local;
       } else {
-        baseRef = input.baseRef ?? sibling?.base_ref ?? repo.default_branch;
+        const head = await currentBranch(repo.path);
+        baseRef = input.baseRef ?? sibling?.base_ref ?? head;
         baseSha =
           sibling && input.baseRef == null ? sibling.base_sha : await resolveSha(repo.path, baseRef);
         branch = `osade/${isolatedSlug(sibling?.title ?? input.title, taskId)}/${resolvedAgent}`;
       }
     } else {
       branch = await currentBranch(repo.path);
-      baseRef = input.baseRef ?? branch;
+      baseRef = branch;
       baseSha = await resolveSha(repo.path, 'HEAD');
       worktreePath = null;
     }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 
 import { agentColor } from './agent-color.js';
+import type { ComposerAttach } from './compose-attach.js';
 import { COMPOSE_EVENT } from './compose-event.js';
 import { parseMentions } from './mentions.js';
 import type { CatalogAgent } from './RepoSettings.js';
@@ -12,6 +13,8 @@ export function Composer({
   autoFocus,
   held,
   catalog = [],
+  attach = null,
+  onDismissAttach,
   onSend,
 }: {
   placeholder: string;
@@ -20,6 +23,8 @@ export function Composer({
   /** A turn is live — Send queues instead of interrupting. */
   held?: boolean;
   catalog?: CatalogAgent[];
+  attach?: ComposerAttach | null;
+  onDismissAttach?: () => void;
   onSend: (text: string) => Promise<void>;
 }): JSX.Element {
   const [text, setText] = useState('');
@@ -97,6 +102,31 @@ export function Composer({
         background: 'var(--bg-1)',
       }}
     >
+      {attach && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 8,
+            fontSize: 'var(--t-xs)',
+            color: 'var(--ink-2)',
+            border: '0.5px solid var(--line)',
+            background: 'var(--bg-2)',
+            padding: '3px 8px',
+            maxWidth: '100%',
+          }}
+        >
+          <span className="mono" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {attach.label}
+          </span>
+          {onDismissAttach && (
+            <button type="button" onClick={onDismissAttach} aria-label="Dismiss context" style={{ padding: '0 4px' }}>
+              ×
+            </button>
+          )}
+        </div>
+      )}
       {mentions.targets.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
           {mentions.targets.map((target) => (
