@@ -80,7 +80,7 @@ export function Composer({
     const el = ref.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, 44), 140)}px`;
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 36), 140)}px`;
   }, [text]);
 
   function send(): void {
@@ -121,7 +121,7 @@ export function Composer({
     <div
       style={{
         borderTop: '1px solid var(--line)',
-        padding: '12px 16px 14px',
+        padding: 10,
         background: over ? 'var(--bg-2)' : 'var(--bg-1)',
       }}
       onDragEnter={(event) => {
@@ -241,103 +241,27 @@ export function Composer({
           ))}
         </div>
       )}
-      <div style={{ position: 'relative' }}>
-        <textarea
-          ref={ref}
-          rows={1}
-          disabled={disabled || busy}
-          value={text}
-          placeholder={hintText}
-          autoFocus={autoFocus}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (suggestions.length > 0 && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
-              event.preventDefault();
-              const delta = event.key === 'ArrowDown' ? 1 : -1;
-              setHint((h) => (h + delta + suggestions.length) % suggestions.length);
-              return;
-            }
-            if (
-              suggestions.length > 0 &&
-              (event.key === 'Tab' || event.key === 'Enter') &&
-              !event.metaKey &&
-              !event.ctrlKey &&
-              !event.shiftKey
-            ) {
-              const pick = suggestions[hint];
-              if (pick?.installed) {
-                event.preventDefault();
-                insertMention(pick.id);
-                return;
-              }
-            }
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              event.stopPropagation();
-              send();
-            }
-          }}
-          style={{ fontSize: 'var(--t-m)', minHeight: 44, overflow: 'hidden', padding: '8px 10px' }}
-        />
-        {suggestions.length > 0 && (
-          <ul
-            style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: '100%',
-              margin: 0,
-              padding: '4px 0',
-              listStyle: 'none',
-              background: 'var(--bg-2)',
-              border: '0.5px solid var(--line)',
-              borderRadius: 'var(--radius)',
-              zIndex: 5,
-            }}
-          >
-            {suggestions.map((agent, i) => (
-              <li key={agent.id}>
-                <button
-                  type="button"
-                  disabled={!agent.installed}
-                  title={agent.installed ? undefined : `${agent.displayName} is not on PATH`}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    if (agent.installed) insertMention(agent.id);
-                  }}
-                  style={{
-                    display: 'flex',
-                    width: '100%',
-                    justifyContent: 'space-between',
-                    background: i === hint ? 'var(--bg-3)' : 'transparent',
-                    border: 'none',
-                    borderRadius: 0,
-                    color: agent.installed ? agentColor(agent.id) : 'var(--ink-3)',
-                    textAlign: 'left',
-                    padding: '5px 10px',
-                  }}
-                >
-                  <span>@{agent.id}</span>
-                  <span style={{ color: 'var(--ink-3)', fontSize: 'var(--t-xs)' }}>
-                    {agent.installed ? agent.displayName : 'Not on PATH'}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-        <button className="primary" disabled={!ready} onClick={send}>
-          {busy ? 'Sending…' : held ? 'Hold' : 'Send'}
-        </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <button
           type="button"
           disabled={disabled || busy || photos.length >= MAX_COMPOSER_PHOTOS}
           onClick={() => fileRef.current?.click()}
-          title="Add photos"
+          title="Attach photos"
+          aria-label="Attach photos"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 36,
+            height: 36,
+            padding: 0,
+            flexShrink: 0,
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--ink-2)',
+          }}
         >
-          Photos
+          <PaperclipIcon />
         </button>
         <input
           ref={fileRef}
@@ -350,13 +274,133 @@ export function Composer({
             event.target.value = '';
           }}
         />
-        {error && (
-          <span className="mono" style={{ color: 'var(--st-fail)', fontSize: 'var(--t-xs)' }}>
-            {error}
-          </span>
-        )}
+        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+          <textarea
+            ref={ref}
+            rows={1}
+            disabled={disabled || busy}
+            value={text}
+            placeholder={hintText}
+            autoFocus={autoFocus}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (suggestions.length > 0 && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+                event.preventDefault();
+                const delta = event.key === 'ArrowDown' ? 1 : -1;
+                setHint((h) => (h + delta + suggestions.length) % suggestions.length);
+                return;
+              }
+              if (
+                suggestions.length > 0 &&
+                (event.key === 'Tab' || event.key === 'Enter') &&
+                !event.metaKey &&
+                !event.ctrlKey &&
+                !event.shiftKey
+              ) {
+                const pick = suggestions[hint];
+                if (pick?.installed) {
+                  event.preventDefault();
+                  insertMention(pick.id);
+                  return;
+                }
+              }
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                event.stopPropagation();
+                send();
+              }
+            }}
+            style={{
+              fontSize: 'var(--t-m)',
+              minHeight: 36,
+              overflow: 'hidden',
+              resize: 'none',
+              padding: '7px 10px',
+              lineHeight: '20px',
+            }}
+          />
+          {suggestions.length > 0 && (
+            <ul
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: '100%',
+                margin: 0,
+                padding: '4px 0',
+                listStyle: 'none',
+                background: 'var(--bg-2)',
+                border: '0.5px solid var(--line)',
+                borderRadius: 'var(--radius)',
+                zIndex: 5,
+              }}
+            >
+              {suggestions.map((agent, i) => (
+                <li key={agent.id}>
+                  <button
+                    type="button"
+                    disabled={!agent.installed}
+                    title={agent.installed ? undefined : `${agent.displayName} is not on PATH`}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      if (agent.installed) insertMention(agent.id);
+                    }}
+                    style={{
+                      display: 'flex',
+                      width: '100%',
+                      justifyContent: 'space-between',
+                      background: i === hint ? 'var(--bg-3)' : 'transparent',
+                      border: 'none',
+                      borderRadius: 0,
+                      color: agent.installed ? agentColor(agent.id) : 'var(--ink-3)',
+                      textAlign: 'left',
+                      padding: '5px 10px',
+                    }}
+                  >
+                    <span>@{agent.id}</span>
+                    <span style={{ color: 'var(--ink-3)', fontSize: 'var(--t-xs)' }}>
+                      {agent.installed ? agent.displayName : 'Not on PATH'}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <button
+          type="button"
+          className="primary"
+          disabled={!ready}
+          onClick={send}
+          style={{ height: 36, padding: '0 12px', flexShrink: 0 }}
+        >
+          {busy ? 'Sending…' : held ? 'Hold' : 'Send'}
+        </button>
       </div>
+      {error && (
+        <p className="mono" style={{ margin: '8px 0 0', color: 'var(--st-fail)', fontSize: 'var(--t-xs)' }}>
+          {error}
+        </p>
+      )}
     </div>
+  );
+}
+
+function PaperclipIcon(): JSX.Element {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
   );
 }
 
