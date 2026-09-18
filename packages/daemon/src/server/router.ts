@@ -41,6 +41,7 @@ import {
   repoWorkingStatus,
 } from '../domain/git.js';
 import { toTaskView } from '../domain/task-view.js';
+import { saveChatPhotos } from '../domain/chat-photos.js';
 import { deriveVerifyPlan, type VerifyStep } from '../domain/verify-plan.js';
 import { isAttached, taskCwd } from '../domain/cwd.js';
 import {
@@ -56,7 +57,7 @@ import type { VerifyRunner } from '../domain/verify-run.js';
 import type { Knowledge } from '../knowledge/service.js';
 import { readRepoRules, repoRulesPath, writeRepoRules } from '../knowledge/repo-rules.js';
 import type { ScmPoller } from '../scm/poller.js';
-import type { ScmWrites } from '../scm/writes.js';
+import type { CommentPayload, OpenPrPayload, ScmWrites } from '../scm/writes.js';
 
 /**
  * The tRPC router — OSADE.md §5.5.
@@ -235,6 +236,35 @@ export const appRouter = t.router({
         });
       }
       return { ok: true as const };
+    }),
+
+  /** Writes pasted photos under ~/.osade/inbox/<task>/ so the agent can open them. */
+  taskDropImages: t.procedure
+    .input(
+      z.object({
+        taskId: TaskId,
+        files: z
+          .array(
+            z.object({
+              name: z.string().min(1),
+              mime: z.string().min(1),
+              data: z.string().min(1),
+            }),
+          )
+          .min(1)
+          .max(8),
+      }),
+    )
+    .output(z.object({ paths: z.array(z.string()) }))
+    .mutation(({ ctx, input }) => {
+      if (!getTask(ctx.db, input.taskId)) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown task' });
+      }
+      try {
+        return saveChatPhotos(input.taskId, input.files);
+      } catch (err) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
+      }
     }),
 
   /** Reads the agent pane transcript — §4.4.1. On demand, never a render loop. */
@@ -906,28 +936,7 @@ export const appRouter = t.router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
       }
       if (input.decision === 'approve') {
-        const row = ctx.db
-          .prepare('SELECT gate, payload_json, task_id FROM gate_request WHERE id = ?')
-          .get(input.gateId) as
-          | { gate: string; payload_json: string; task_id: string }
-          | undefined;
-        if (row?.gate === 'gate.branch_switch') {
-          const payload = JSON.parse(row.payload_json) as { branch: string };
-          const task = getTask(ctx.db, row.task_id);
-          if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown task' });
-          const repo = ctx.db.prepare('SELECT path FROM repo WHERE id = ?').get(task.repo_id) as
-            | { path: string }
-            | undefined;
-          if (!repo) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown repo' });
-          try {
-            await checkoutBranch(taskCwd(task, repo.path), payload.branch);
-            ctx.db.prepare('UPDATE task SET branch = ? WHERE id = ?').run(payload.branch, task.id);
-            ctx.gates.markExecuted(input.gateId);
-          } catch (err) {
-            ctx.gates.markExecuted(input.gateId, (err as Error).message);
-            throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
-          }
-        }
+        await executeApprovedGate(ctx, input.gateId);
       }
       return { ok: true as const };
     }),
@@ -936,12 +945,13 @@ export const appRouter = t.router({
   gateEditAndApprove: t.procedure
     .input(z.object({ gateId: z.string(), payload: z.unknown() }))
     .output(z.object({ ok: z.literal(true) }))
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       try {
         ctx.gates.editAndApprove(input.gateId, input.payload);
       } catch (err) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
       }
+      await executeApprovedGate(ctx, input.gateId);
       return { ok: true as const };
     }),
 
@@ -1064,6 +1074,27 @@ export const appRouter = t.router({
       return { gateId: ctx.scmWrites.requestGate(input.taskId, 'gate.pr_open', payload) };
     }),
 
+  /**
+   * §11.2 / §12 — requests a gate for posting a comment on the originating issue.
+   * Nothing is written until it is approved.
+   */
+  issueCommentRequest: t.procedure
+    .input(z.object({ taskId: TaskId, body: z.string().min(1) }))
+    .output(z.object({ gateId: z.string() }))
+    .mutation(({ ctx, input }) => {
+      const task = getTask(ctx.db, input.taskId);
+      if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown task' });
+      if (issueNumberFromRef(task.origin_ref) == null) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'this task has no originating issue to comment on',
+        });
+      }
+      const disclosure = '_Produced by an agent through Osade, and reviewed by a human before posting._';
+      const body = input.body.includes(disclosure) ? input.body : `${input.body.trim()}\n\n---\n${disclosure}`;
+      return { gateId: ctx.scmWrites.requestGate(input.taskId, 'gate.issue_comment', { body }) };
+    }),
+
   // ── §13 repository conventions ─────────────────────────────────────────────
 
   /** What is known about this repo, and whether more can be learned right now. */
@@ -1138,6 +1169,64 @@ export const appRouter = t.router({
       return { ok: true as const };
     }),
 });
+
+/**
+ * Approval is not the write. `gate.branch_switch` already executed here; public GitHub
+ * writes used to stop at `decide`, so a live M2 run would approve a PR that never opened.
+ */
+async function executeApprovedGate(ctx: DaemonContext, gateId: string): Promise<void> {
+  const row = ctx.db
+    .prepare('SELECT gate, payload_json, task_id FROM gate_request WHERE id = ?')
+    .get(gateId) as { gate: string; payload_json: string; task_id: string } | undefined;
+  if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown gate' });
+
+  const payload = JSON.parse(row.payload_json) as unknown;
+  try {
+    switch (row.gate) {
+      case 'gate.branch_switch': {
+        const branch = (payload as { branch: string }).branch;
+        const task = getTask(ctx.db, row.task_id);
+        if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown task' });
+        const repo = ctx.db.prepare('SELECT path FROM repo WHERE id = ?').get(task.repo_id) as
+          | { path: string }
+          | undefined;
+        if (!repo) throw new TRPCError({ code: 'NOT_FOUND', message: 'unknown repo' });
+        await checkoutBranch(taskCwd(task, repo.path), branch);
+        ctx.db.prepare('UPDATE task SET branch = ? WHERE id = ?').run(branch, task.id);
+        ctx.gates.markExecuted(gateId);
+        return;
+      }
+      case 'gate.pr_open':
+        await ctx.scmWrites.openPr(row.task_id, gateId, payload as OpenPrPayload);
+        return;
+      case 'gate.issue_comment':
+      case 'gate.pr_comment': {
+        const task = getTask(ctx.db, row.task_id);
+        const fromIssue = issueNumberFromRef(task?.origin_ref ?? null);
+        const fromPr = getTaskFacts(ctx.db, row.task_id)?.scm?.pr_number ?? null;
+        const issueNumber = row.gate === 'gate.pr_comment' ? fromPr ?? fromIssue : fromIssue ?? fromPr;
+        if (issueNumber == null) {
+          throw new Error('no issue or pull request to comment on');
+        }
+        await ctx.scmWrites.comment(row.task_id, gateId, payload as CommentPayload, { issueNumber });
+        return;
+      }
+      default:
+        return;
+    }
+  } catch (err) {
+    if (err instanceof TRPCError) throw err;
+    throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
+  }
+}
+
+function issueNumberFromRef(ref: string | null): number | null {
+  if (!ref) return null;
+  const match = /\/(?:issues|pull)\/(\d+)(?:\b|$)/u.exec(ref);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 
 /**
  * Mining is optional: a daemon with no model or no token configured serves every other procedure

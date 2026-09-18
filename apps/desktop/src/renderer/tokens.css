@@ -184,6 +184,24 @@ textarea {
   min-width: 0;
 }
 
+.branch-clip {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+}
+
+.branch-clip > span {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
 .ledger-row:hover {
   background: var(--bg-3);
 }

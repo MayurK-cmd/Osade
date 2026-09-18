@@ -11,6 +11,14 @@ describe('visibleUserText', () => {
       visibleUserText('<osade_lanes>\n- codex on osade/x/codex: working\n</osade_lanes>\n\nreal work'),
     ).toBe('real work');
   });
+
+  it('collapses pasted photos to a count', () => {
+    expect(
+      visibleUserText(
+        '```photos\n/a.png\n/b.png\n```\n\nThe user pasted these photos. Open each file and look at it.\n\nwhat is this?',
+      ),
+    ).toBe('(2 photos)\nwhat is this?');
+  });
 });
 
 describe('chatLines', () => {

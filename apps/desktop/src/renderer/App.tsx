@@ -2,19 +2,29 @@ import { useEffect, useMemo, useState, type CSSProperties, type JSX } from 'reac
 
 import type { TaskView } from '@osade/contract';
 
-import { agentColor } from './agent-color.js';
+import { AgentMark } from './agent-icon.js';
 import { Board } from './Board.js';
 import { CommandPalette } from './CommandPalette.js';
+import { photosPrompt, type ComposerPhoto } from './compose-photos.js';
 import { Detail, DraftPane, type Lane } from './Detail.js';
 import { api } from './api.js';
 import { attachCheckoutHint, isolatedWorktreeHint } from './branch-copy.js';
 import { chord } from './chords.js';
 import { type PendingLane } from './delivery.js';
 import { GitHubSignIn, useGithub } from './GitHubSignIn.js';
-import { groupChats, laneDigest, primaryLane, showPinnedNeedsYou, withDigest, chatLabel, type ChatGroup } from './lanes.js';
+import {
+  chatLabel,
+  displayBranch,
+  groupChats,
+  laneDigest,
+  primaryLane,
+  showPinnedNeedsYou,
+  withDigest,
+  type ChatGroup,
+} from './lanes.js';
 import { lanePrompt, parseMentions } from './mentions.js';
 import { RepoSettings, useAgentCatalog } from './RepoSettings.js';
-import { GLYPH, STATUS, TONE_COLOUR, summarise } from './status.js';
+import { STATUS, TONE_COLOUR, ago, summarise } from './status.js';
 import { titleFrom } from './title.js';
 import { useLedger } from './useLedger.js';
 import { useRepo, type OpenRepo } from './useRepo.js';
@@ -300,12 +310,17 @@ export function App(): JSX.Element {
     });
   }
 
-  async function submitDraft(tab: Extract<Tab, { kind: 'draft' }>, message: string): Promise<void> {
+  async function submitDraft(
+    tab: Extract<Tab, { kind: 'draft' }>,
+    message: string,
+    photos: ComposerPhoto[] = [],
+  ): Promise<void> {
     if (tab.repoPath == null) throw new Error('Pick a repository first');
+    const shown = optimisticLine(message, photos);
     setTabs((current) =>
       current.map((t) =>
         t.id === tab.id && t.kind === 'draft'
-          ? { ...t, optimistic: message, submitting: true }
+          ? { ...t, optimistic: shown, submitting: true }
           : t,
       ),
     );
@@ -322,17 +337,17 @@ export function App(): JSX.Element {
         { agentId: first.agentId ?? 'claude', text: first.text },
         message,
       );
-      if (firstPrompt.length === 0) throw new Error('Write something to send');
+      if (firstPrompt.length === 0 && photos.length === 0) throw new Error('Write something to send');
       for (const target of targets) {
         const agentId = target.agentId ?? defaultAgent ?? 'claude';
         const prompt = lanePrompt(parsed, { agentId, text: target.text }, message);
-        if (prompt.length === 0) continue;
-        markPending(tab.id, agentId, prompt, 'starting');
+        if (prompt.length === 0 && photos.length === 0) continue;
+        markPending(tab.id, agentId, prompt || shown, 'starting');
       }
       const created = await api.taskCreate({
         repoPath: tab.repoPath,
         title: titleFrom(message),
-        intent: firstPrompt,
+        intent: firstPrompt || shown,
         ...(first.agentId ? { agentId: first.agentId } : {}),
         ...(tab.baseRef ? { baseRef: tab.baseRef } : {}),
         ...(tab.isolate ? { isolate: true } : {}),
@@ -349,7 +364,7 @@ export function App(): JSX.Element {
                 kind: 'chat',
                 id: created.taskId,
                 focusId: created.taskId,
-                optimistic: message,
+                optimistic: shown,
                 isolatedNotice: notice,
               }
             : t,
@@ -359,24 +374,24 @@ export function App(): JSX.Element {
       setPendingLanes((current) =>
         current.map((p) => (p.chatId === tab.id ? { ...p, chatId: created.taskId } : p)),
       );
-      void launchAndSend(created.taskId, firstPrompt).catch((err: Error) => setActionError(err.message));
+      void launchAndSend(created.taskId, firstPrompt, photos).catch((err: Error) => setActionError(err.message));
       for (const extra of targets.slice(1)) {
         if (!extra.agentId) continue;
         const extraPrompt = lanePrompt(parsed, extra, message);
-        if (extraPrompt.length === 0) continue;
+        if (extraPrompt.length === 0 && photos.length === 0) continue;
         void (async () => {
           const lane = await api.taskCreate({
             repoPath: tab.repoPath!,
             title: titleFrom(message),
-            intent: extraPrompt,
+            intent: extraPrompt || shown,
             chatId: created.taskId,
             agentId: extra.agentId,
             ...(tab.baseRef ? { baseRef: tab.baseRef } : {}),
             isolate: true,
           });
-          await launchAndSend(lane.taskId, extraPrompt);
+          await launchAndSend(lane.taskId, extraPrompt, photos);
         })().catch((err: Error) => {
-          markPending(created.taskId, extra.agentId, extraPrompt, 'failed', err.message);
+          markPending(created.taskId, extra.agentId, extraPrompt || shown, 'failed', err.message);
           setActionError(err.message);
         });
       }
@@ -396,9 +411,14 @@ export function App(): JSX.Element {
     }
   }
 
-  async function sendOnChat(chat: ChatGroup, message: string): Promise<void> {
+  async function sendOnChat(
+    chat: ChatGroup,
+    message: string,
+    photos: ComposerPhoto[] = [],
+  ): Promise<void> {
+    const shown = optimisticLine(message, photos);
     setTabs((current) =>
-      current.map((t) => (t.kind === 'chat' && t.id === chat.chatId ? { ...t, optimistic: message } : t)),
+      current.map((t) => (t.kind === 'chat' && t.id === chat.chatId ? { ...t, optimistic: shown } : t)),
     );
     const ids = catalog.map((a) => a.id);
     const parsed = parseMentions(message, ids);
@@ -417,11 +437,11 @@ export function App(): JSX.Element {
 
     for (const target of targets) {
       const text = lanePrompt(parsed, target, message);
-      if (text.length === 0) {
+      if (text.length === 0 && photos.length === 0) {
         setActionError('Write something to send');
         continue;
       }
-      void sendToLane(chat, target.agentId, text, repoPath).catch((err: Error) =>
+      void sendToLane(chat, target.agentId, text, repoPath, photos).catch((err: Error) =>
         setActionError(err.message),
       );
     }
@@ -432,22 +452,23 @@ export function App(): JSX.Element {
     agentId: string,
     text: string,
     repoPath: string | null,
+    photos: ComposerPhoto[] = [],
   ): Promise<void> {
     const lane = chat.lanes.find((l) => l.agentId === agentId);
     if (lane == null) {
       if (repoPath == null) throw new Error('Open this repository to add a lane');
-      markPending(chat.chatId, agentId, text, 'starting');
+      markPending(chat.chatId, agentId, text || optimisticLine('', photos), 'starting');
       try {
         const created = await api.taskCreate({
           repoPath,
           title: chat.title,
-          intent: text,
+          intent: text || optimisticLine('', photos),
           chatId: chat.chatId,
           agentId,
           baseRef: chat.lanes[0]?.task.base_ref,
           isolate: true,
         });
-        await launchAndSend(created.taskId, text);
+        await launchAndSend(created.taskId, text, photos);
       } catch (err) {
         markPending(chat.chatId, agentId, text, 'failed', (err as Error).message);
         throw err;
@@ -455,11 +476,16 @@ export function App(): JSX.Element {
       return;
     }
     const digest = laneDigest(lane, chat.lanes);
-    await launchAndSend(lane.task.id, withDigest(text, digest));
+    await launchAndSend(lane.task.id, withDigest(text, digest), photos);
   }
 
-  async function launchAndSend(taskId: string, text: string): Promise<void> {
-    const payload = text.trim();
+  async function launchAndSend(
+    taskId: string,
+    text: string,
+    photos: ComposerPhoto[] = [],
+  ): Promise<void> {
+    const planted = await plantPhotos(taskId, photos);
+    const payload = photosPrompt(planted, text);
     if (payload.length === 0) throw new Error('Write something to send');
     const view = chats.find((t) => t.task.id === taskId);
     const live =
@@ -472,6 +498,15 @@ export function App(): JSX.Element {
       return;
     }
     await Promise.all([api.taskLaunch(taskId), sending]);
+  }
+
+  async function plantPhotos(taskId: string, photos: ComposerPhoto[]): Promise<string[]> {
+    if (photos.length === 0) return [];
+    const { paths } = await api.taskDropImages(
+      taskId,
+      photos.map((photo) => ({ name: photo.name, mime: photo.mime, data: photo.data })),
+    );
+    return paths;
   }
 
   function markPending(
@@ -716,25 +751,15 @@ export function App(): JSX.Element {
                     )}
                     {(hideRepoHead || !closed) &&
                       group.chats.map((chat) => (
-                        <div key={chat.chatId}>
-                          <ChatRow
-                            chat={chat}
-                            selected={selectedChat?.chatId === chat.chatId}
-                            onSelect={() => openLane(primaryLane(chat))}
-                            onMenu={(x, y) =>
-                              setMenu({ id: primaryLane(chat).task.id, x, y })
-                            }
-                          />
-                          {chat.lanes.map((task) => (
-                            <LaneRow
-                              key={task.task.id}
-                              task={task}
-                              selected={selected?.task.id === task.task.id}
-                              onSelect={() => openLane(task)}
-                              onMenu={(x, y) => setMenu({ id: task.task.id, x, y })}
-                            />
-                          ))}
-                        </div>
+                        <ChatRow
+                          key={chat.chatId}
+                          chat={chat}
+                          selected={selectedChat?.chatId === chat.chatId}
+                          onSelect={() => openLane(primaryLane(chat))}
+                          onMenu={(x, y) =>
+                            setMenu({ id: primaryLane(chat).task.id, x, y })
+                          }
+                        />
                       ))}
                   </section>
                 );
@@ -770,7 +795,7 @@ export function App(): JSX.Element {
               submitting={Boolean(activeTab.submitting)}
               catalog={catalog}
               pending={pendingLanes.filter((p) => p.chatId === activeTab.id)}
-              onSend={(text) => submitDraft(activeTab, text)}
+              onSend={(text, photos) => submitDraft(activeTab, text, photos)}
             />
           ) : selectedChat && selected ? (
             <Detail
@@ -786,7 +811,7 @@ export function App(): JSX.Element {
               optimistic={activeTab?.kind === 'chat' ? activeTab.optimistic : undefined}
               isolatedNotice={activeTab?.kind === 'chat' ? activeTab.isolatedNotice : undefined}
               pending={pendingLanes.filter((p) => p.chatId === selectedChat.chatId)}
-              onSend={(text) => sendOnChat(selectedChat, text)}
+              onSend={(text, photos) => sendOnChat(selectedChat, text, photos)}
               onNewIsolatedChat={(opts) => {
                 const lane = primaryLane(selectedChat);
                 const repoPath = repoPaths[lane.task.repo_id] ?? repo?.path ?? undefined;
@@ -991,7 +1016,12 @@ function ChatRow({
 }): JSX.Element {
   const copy = STATUS[chat.status];
   const colour = TONE_COLOUR[copy.tone];
-  const primary = chat.lanes[0]!;
+  const primary = primaryLane(chat);
+  const stacked = chat.lanes.length > 1;
+  const behind = stacked ? chat.lanes[1] : null;
+  const branch = displayBranch(primary.branch);
+  const age = ago(chatActivity(chat));
+  const extraLanes = chat.lanes.length - 3;
 
   return (
     <div
@@ -1013,87 +1043,151 @@ function ChatRow({
       }}
       style={{
         display: 'grid',
-        gridTemplateColumns: '2px 18px 1fr auto',
-        alignItems: 'center',
+        gridTemplateColumns: '2px 22px minmax(0, 1fr)',
+        gridTemplateRows: 'auto auto',
         columnGap: 8,
-        padding: '6px 16px 6px 0',
+        rowGap: 2,
+        alignItems: 'center',
+        minHeight: 52,
+        padding: '8px 14px 8px 0',
         borderBottom: '0.5px solid var(--line)',
         cursor: 'default',
       }}
     >
-      <span style={{ background: colour, alignSelf: 'stretch', borderRadius: 1 }} aria-hidden="true" />
-      <span className="mono" style={{ color: colour, fontSize: 'var(--t-s)' }} aria-hidden="true">
-        {GLYPH[copy.tone]}
+      <span
+        style={{
+          gridColumn: 1,
+          gridRow: '1 / 3',
+          background: colour,
+          alignSelf: 'stretch',
+          borderRadius: 1,
+        }}
+        aria-hidden="true"
+      />
+      <span
+        style={{
+          gridColumn: 2,
+          gridRow: '1 / 3',
+          position: 'relative',
+          width: 22,
+          height: 22,
+          flexShrink: 0,
+        }}
+        aria-hidden="true"
+      >
+        {behind && (
+          <span
+            style={{
+              position: 'absolute',
+              right: 0,
+              bottom: 0,
+              width: 16,
+              height: 16,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'var(--bg-2)',
+              borderRadius: 2,
+            }}
+          >
+            <AgentMark name={behind.agentId} size={14} />
+          </span>
+        )}
+        <span
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: 16,
+            height: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--bg-2)',
+            borderRadius: 2,
+            boxShadow: stacked ? '0 0 0 1px var(--bg-0)' : undefined,
+          }}
+        >
+          <AgentMark name={primary.agentId} size={14} />
+        </span>
       </span>
       <div
         style={{
-          fontSize: 'var(--t-m)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          gridColumn: 3,
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 8,
           minWidth: 0,
         }}
       >
-        {chatLabel(chat)}
+        <div
+          title={chatLabel(chat)}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontSize: 'var(--t-m)',
+            lineHeight: 1.3,
+            fontFamily: "ui-sans-serif, system-ui, 'Segoe UI', sans-serif",
+          }}
+        >
+          {chatLabel(chat)}
+        </div>
+        {age && (
+          <span
+            className="mono"
+            style={{
+              flexShrink: 0,
+              fontSize: 'var(--t-xs)',
+              color: 'var(--ink-3)',
+              lineHeight: 1.3,
+            }}
+          >
+            {age}
+          </span>
+        )}
       </div>
-      {chat.lanes.length > 1 && (
-        <span className="mono" style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-3)' }}>
-          {chat.lanes.length}
+      <div
+        style={{
+          gridColumn: 3,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          minWidth: 0,
+        }}
+      >
+        <span className="branch-clip" title={primary.branch}>
+          <span>{branch}</span>
         </span>
-      )}
-    </div>
-  );
-}
-
-function LaneRow({
-  task,
-  selected,
-  onSelect,
-  onMenu,
-}: {
-  task: TaskView;
-  selected: boolean;
-  onSelect: () => void;
-  onMenu: (x: number, y: number) => void;
-}): JSX.Element {
-  const copy = STATUS[task.status];
-  const colour = TONE_COLOUR[copy.tone];
-  return (
-    <div
-      data-task-id={task.task.id}
-      role="button"
-      tabIndex={0}
-      aria-pressed={selected}
-      className="ledger-row"
-      onClick={onSelect}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        onMenu(event.clientX, event.clientY);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '2px 18px 1fr minmax(4em, 50%)',
-        alignItems: 'center',
-        columnGap: 8,
-        padding: '4px 16px 4px 18px',
-        borderBottom: '0.5px solid var(--line)',
-        cursor: 'default',
-      }}
-    >
-      <span style={{ background: agentColor(task.agentId), alignSelf: 'stretch', borderRadius: 1 }} />
-      <span className="mono" style={{ color: colour, fontSize: 'var(--t-s)' }}>
-        {GLYPH[copy.tone]}
-      </span>
-      <span style={{ fontSize: 'var(--t-s)', color: agentColor(task.agentId) }}>{task.agentId}</span>
-      <span className="branch-tail" title={task.task.branch}>
-        {task.task.branch}
-      </span>
+        {stacked && (
+          <span
+            style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}
+            title={chat.lanes.map((lane) => lane.agentId).join(', ')}
+          >
+            {chat.lanes.slice(0, 3).map((lane) => (
+              <span
+                key={lane.task.id}
+                style={{
+                  width: 12,
+                  height: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <AgentMark name={lane.agentId} size={12} />
+              </span>
+            ))}
+            {extraLanes > 0 && (
+              <span className="mono" style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-3)' }}>
+                {chat.lanes.length}
+              </span>
+            )}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -1395,6 +1489,14 @@ function groupByRepo(tasks: TaskView[]): { repoId: string; chats: ChatGroup[] }[
     repoId,
     chats: groupChats(list).sort((a, b) => chatActivity(b) - chatActivity(a)),
   }));
+}
+
+function optimisticLine(message: string, photos: ComposerPhoto[]): string {
+  const n = photos.length;
+  const tag = n === 0 ? '' : `(${n} ${n === 1 ? 'photo' : 'photos'})`;
+  const body = message.trim();
+  if (body.length === 0) return tag;
+  return tag.length > 0 ? `${body}\n${tag}` : body;
 }
 
 function chatActivity(chat: ChatGroup): number {

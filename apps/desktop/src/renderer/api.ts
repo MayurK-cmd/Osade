@@ -230,6 +230,12 @@ export const api = {
   taskSend: (taskId: string, text: string, wait?: boolean) =>
     call('mutation', 'taskSend', { taskId, text, wait }) as Promise<{ ok: true }>,
 
+  taskDropImages: (
+    taskId: string,
+    files: { name: string; mime: string; data: string }[],
+  ) =>
+    call('mutation', 'taskDropImages', { taskId, files }) as Promise<{ paths: string[] }>,
+
   /** §4.4.1 — on-demand pane.read, never a render loop. */
   taskTranscript: (taskId: string, lines?: number) =>
     call('query', 'taskTranscript', { taskId, lines }) as Promise<{
