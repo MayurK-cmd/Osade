@@ -5,6 +5,7 @@ import type { TaskView } from '@osade/contract';
 import { AgentMark } from './agent-icon.js';
 import { Board } from './Board.js';
 import { CommandPalette } from './CommandPalette.js';
+import { photosPrompt, type ComposerPhoto } from './compose-photos.js';
 import { Detail, DraftPane, type Lane } from './Detail.js';
 import { api } from './api.js';
 import { attachCheckoutHint, isolatedWorktreeHint } from './branch-copy.js';
@@ -309,12 +310,17 @@ export function App(): JSX.Element {
     });
   }
 
-  async function submitDraft(tab: Extract<Tab, { kind: 'draft' }>, message: string): Promise<void> {
+  async function submitDraft(
+    tab: Extract<Tab, { kind: 'draft' }>,
+    message: string,
+    photos: ComposerPhoto[] = [],
+  ): Promise<void> {
     if (tab.repoPath == null) throw new Error('Pick a repository first');
+    const shown = optimisticLine(message, photos);
     setTabs((current) =>
       current.map((t) =>
         t.id === tab.id && t.kind === 'draft'
-          ? { ...t, optimistic: message, submitting: true }
+          ? { ...t, optimistic: shown, submitting: true }
           : t,
       ),
     );
@@ -331,17 +337,17 @@ export function App(): JSX.Element {
         { agentId: first.agentId ?? 'claude', text: first.text },
         message,
       );
-      if (firstPrompt.length === 0) throw new Error('Write something to send');
+      if (firstPrompt.length === 0 && photos.length === 0) throw new Error('Write something to send');
       for (const target of targets) {
         const agentId = target.agentId ?? defaultAgent ?? 'claude';
         const prompt = lanePrompt(parsed, { agentId, text: target.text }, message);
-        if (prompt.length === 0) continue;
-        markPending(tab.id, agentId, prompt, 'starting');
+        if (prompt.length === 0 && photos.length === 0) continue;
+        markPending(tab.id, agentId, prompt || shown, 'starting');
       }
       const created = await api.taskCreate({
         repoPath: tab.repoPath,
         title: titleFrom(message),
-        intent: firstPrompt,
+        intent: firstPrompt || shown,
         ...(first.agentId ? { agentId: first.agentId } : {}),
         ...(tab.baseRef ? { baseRef: tab.baseRef } : {}),
         ...(tab.isolate ? { isolate: true } : {}),
@@ -358,7 +364,7 @@ export function App(): JSX.Element {
                 kind: 'chat',
                 id: created.taskId,
                 focusId: created.taskId,
-                optimistic: message,
+                optimistic: shown,
                 isolatedNotice: notice,
               }
             : t,
@@ -368,24 +374,24 @@ export function App(): JSX.Element {
       setPendingLanes((current) =>
         current.map((p) => (p.chatId === tab.id ? { ...p, chatId: created.taskId } : p)),
       );
-      void launchAndSend(created.taskId, firstPrompt).catch((err: Error) => setActionError(err.message));
+      void launchAndSend(created.taskId, firstPrompt, photos).catch((err: Error) => setActionError(err.message));
       for (const extra of targets.slice(1)) {
         if (!extra.agentId) continue;
         const extraPrompt = lanePrompt(parsed, extra, message);
-        if (extraPrompt.length === 0) continue;
+        if (extraPrompt.length === 0 && photos.length === 0) continue;
         void (async () => {
           const lane = await api.taskCreate({
             repoPath: tab.repoPath!,
             title: titleFrom(message),
-            intent: extraPrompt,
+            intent: extraPrompt || shown,
             chatId: created.taskId,
             agentId: extra.agentId,
             ...(tab.baseRef ? { baseRef: tab.baseRef } : {}),
             isolate: true,
           });
-          await launchAndSend(lane.taskId, extraPrompt);
+          await launchAndSend(lane.taskId, extraPrompt, photos);
         })().catch((err: Error) => {
-          markPending(created.taskId, extra.agentId, extraPrompt, 'failed', err.message);
+          markPending(created.taskId, extra.agentId, extraPrompt || shown, 'failed', err.message);
           setActionError(err.message);
         });
       }
@@ -405,9 +411,14 @@ export function App(): JSX.Element {
     }
   }
 
-  async function sendOnChat(chat: ChatGroup, message: string): Promise<void> {
+  async function sendOnChat(
+    chat: ChatGroup,
+    message: string,
+    photos: ComposerPhoto[] = [],
+  ): Promise<void> {
+    const shown = optimisticLine(message, photos);
     setTabs((current) =>
-      current.map((t) => (t.kind === 'chat' && t.id === chat.chatId ? { ...t, optimistic: message } : t)),
+      current.map((t) => (t.kind === 'chat' && t.id === chat.chatId ? { ...t, optimistic: shown } : t)),
     );
     const ids = catalog.map((a) => a.id);
     const parsed = parseMentions(message, ids);
@@ -426,11 +437,11 @@ export function App(): JSX.Element {
 
     for (const target of targets) {
       const text = lanePrompt(parsed, target, message);
-      if (text.length === 0) {
+      if (text.length === 0 && photos.length === 0) {
         setActionError('Write something to send');
         continue;
       }
-      void sendToLane(chat, target.agentId, text, repoPath).catch((err: Error) =>
+      void sendToLane(chat, target.agentId, text, repoPath, photos).catch((err: Error) =>
         setActionError(err.message),
       );
     }
@@ -441,22 +452,23 @@ export function App(): JSX.Element {
     agentId: string,
     text: string,
     repoPath: string | null,
+    photos: ComposerPhoto[] = [],
   ): Promise<void> {
     const lane = chat.lanes.find((l) => l.agentId === agentId);
     if (lane == null) {
       if (repoPath == null) throw new Error('Open this repository to add a lane');
-      markPending(chat.chatId, agentId, text, 'starting');
+      markPending(chat.chatId, agentId, text || optimisticLine('', photos), 'starting');
       try {
         const created = await api.taskCreate({
           repoPath,
           title: chat.title,
-          intent: text,
+          intent: text || optimisticLine('', photos),
           chatId: chat.chatId,
           agentId,
           baseRef: chat.lanes[0]?.task.base_ref,
           isolate: true,
         });
-        await launchAndSend(created.taskId, text);
+        await launchAndSend(created.taskId, text, photos);
       } catch (err) {
         markPending(chat.chatId, agentId, text, 'failed', (err as Error).message);
         throw err;
@@ -464,11 +476,16 @@ export function App(): JSX.Element {
       return;
     }
     const digest = laneDigest(lane, chat.lanes);
-    await launchAndSend(lane.task.id, withDigest(text, digest));
+    await launchAndSend(lane.task.id, withDigest(text, digest), photos);
   }
 
-  async function launchAndSend(taskId: string, text: string): Promise<void> {
-    const payload = text.trim();
+  async function launchAndSend(
+    taskId: string,
+    text: string,
+    photos: ComposerPhoto[] = [],
+  ): Promise<void> {
+    const planted = await plantPhotos(taskId, photos);
+    const payload = photosPrompt(planted, text);
     if (payload.length === 0) throw new Error('Write something to send');
     const view = chats.find((t) => t.task.id === taskId);
     const live =
@@ -481,6 +498,15 @@ export function App(): JSX.Element {
       return;
     }
     await Promise.all([api.taskLaunch(taskId), sending]);
+  }
+
+  async function plantPhotos(taskId: string, photos: ComposerPhoto[]): Promise<string[]> {
+    if (photos.length === 0) return [];
+    const { paths } = await api.taskDropImages(
+      taskId,
+      photos.map((photo) => ({ name: photo.name, mime: photo.mime, data: photo.data })),
+    );
+    return paths;
   }
 
   function markPending(
@@ -769,7 +795,7 @@ export function App(): JSX.Element {
               submitting={Boolean(activeTab.submitting)}
               catalog={catalog}
               pending={pendingLanes.filter((p) => p.chatId === activeTab.id)}
-              onSend={(text) => submitDraft(activeTab, text)}
+              onSend={(text, photos) => submitDraft(activeTab, text, photos)}
             />
           ) : selectedChat && selected ? (
             <Detail
@@ -785,7 +811,7 @@ export function App(): JSX.Element {
               optimistic={activeTab?.kind === 'chat' ? activeTab.optimistic : undefined}
               isolatedNotice={activeTab?.kind === 'chat' ? activeTab.isolatedNotice : undefined}
               pending={pendingLanes.filter((p) => p.chatId === selectedChat.chatId)}
-              onSend={(text) => sendOnChat(selectedChat, text)}
+              onSend={(text, photos) => sendOnChat(selectedChat, text, photos)}
               onNewIsolatedChat={(opts) => {
                 const lane = primaryLane(selectedChat);
                 const repoPath = repoPaths[lane.task.repo_id] ?? repo?.path ?? undefined;
@@ -1463,6 +1489,14 @@ function groupByRepo(tasks: TaskView[]): { repoId: string; chats: ChatGroup[] }[
     repoId,
     chats: groupChats(list).sort((a, b) => chatActivity(b) - chatActivity(a)),
   }));
+}
+
+function optimisticLine(message: string, photos: ComposerPhoto[]): string {
+  const n = photos.length;
+  const tag = n === 0 ? '' : `(${n} ${n === 1 ? 'photo' : 'photos'})`;
+  const body = message.trim();
+  if (body.length === 0) return tag;
+  return tag.length > 0 ? `${body}\n${tag}` : body;
 }
 
 function chatActivity(chat: ChatGroup): number {

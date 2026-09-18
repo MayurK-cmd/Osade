@@ -3,6 +3,12 @@ import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { agentColor } from './agent-color.js';
 import type { ComposerAttach } from './compose-attach.js';
 import { COMPOSE_EVENT } from './compose-event.js';
+import {
+  fileToPhoto,
+  imageFilesFromDataTransfer,
+  MAX_COMPOSER_PHOTOS,
+  type ComposerPhoto,
+} from './compose-photos.js';
 import { parseMentions } from './mentions.js';
 import type { CatalogAgent } from './RepoSettings.js';
 
@@ -25,14 +31,17 @@ export function Composer({
   catalog?: CatalogAgent[];
   attach?: ComposerAttach | null;
   onDismissAttach?: () => void;
-  onSend: (text: string) => Promise<void>;
+  onSend: (text: string, photos: ComposerPhoto[]) => Promise<void>;
 }): JSX.Element {
   const [text, setText] = useState('');
+  const [photos, setPhotos] = useState<ComposerPhoto[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState(0);
+  const [over, setOver] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
-  const ready = !disabled && !busy && text.trim().length > 0;
+  const fileRef = useRef<HTMLInputElement>(null);
+  const ready = !disabled && !busy && (text.trim().length > 0 || photos.length > 0);
   const hintText = held
     ? 'Held until this turn finishes. Enter queues it.'
     : placeholder;
@@ -77,12 +86,26 @@ export function Composer({
   function send(): void {
     if (!ready) return;
     const payload = text.trim();
+    const attached = photos;
     setBusy(true);
     setError(null);
-    void onSend(payload)
-      .then(() => setText(''))
+    void onSend(payload, attached)
+      .then(() => {
+        setText('');
+        setPhotos([]);
+      })
       .catch((err: Error) => setError(err.message))
       .finally(() => setBusy(false));
+  }
+
+  function addFiles(files: File[]): void {
+    if (files.length === 0) return;
+    void Promise.all(files.map(fileToPhoto))
+      .then((next) => {
+        setPhotos((current) => [...current, ...next].slice(0, MAX_COMPOSER_PHOTOS));
+        setError(null);
+      })
+      .catch((err: Error) => setError(err.message));
   }
 
   function insertMention(id: string): void {
@@ -99,7 +122,40 @@ export function Composer({
       style={{
         borderTop: '1px solid var(--line)',
         padding: '12px 16px 14px',
-        background: 'var(--bg-1)',
+        background: over ? 'var(--bg-2)' : 'var(--bg-1)',
+      }}
+      onDragEnter={(event) => {
+        if (event.dataTransfer?.types.includes('Files')) {
+          event.preventDefault();
+          setOver(true);
+        }
+      }}
+      onDragOver={(event) => {
+        if (event.dataTransfer?.types.includes('Files')) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+          setOver(true);
+        }
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) setOver(false);
+      }}
+      onDrop={(event) => {
+        const files = imageFilesFromDataTransfer(event.dataTransfer);
+        if (files.length === 0) return;
+        event.preventDefault();
+        setOver(false);
+        addFiles(files);
+      }}
+      onPaste={(event) => {
+        const files = imageFilesFromDataTransfer(event.clipboardData);
+        if (files.length === 0) return;
+        event.preventDefault();
+        addFiles(files);
+        const pasted = event.clipboardData?.getData('text/plain') ?? '';
+        if (pasted.length > 0) {
+          setText((current) => `${current}${pasted}`);
+        }
       }}
     >
       {attach && (
@@ -125,6 +181,45 @@ export function Composer({
               ×
             </button>
           )}
+        </div>
+      )}
+      {photos.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          {photos.map((photo) => (
+            <span key={photo.id} style={{ position: 'relative', display: 'block' }}>
+              <img
+                src={photo.preview}
+                alt={photo.name}
+                style={{
+                  width: 56,
+                  height: 56,
+                  objectFit: 'cover',
+                  borderRadius: 'var(--radius)',
+                  border: '0.5px solid var(--line)',
+                  display: 'block',
+                  background: 'var(--bg-2)',
+                }}
+              />
+              <button
+                type="button"
+                aria-label={`Remove ${photo.name}`}
+                onClick={() => setPhotos((current) => current.filter((p) => p.id !== photo.id))}
+                style={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -6,
+                  width: 18,
+                  height: 18,
+                  padding: 0,
+                  borderRadius: 999,
+                  fontSize: 12,
+                  lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
         </div>
       )}
       {mentions.targets.length > 0 && (
@@ -236,6 +331,25 @@ export function Composer({
         <button className="primary" disabled={!ready} onClick={send}>
           {busy ? 'Sending…' : held ? 'Hold' : 'Send'}
         </button>
+        <button
+          type="button"
+          disabled={disabled || busy || photos.length >= MAX_COMPOSER_PHOTOS}
+          onClick={() => fileRef.current?.click()}
+          title="Add photos"
+        >
+          Photos
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"
+          multiple
+          hidden
+          onChange={(event) => {
+            addFiles(Array.from(event.target.files ?? []));
+            event.target.value = '';
+          }}
+        />
         {error && (
           <span className="mono" style={{ color: 'var(--st-fail)', fontSize: 'var(--t-xs)' }}>
             {error}

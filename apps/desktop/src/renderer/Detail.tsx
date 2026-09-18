@@ -9,6 +9,7 @@ import { BranchControl } from './BranchControl.js';
 import { Changes } from './Changes.js';
 import { Composer } from './Composer.js';
 import { prependAttach, type ComposerAttach } from './compose-attach.js';
+import type { ComposerPhoto } from './compose-photos.js';
 import { Conventions } from './Conventions.js';
 import { lanePhase, startingLine, type PendingLane } from './delivery.js';
 import { Files } from './Files.js';
@@ -54,7 +55,7 @@ export function Detail({
   optimistic?: string;
   isolatedNotice?: string;
   pending?: PendingLane[];
-  onSend: (text: string) => Promise<void>;
+  onSend: (text: string, photos?: ComposerPhoto[]) => Promise<void>;
   onNewIsolatedChat: (opts: { checkoutRef?: string; baseRef?: string }) => void;
   onMoveToBranch: (checkoutRef: string) => void;
   onOpenPrLane: () => void;
@@ -106,7 +107,7 @@ export function Detail({
     setLaneAttach(null);
   }, [lane, focused.task.id]);
 
-  async function handleSend(text: string): Promise<void> {
+  async function handleSend(text: string, photos: ComposerPhoto[] = []): Promise<void> {
     const match = text.match(/^\/branch(?:\s+(.*))?$/iu);
     if (match) {
       const name = match[1]?.trim();
@@ -119,7 +120,7 @@ export function Detail({
     }
     const payload =
       lane === 'transcript' || attachDismissed ? text : prependAttach(text, laneAttach);
-    await onSend(payload);
+    await onSend(payload, photos);
   }
 
   return (
@@ -533,7 +534,7 @@ export function DraftPane({
   submitting: boolean;
   catalog: CatalogAgent[];
   pending?: PendingLane[];
-  onSend: (text: string) => Promise<void>;
+  onSend: (text: string, photos?: ComposerPhoto[]) => Promise<void>;
 }): JSX.Element {
   return (
     <div

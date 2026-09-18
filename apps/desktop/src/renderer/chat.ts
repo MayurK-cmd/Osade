@@ -12,7 +12,16 @@ export interface ChatLine {
 
 /** Strip the sibling-lane digest so it never shows up as a chat bubble. */
 export function visibleUserText(text: string): string {
-  return text.replace(/<osade_lanes>[\s\S]*?<\/osade_lanes>\s*/g, '').trim();
+  return text
+    .replace(/<osade_lanes>[\s\S]*?<\/osade_lanes>\s*/g, '')
+    .replace(/```photos\n[\s\S]*?```\s*/g, (block) => {
+      const n = block
+        .split('\n')
+        .filter((line) => line.length > 0 && !line.startsWith('```')).length;
+      return n > 0 ? `(${n} ${n === 1 ? 'photo' : 'photos'})\n` : '';
+    })
+    .replace(/The user pasted these photos\. Open each file and look at it\.\s*/g, '')
+    .trim();
 }
 
 /**
