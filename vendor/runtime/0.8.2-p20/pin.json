@@ -31,6 +31,7 @@
     "$comment_env_prefix": "The prefix of the environment variables the pinned executable reads (<prefix>_SOCKET_PATH, <prefix>_SESSION, <prefix>_STARTUP_CWD...). This is the BINARY's input contract and must never be derived from license.upstream_repository: that field carries Osade's rebranded identity, while the shipped release binary still reads its original names. Confirmed 2026-09-20 by scanning the pinned Windows executable: it contains HERDR_* names and zero OSADE_* names. Deriving this from the repository URL makes the supervisor pass overrides the runtime ignores, so it listens elsewhere and boot fails the ping with no diagnostic.",
     "env_prefix": "HERDR",
     "release_tag": "v0.8.2",
+    "release_repository": "https://github.com/herdrdev/herdr",
     "expected_layout": "vendor/runtime/<version>-p<protocol>/<target>/osade-runtime[.exe]",
     "assets": {
       "{project}-linux-aarch64": {
