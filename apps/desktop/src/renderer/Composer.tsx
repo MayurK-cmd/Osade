@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 
 import { agentColor } from './agent-color.js';
 import type { ComposerAttach } from './compose-attach.js';
-import { COMPOSE_EVENT } from './compose-event.js';
+import { COMPOSE_EVENT, COMPOSE_PHOTO_EVENT } from './compose-event.js';
 import {
   fileToPhoto,
   imageFilesFromDataTransfer,
@@ -70,6 +70,25 @@ export function Composer({
     }
     window.addEventListener(COMPOSE_EVENT, onCompose);
     return () => window.removeEventListener(COMPOSE_EVENT, onCompose);
+  }, []);
+
+  // The browser pane hands over a screenshot it has already annotated. Same photo shape as a
+  // paste, so it lands in the same row of thumbnails and the same send path — `taskDropImages`
+  // writes it to the inbox and the prompt references the path, which is how an image reaches an
+  // agent in Osade (§18.1: no model ships, so there is no vision payload to put one in).
+  useEffect(() => {
+    function onPhoto(event: Event): void {
+      const detail = (event as CustomEvent<ComposerPhoto>).detail;
+      if (detail == null || typeof detail.data !== 'string' || detail.data === '') return;
+      setPhotos((current) =>
+        current.some((p) => p.id === detail.id)
+          ? current
+          : [...current, detail].slice(-MAX_COMPOSER_PHOTOS),
+      );
+      setError(null);
+    }
+    window.addEventListener(COMPOSE_PHOTO_EVENT, onPhoto);
+    return () => window.removeEventListener(COMPOSE_PHOTO_EVENT, onPhoto);
   }, []);
 
   useEffect(() => {

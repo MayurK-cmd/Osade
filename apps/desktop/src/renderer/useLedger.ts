@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { ServerMessage, TaskView } from '@osade/contract';
 
+import type { BrowserElement, BrowserShot, BrowserState } from '../main/browser-contract.js';
+
 /**
  * The ledger's connection to the daemon — OSADE.md §18.1.
  *
@@ -34,6 +36,21 @@ declare global {
       onGithubDevice(
         handler: (prompt: { userCode: string; verificationUri: string }) => void,
       ): () => void;
+      /** The browser pane — issue #13. Absent outside the desktop shell. */
+      browser?: {
+        open(url: string): Promise<BrowserState>;
+        close(): Promise<void>;
+        bounds(rect: { x: number; y: number; width: number; height: number } | null): Promise<void>;
+        load(url: string): Promise<BrowserState>;
+        reload(): Promise<void>;
+        back(): Promise<boolean>;
+        forward(): Promise<boolean>;
+        openExternal(): Promise<void>;
+        state(): Promise<BrowserState>;
+        screenshot(): Promise<BrowserShot>;
+        element(x: number, y: number): Promise<BrowserElement | null>;
+        onChanged(handler: (state: BrowserState) => void): () => void;
+      };
     };
   }
 }

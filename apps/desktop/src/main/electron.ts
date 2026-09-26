@@ -30,6 +30,8 @@ app.setPath('sessionData', join(OSADE_ROOT, 'electron', 'session'));
 app.setAppUserModelId('dev.osade.app');
 
 import { repoFromArgv } from './argv.js';
+import { readBounds } from './browser-contract.js';
+import { BrowserViewHost } from './browser-view.js';
 import {
   beginDeviceFlow,
   githubClientId,
@@ -79,6 +81,17 @@ let spawnedDaemon: ChildProcess | null = null;
 let openedRepo: string | null = null;
 
 const ZOOM_PATH = join(OSADE_ROOT, 'ui-zoom');
+
+/**
+ * The browser pane's page — issue #13. Created once, opened and closed on demand.
+ *
+ * It lives here rather than per window because there is one window: `osade .` re-scopes the
+ * window it already has instead of opening a second one.
+ */
+const browserView = new BrowserViewHost({
+  onInfo: (message) => say(`[browser] ${message}`),
+  zoomFactor: () => zoomFactor(currentZoomLevel()),
+});
 
 function readZoomLevel(): number {
   try {
@@ -284,6 +297,9 @@ function createWindow(): void {
     say('the window closed');
     window = null;
   });
+  // A `WebContentsView` is parented to the window, not owned by its webContents. Closing the
+  // window without dropping it leaves a live renderer process with nothing to draw into.
+  window.on('close', () => browserView.close());
 
   void runSmokeShot(window);
 }
@@ -572,6 +588,58 @@ ipcMain.handle('osade:open-in-substrate', async () => {
     .map(([name, value]) => `${name}=${JSON.stringify(value)}`)
     .join(' ');
   return { command, hint: `${exports} ${substrateBinary()} session attach ${OSADE_SESSION}` };
+});
+
+/**
+ * The browser pane — issue #13.
+ *
+ * One handler per operation, all of them synchronous except the three that have to wait on the
+ * page: a load, a capture, and an element probe. Geometry arrives as plain numbers and is
+ * re-applied by `BrowserViewHost` rather than pushed per animation frame, so a resize costs one
+ * message per layout change and none while the page is merely repainting.
+ */
+browserView.onState((state) => {
+  if (window && !window.isDestroyed()) window.webContents.send('osade:browser-changed', state);
+});
+
+ipcMain.handle('osade:browser-open', (event, url?: unknown) => {
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  if (owner == null) return browserView.state();
+  browserView.open(owner, typeof url === 'string' && url !== '' ? url : 'about:blank');
+  return browserView.state();
+});
+
+ipcMain.handle('osade:browser-close', () => {
+  browserView.close();
+});
+
+ipcMain.handle('osade:browser-bounds', (_event, rect?: unknown) => {
+  browserView.setBounds(readBounds(rect));
+});
+
+ipcMain.handle('osade:browser-load', (_event, url?: unknown) =>
+  browserView.load(typeof url === 'string' ? url : ''),
+);
+
+ipcMain.handle('osade:browser-reload', () => {
+  browserView.reload();
+});
+
+ipcMain.handle('osade:browser-back', () => browserView.goBack());
+
+ipcMain.handle('osade:browser-forward', () => browserView.goForward());
+
+ipcMain.handle('osade:browser-external', () => {
+  browserView.openExternally();
+});
+
+ipcMain.handle('osade:browser-state', () => browserView.state());
+
+ipcMain.handle('osade:browser-screenshot', () => browserView.screenshot());
+
+ipcMain.handle('osade:browser-element', (_event, point?: unknown) => {
+  const at = point as { x?: unknown; y?: unknown } | null | undefined;
+  return browserView.elementAt(typeof at?.x === 'number' ? at.x : 0, typeof at?.y === 'number' ? at.y : 0);
 });
 
 app.whenReady().then(

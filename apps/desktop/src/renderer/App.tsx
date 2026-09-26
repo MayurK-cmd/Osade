@@ -5,6 +5,8 @@ import type { TaskView } from '@osade/contract';
 import { AgentMark } from './agent-icon.js';
 import { AgentPicker, resolveNewChatAgent } from './AgentPicker.js';
 import { Board } from './Board.js';
+import { BROWSER_DEFAULT, BROWSER_MAX, BROWSER_MIN, clampBrowserWidth } from './browser-view.js';
+import { BrowserPane } from './BrowserPane.js';
 import { CommandPalette } from './CommandPalette.js';
 import { photosPrompt, type ComposerPhoto } from './compose-photos.js';
 import { Detail, DraftPane, type Lane } from './Detail.js';
@@ -39,6 +41,8 @@ const SIDEBAR_KEY = 'osade.sidebar-width';
 const SIDEBAR_MIN = 240;
 const SIDEBAR_MAX = 640;
 const SIDEBAR_DEFAULT = 320;
+const BROWSER_KEY = 'osade.browser-open';
+const BROWSER_WIDTH_KEY = 'osade.browser-width';
 
 type Tab =
   | {
@@ -93,6 +97,10 @@ export function App(): JSX.Element {
   const [sidebarWidth, setSidebarWidth] = useState(() => loadSidebarWidth());
   const [sidebarDrag, setSidebarDrag] = useState(false);
   const sidebarDragOrigin = useRef<{ x: number; width: number } | null>(null);
+  const [browserOpen, setBrowserOpen] = useState(() => loadFlag(BROWSER_KEY));
+  const [browserWidth, setBrowserWidth] = useState(() => loadBrowserWidth());
+  const [browserDrag, setBrowserDrag] = useState(false);
+  const browserDragOrigin = useRef<{ x: number; width: number } | null>(null);
 
   const defaultAgent = agentOverride ?? repo?.defaultAgent ?? null;
   const scoped = repo ? allTasks.filter((t) => t.task.repo_id === repo.repoId) : allTasks;
@@ -152,6 +160,14 @@ export function App(): JSX.Element {
   }, [aliases]);
 
   useEffect(() => {
+    localStorage.setItem(BROWSER_KEY, browserOpen ? '1' : '0');
+  }, [browserOpen]);
+
+  useEffect(() => {
+    localStorage.setItem(BROWSER_WIDTH_KEY, String(browserWidth));
+  }, [browserWidth]);
+
+  useEffect(() => {
     if (github.status.signedIn || githubSkipped) {
       setGithubWelcome(false);
       return;
@@ -201,6 +217,13 @@ export function App(): JSX.Element {
       if (modKey && event.key.toLowerCase() === 'w') {
         event.preventDefault();
         closeTab(activeId);
+        return;
+      }
+      // Ctrl/Cmd+Shift+B — the browser pane. Shift-qualified because the bare chord is a
+      // readline move, and a developer about to Ctrl+click their own app should not lose it.
+      if (modKey && event.shiftKey && event.key.toLowerCase() === 'b') {
+        event.preventDefault();
+        setBrowserOpen((open) => !open);
         return;
       }
 
@@ -601,6 +624,31 @@ export function App(): JSX.Element {
     }
   }
 
+  function onBrowserPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    browserDragOrigin.current = { x: event.clientX, width: browserWidth };
+    setBrowserDrag(true);
+  }
+
+  function onBrowserPointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
+    const origin = browserDragOrigin.current;
+    if (origin == null) return;
+    // Dragged leftwards, so the delta runs the other way: the pane's right edge is what is being
+    // pulled, and the window's right edge is fixed.
+    setBrowserWidth(clampBrowser(origin.width + origin.x - event.clientX));
+  }
+
+  function onBrowserPointerUp(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (browserDragOrigin.current == null) return;
+    browserDragOrigin.current = null;
+    setBrowserDrag(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
   if (githubWelcome && !github.status.signedIn && !githubSkipped && repo == null) {
     return (
       <div style={{ padding: '48px 28px', maxWidth: 520, height: '100%' }}>
@@ -626,13 +674,19 @@ export function App(): JSX.Element {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: showDetail
-          ? `${sidebarWidth}px 6px minmax(0, 1fr)`
-          : 'minmax(0, 1fr)',
+        gridTemplateColumns: [
+          showDetail ? `${sidebarWidth}px` : null,
+          showDetail ? '6px' : null,
+          'minmax(0, 1fr)',
+          browserOpen ? '6px' : null,
+          browserOpen ? `${browserWidth}px` : null,
+        ]
+          .filter(Boolean)
+          .join(' '),
         height: '100%',
         background: 'var(--bg-0)',
-        cursor: sidebarDrag ? 'col-resize' : undefined,
-        userSelect: sidebarDrag ? 'none' : undefined,
+        cursor: sidebarDrag || browserDrag ? 'col-resize' : undefined,
+        userSelect: sidebarDrag || browserDrag ? 'none' : undefined,
       }}
     >
       <main
@@ -658,6 +712,8 @@ export function App(): JSX.Element {
           })}
           view={view}
           onView={setView}
+          browserOpen={browserOpen}
+          onBrowser={() => setBrowserOpen((open) => !open)}
           onNew={() => void openDraftTab()}
           settings={
             repo ? (
@@ -974,6 +1030,39 @@ export function App(): JSX.Element {
             <NothingSelected hasChats={groups.length > 0} />
           )}
         </div>
+          </aside>
+        </>
+      )}
+
+      {browserOpen && (
+        <>
+          {/*
+            The pane's left edge. Six pixels, like the sidebar's, so the two read as the same
+            kind of thing — and because the native view underneath paints over anything with a
+            z-index, the handle has to live in the renderer's grid rather than on top of the page.
+          */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize browser pane"
+            aria-valuenow={Math.round(browserWidth)}
+            aria-valuemin={BROWSER_MIN}
+            aria-valuemax={BROWSER_MAX}
+            onPointerDown={onBrowserPointerDown}
+            onPointerMove={onBrowserPointerMove}
+            onPointerUp={onBrowserPointerUp}
+            onPointerCancel={onBrowserPointerUp}
+            onDoubleClick={() => setBrowserWidth(BROWSER_DEFAULT)}
+            style={{
+              cursor: 'col-resize',
+              touchAction: 'none',
+              background: browserDrag
+                ? 'var(--focus)'
+                : 'linear-gradient(to right, transparent 2px, var(--line) 2px, var(--line) 3px, transparent 3px)',
+            }}
+          />
+          <aside style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+            <BrowserPane onClose={() => setBrowserOpen(false)} />
           </aside>
         </>
       )}
@@ -1375,6 +1464,8 @@ function Header({
   summary,
   view,
   onView,
+  browserOpen,
+  onBrowser,
   onNew,
   settings,
 }: {
@@ -1383,6 +1474,8 @@ function Header({
   summary: string;
   view: 'list' | 'board';
   onView: (view: 'list' | 'board') => void;
+  browserOpen: boolean;
+  onBrowser: () => void;
   onNew: () => void;
   settings: JSX.Element | null;
 }): JSX.Element {
@@ -1443,6 +1536,19 @@ function Header({
         style={{ flexShrink: 0, fontSize: 'var(--t-xs)' }}
       >
         {view === 'board' ? 'List' : 'Kanban'}
+      </button>
+      <button
+        type="button"
+        aria-pressed={browserOpen}
+        title="Browser view"
+        onClick={onBrowser}
+        style={{
+          flexShrink: 0,
+          fontSize: 'var(--t-xs)',
+          ...(browserOpen ? { background: 'var(--bg-3)', borderColor: 'var(--focus)' } : {}),
+        }}
+      >
+        Browser <kbd>{chord('b')}</kbd>
       </button>
       {settings ? <div style={{ flexShrink: 0 }}>{settings}</div> : null}
       <button data-new-task onClick={onNew} style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
@@ -1658,6 +1764,45 @@ function loadSidebarWidth(): number {
 function clampSidebar(n: number): number {
   const room = typeof window === 'undefined' ? SIDEBAR_MAX : window.innerWidth - 280;
   return clamp(n, SIDEBAR_MIN, Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, room)));
+}
+
+/**
+ * The browser pane's remembered state — issue #13.
+ *
+ * localStorage like the sidebar's, and for the same reason: a pane you have to re-open and
+ * re-navigate on every launch is a pane you stop using. It is a *view*, not durable product
+ * state, so it does not belong in the ledger or the database (§5.4 is for changes, not settings).
+ *
+ * Open or closed, and how wide — but **not** the URL. The pane starts at
+ * `http://localhost:3000` every time it is opened, because the thing you want to look at is
+ * whatever you just started, and a remembered URL is a remembered *yesterday*.
+ */
+function loadFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function loadBrowserWidth(): number {
+  try {
+    const raw = localStorage.getItem(BROWSER_WIDTH_KEY);
+    // The key's presence is the check, not the value's type. `Number(null)` is `0`, so a profile
+    // that has never opened the pane returns a *valid* zero — which clamps straight down to the
+    // minimum, and a first run would get the smallest pane instead of the default.
+    if (raw != null && raw.trim() !== '') {
+      const n = Number(raw);
+      if (Number.isFinite(n)) return clampBrowser(n);
+    }
+  } catch {
+    // localStorage can throw in a private session.
+  }
+  return BROWSER_DEFAULT;
+}
+
+function clampBrowser(n: number): number {
+  return clampBrowserWidth(n, typeof window === 'undefined' ? BROWSER_MAX : window.innerWidth);
 }
 
 function loadAliases(): Record<string, string> {
