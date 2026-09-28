@@ -30,8 +30,21 @@ describe('parseMentions', () => {
     ]);
   });
 
-  it('an @ in the middle of a line is not a mention', () => {
-    expect(parseMentions('ping @claude later', catalog).targets).toEqual([]);
+  it('an @ in the middle of a line is a mention', () => {
+    expect(parseMentions('ping @claude later', catalog)).toEqual({
+      shared: 'ping',
+      targets: [{ agentId: 'claude', text: 'later' }],
+    });
+  });
+
+  it('routes inline mentions on one line to separate agents', () => {
+    expect(parseMentions('@claude fix this, @codex fix that', catalog)).toEqual({
+      shared: '',
+      targets: [
+        { agentId: 'claude', text: 'fix this,' },
+        { agentId: 'codex', text: 'fix that' },
+      ],
+    });
   });
 
   it('unknown ids are left in the shared text', () => {

@@ -109,21 +109,21 @@ export function Composer({
   }
 
   function insertMention(id: string): void {
-    const next = text.replace(/(?:^|\n)@[a-z0-9_-]*$/iu, (chunk) => {
-      const lead = chunk.startsWith('\n') ? '\n' : '';
-      return `${lead}@${id} `;
+    setText((current) => {
+      const replaced = current.replace(/(?:^|\s)@[a-z0-9_-]*$/iu, (chunk) => {
+        const lead = /^\s/u.test(chunk) ? chunk.slice(0, chunk.search(/\S/u)) : '';
+        return `${lead}@${id} `;
+      });
+      if (replaced !== current) return replaced;
+      return `${current.replace(/@[a-z0-9_-]*$/iu, '')}@${id} `;
     });
-    setText(next.endsWith(`@${id} `) || next.includes(`@${id} `) ? next : `${text.replace(/@[a-z0-9_-]*$/iu, '')}@${id} `);
     ref.current?.focus();
   }
 
   return (
     <div
-      style={{
-        borderTop: '1px solid var(--line)',
-        padding: 10,
-        background: over ? 'var(--bg-2)' : 'var(--bg-1)',
-      }}
+      className="osade-composer"
+      style={{ background: over ? 'var(--bg-2)' : undefined }}
       onDragEnter={(event) => {
         if (event.dataTransfer?.types.includes('Files')) {
           event.preventDefault();
@@ -241,7 +241,8 @@ export function Composer({
           ))}
         </div>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div className="composer-frame">
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
         <button
           type="button"
           disabled={disabled || busy || photos.length >= MAX_COMPOSER_PHOTOS}
@@ -377,6 +378,8 @@ export function Composer({
           {busy ? 'Sending…' : held ? 'Hold' : 'Send'}
         </button>
       </div>
+      </div>
+      <p className="composer-hint">@agent to choose a lane. Enter sends. Shift+Enter adds a line.</p>
       {error && (
         <p className="mono" style={{ margin: '8px 0 0', color: 'var(--st-fail)', fontSize: 'var(--t-xs)' }}>
           {error}
@@ -406,6 +409,6 @@ function PaperclipIcon(): JSX.Element {
 
 function mentionPrefix(text: string): string | null {
   const line = text.split(/\r?\n/u).at(-1) ?? '';
-  const match = /^@([a-z0-9_-]*)$/iu.exec(line);
+  const match = /(?:^|\s)@([a-z0-9_-]*)$/iu.exec(line);
   return match ? (match[1] ?? '').toLowerCase() : null;
 }

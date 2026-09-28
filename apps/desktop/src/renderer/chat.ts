@@ -1,19 +1,28 @@
 import type { ChatTurn, TaskView } from '@osade/contract';
 
+import { stripContextBlock } from './repo-context.js';
+
 export interface ChatLine {
   id: string;
   role: 'user' | 'agent';
   agentId: string;
+  taskId: string;
   text: string;
   live: boolean;
   held?: boolean;
   failed?: boolean;
+  /** When this line was written. */
+  at: number;
+  /** When the turn that produced an agent line started. */
+  startedAt?: number;
+  endedAt?: number;
 }
 
 /** Strip the sibling-lane digest so it never shows up as a chat bubble. */
 export function visibleUserText(text: string): string {
-  return text
+  return stripContextBlock(text)
     .replace(/<osade_lanes>[\s\S]*?<\/osade_lanes>\s*/g, '')
+    .replace(/<osade_collab>[\s\S]*?<\/osade_collab>\s*/g, '')
     .replace(/```photos\n[\s\S]*?```\s*/g, (block) => {
       const n = block
         .split('\n')
@@ -38,7 +47,16 @@ export function chatLines(task: TaskView, followUps: readonly string[] = []): Ch
   if (turns.length === 0) {
     const intent = visibleUserText(task.task.intent);
     if (intent) {
-      lines.push({ id: `${task.task.id}-intent`, role: 'user', agentId, text: intent, live: false });
+      lines.push({
+        id: `${task.task.id}-intent`,
+        role: 'user',
+        agentId,
+        taskId: task.task.id,
+        text: intent,
+        live: false,
+        at: task.task.created_at,
+        startedAt: task.task.created_at,
+      });
     }
     for (let i = 0; i < followUps.length; i++) {
       const text = visibleUserText(followUps[i] ?? '');
@@ -47,9 +65,11 @@ export function chatLines(task: TaskView, followUps: readonly string[] = []): Ch
         id: `${task.task.id}-follow-${i}`,
         role: 'user',
         agentId,
+        taskId: task.task.id,
         text,
         live: false,
         held: true,
+        at: Date.now(),
       });
     }
     const live = agentOverlay(task);
@@ -57,10 +77,12 @@ export function chatLines(task: TaskView, followUps: readonly string[] = []): Ch
     return lines;
   }
 
+  let lastUserAt = task.task.created_at;
   for (const turn of turns) {
     const text = turn.role === 'user' ? visibleUserText(turn.text) : turn.text.trim();
     if (!text) continue;
-    lines.push(lineFromTurn(turn, agentId, text));
+    if (turn.role === 'user') lastUserAt = turn.created_at;
+    lines.push(lineFromTurn(turn, agentId, text, lastUserAt));
   }
 
   const seen = new Set(lines.filter((l) => l.role === 'user').map((l) => l.text));
@@ -72,9 +94,11 @@ export function chatLines(task: TaskView, followUps: readonly string[] = []): Ch
       id: `${task.task.id}-follow-${i}`,
       role: 'user',
       agentId,
+      taskId: task.task.id,
       text,
       live: false,
       held: true,
+      at: Date.now(),
     });
   }
 
@@ -87,27 +111,47 @@ export function chatLines(task: TaskView, followUps: readonly string[] = []): Ch
   return lines;
 }
 
-function lineFromTurn(turn: ChatTurn, agentId: string, text: string): ChatLine {
+function lineFromTurn(turn: ChatTurn, agentId: string, text: string, startedAt: number): ChatLine {
   const failed = turn.delivery === 'failed';
   return {
     id: turn.id,
     role: turn.role,
     agentId,
+    taskId: turn.task_id,
     text: failed && turn.error ? `${text}\n${turn.error}` : text,
     live: turn.delivery === 'sending',
     held: turn.delivery === 'queued',
     failed,
+    at: turn.created_at,
+    startedAt: turn.role === 'agent' ? startedAt : turn.created_at,
+    endedAt: turn.role === 'agent' ? turn.created_at : undefined,
   };
 }
 
 function agentOverlay(task: TaskView): ChatLine | null {
   const agentId = task.agentId || 'claude';
   const fact = task.agent;
-  const final = fact?.final_message?.trim();
-  if (final) {
-    return { id: `${task.task.id}-agent-live`, role: 'agent', agentId, text: final, live: false };
-  }
+  const streamed =
+    fact?.stream_text?.trim() ||
+    (task.output?.kind === 'partial_output' ? task.output.text?.trim() : '');
+  const final =
+    fact?.final_message?.trim() ||
+    (task.output?.kind === 'final_output' ? task.output.text?.trim() : '');
+  const spoken = streamed || final;
   const lastUser = [...(task.turns ?? [])].filter((t) => t.role === 'user').at(-1);
+  const working = task.status === 'implementing' || task.status === 'verifying' || task.status === 'queued';
+  if (spoken) {
+    return {
+      id: `${task.task.id}-agent-live`,
+      role: 'agent',
+      agentId,
+      taskId: task.task.id,
+      text: spoken,
+      live: Boolean(streamed) && working,
+      at: Date.now(),
+      startedAt: lastUser?.created_at ?? task.task.created_at,
+    };
+  }
   const waiting =
     fact?.composer_ready !== true &&
     task.status !== 'implementing' &&
@@ -118,21 +162,42 @@ function agentOverlay(task: TaskView): ChatLine | null {
       id: `${task.task.id}-starting`,
       role: 'agent',
       agentId,
+      taskId: task.task.id,
       text: `starting ${agentId}`,
       live: true,
+      at: Date.now(),
+      startedAt: lastUser?.created_at ?? task.task.created_at,
     };
   }
-  const working = task.status === 'implementing' || task.status === 'verifying' || task.status === 'queued';
   if (working) {
-    const tool = fact?.tool_name?.trim();
-    const activity = workingLabel(fact?.activity_text ?? '', agentId);
+    const reportedTool = fact?.tool_name?.trim() || (task.output?.kind === 'tool' ? task.output.tool : null);
+    if (reportedTool && !fact?.activity_text?.trim() && !fact?.stream_text?.trim()) {
+      return {
+        id: `${task.task.id}-agent-live`,
+        role: 'agent',
+        agentId,
+        taskId: task.task.id,
+        text: `Using ${reportedTool}`,
+        live: true,
+        at: Date.now(),
+        startedAt: lastUser?.created_at ?? task.task.created_at,
+      };
+    }
+    const tool = reportedTool;
+    const activity =
+      task.output?.kind === 'activity' && task.output.text
+        ? task.output.text
+        : workingLabel(fact?.activity_text ?? '', agentId);
     const parts = [activity, tool ? `Using ${tool}` : ''].filter(Boolean);
     return {
       id: `${task.task.id}-agent-live`,
       role: 'agent',
       agentId,
+      taskId: task.task.id,
       text: parts.join('\n'),
       live: true,
+      at: Date.now(),
+      startedAt: lastUser?.created_at ?? task.task.created_at,
     };
   }
   if (task.status === 'needs_input') {
@@ -140,8 +205,11 @@ function agentOverlay(task: TaskView): ChatLine | null {
       id: `${task.task.id}-agent-live`,
       role: 'agent',
       agentId,
+      taskId: task.task.id,
       text: workingLabel(fact?.activity_text ?? '', agentId) || 'Waiting for you.',
       live: false,
+      at: Date.now(),
+      startedAt: lastUser?.created_at ?? task.task.created_at,
     };
   }
   return null;

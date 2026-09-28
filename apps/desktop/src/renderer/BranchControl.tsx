@@ -1,16 +1,19 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 
 import type { TaskView } from '@osade/contract';
 
 import { api } from './api.js';
 import { attachCheckoutHint, heldReason, isolatedWorktreeHint } from './branch-copy.js';
+import { branchMenuReducer } from './branch-menu.js';
 
 export function BranchControl({
   task,
+  focusTaskId,
   onNewIsolatedChat,
   onMoveToBranch,
 }: {
   task: TaskView;
+  focusTaskId: string;
   onNewIsolatedChat: (opts: { checkoutRef?: string; baseRef?: string }) => void;
   onMoveToBranch: (checkoutRef: string) => void;
 }): JSX.Element {
@@ -24,9 +27,19 @@ export function BranchControl({
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const attached = task.attachment === 'repo';
   const holder = holders[task.branch];
   const onBranchDisabled = heldReason(task.branch, holder);
+
+  function dispatch(event: Parameters<typeof branchMenuReducer>[1]): void {
+    setOpen((current) => branchMenuReducer(current, event));
+  }
+
+  useEffect(() => {
+    dispatch({ type: 'focus_lane_change' });
+  }, [focusTaskId]);
 
   useEffect(() => {
     if (!open) return;
@@ -48,6 +61,28 @@ export function BranchControl({
       .catch((err: Error) => setError(err.message));
   }, [open, task.task.repo_id]);
 
+  useEffect(() => {
+    if (!open) return;
+    function onPointer(event: PointerEvent): void {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      dispatch({ type: 'outside_click' });
+    }
+    function onKey(event: KeyboardEvent): void {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      dispatch({ type: 'escape' });
+      triggerRef.current?.focus();
+    }
+    window.addEventListener('pointerdown', onPointer);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerdown', onPointer);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
   async function branchOut(): Promise<void> {
     setBusy(true);
     setError(null);
@@ -57,7 +92,7 @@ export function BranchControl({
         branch: branchName.trim() || undefined,
         carryChanges: carry,
       });
-      setOpen(false);
+      dispatch({ type: 'select' });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -70,7 +105,7 @@ export function BranchControl({
     setError(null);
     try {
       await api.taskSwitchBranch(task.task.id, name);
-      setOpen(false);
+      dispatch({ type: 'select' });
       setSwitching(false);
     } catch (err) {
       setError((err as Error).message);
@@ -82,7 +117,11 @@ export function BranchControl({
   return (
     <div style={{ position: 'relative', flexShrink: 0 }}>
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={triggerRef}
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => dispatch({ type: 'toggle' })}
         title={attached ? attachCheckoutHint() : isolatedWorktreeHint()}
         style={{
           display: 'inline-flex',
@@ -102,6 +141,8 @@ export function BranchControl({
       </button>
       {open && (
         <div
+          ref={panelRef}
+          role="menu"
           style={{
             position: 'absolute',
             right: 0,
@@ -206,7 +247,7 @@ export function BranchControl({
                     title={reason}
                     onClick={() => {
                       onMoveToBranch(name);
-                      setOpen(false);
+                      dispatch({ type: 'select' });
                       setMoving(false);
                     }}
                     style={{
@@ -228,7 +269,7 @@ export function BranchControl({
             title={onBranchDisabled}
             onClick={() => {
               onNewIsolatedChat({ checkoutRef: task.branch });
-              setOpen(false);
+              dispatch({ type: 'select' });
             }}
             style={{ width: '100%', marginBottom: 6 }}
           >
@@ -238,7 +279,7 @@ export function BranchControl({
             disabled={busy}
             onClick={() => {
               onNewIsolatedChat({ baseRef: task.branch });
-              setOpen(false);
+              dispatch({ type: 'select' });
             }}
             style={{ width: '100%' }}
           >

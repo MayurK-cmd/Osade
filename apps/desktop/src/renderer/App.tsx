@@ -24,7 +24,8 @@ import {
   withDigest,
   type ChatGroup,
 } from './lanes.js';
-import { lanePrompt, parseMentions } from './mentions.js';
+import { lanePrompt, laneTarget, parseMentions } from './mentions.js';
+import { contextReposForChat } from './repo-context.js';
 import { RepoSettings, useAgentCatalog } from './RepoSettings.js';
 import { STATUS, TONE_COLOUR, ago, summarise } from './status.js';
 import { titleFrom } from './title.js';
@@ -92,6 +93,7 @@ export function App(): JSX.Element {
   const [agentModal, setAgentModal] = useState<PendingDraft | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() => loadSidebarWidth());
   const [sidebarDrag, setSidebarDrag] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const sidebarDragOrigin = useRef<{ x: number; width: number } | null>(null);
 
   const defaultAgent = agentOverride ?? repo?.defaultAgent ?? null;
@@ -119,6 +121,8 @@ export function App(): JSX.Element {
     view !== 'board' &&
     activeTab != null &&
     (activeTab.kind === 'draft' || selectedChat != null);
+  const showWorkspace = view !== 'board';
+  const sidebarVisible = view === 'board' || sidebarOpen;
 
   useEffect(() => {
     if (repo) {
@@ -148,6 +152,14 @@ export function App(): JSX.Element {
   }, [sidebarWidth]);
 
   useEffect(() => {
+    const mq = window.matchMedia('(max-width: 960px)');
+    const sync = () => setSidebarOpen(!mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem(NAMES_KEY, JSON.stringify(aliases));
   }, [aliases]);
 
@@ -164,6 +176,7 @@ export function App(): JSX.Element {
   useEffect(() => {
     setPendingLanes((current) =>
       current.filter((pending) => {
+        if (pending.phase === 'failed') return true;
         const chat = groups.find((g) => g.chatId === pending.chatId);
         return !chat?.lanes.some((l) => l.agentId === pending.agentId);
       }),
@@ -398,12 +411,13 @@ export function App(): JSX.Element {
         const agentId = target.agentId ?? resolveNewChatAgent(tab.agentId, defaultAgent);
         const prompt = lanePrompt(parsed, { agentId, text: target.text }, message);
         if (prompt.length === 0 && photos.length === 0) continue;
-        markPending(tab.id, agentId, prompt || shown, 'starting');
+        markPending(tab.id, agentId, '', 'starting');
       }
+      const contextualFirst = firstPrompt || shown;
       const created = await api.taskCreate({
         repoPath: tab.repoPath,
         title: titleFrom(message),
-        intent: firstPrompt || shown,
+        intent: contextualFirst,
         ...(first.agentId ? { agentId: first.agentId } : {}),
         ...(tab.baseRef ? { baseRef: tab.baseRef } : {}),
         ...(tab.isolate ? { isolate: true } : {}),
@@ -430,24 +444,29 @@ export function App(): JSX.Element {
       setPendingLanes((current) =>
         current.map((p) => (p.chatId === tab.id ? { ...p, chatId: created.taskId } : p)),
       );
-      void launchAndSend(created.taskId, firstPrompt, photos).catch((err: Error) => setActionError(err.message));
+      const firstAgent = first.agentId ?? resolveNewChatAgent(tab.agentId, defaultAgent);
+      void launchAndSend(created.taskId, contextualFirst, photos).catch((err: Error) => {
+        markPending(created.taskId, firstAgent, '', 'failed', err.message);
+        setActionError(err.message);
+      });
       for (const extra of targets.slice(1)) {
         if (!extra.agentId) continue;
         const extraPrompt = lanePrompt(parsed, extra, message);
         if (extraPrompt.length === 0 && photos.length === 0) continue;
+        const contextualExtra = extraPrompt;
         void (async () => {
           const lane = await api.taskCreate({
             repoPath: tab.repoPath!,
             title: titleFrom(message),
-            intent: extraPrompt || shown,
+            intent: contextualExtra || shown,
             chatId: created.taskId,
             agentId: extra.agentId,
             ...(tab.baseRef ? { baseRef: tab.baseRef } : {}),
             isolate: true,
           });
-          await launchAndSend(lane.taskId, extraPrompt, photos);
+          await launchAndSend(lane.taskId, contextualExtra, photos);
         })().catch((err: Error) => {
-          markPending(created.taskId, extra.agentId, extraPrompt || shown, 'failed', err.message);
+          markPending(created.taskId, extra.agentId, '', 'failed', err.message);
           setActionError(err.message);
         });
       }
@@ -510,10 +529,10 @@ export function App(): JSX.Element {
     repoPath: string | null,
     photos: ComposerPhoto[] = [],
   ): Promise<void> {
-    const lane = chat.lanes.find((l) => l.agentId === agentId);
+    const lane = laneTarget(chat.lanes, agentId);
     if (lane == null) {
       if (repoPath == null) throw new Error('Open this repository to add a lane');
-      markPending(chat.chatId, agentId, text || optimisticLine('', photos), 'starting');
+      markPending(chat.chatId, agentId, '', 'starting');
       try {
         const created = await api.taskCreate({
           repoPath,
@@ -526,13 +545,18 @@ export function App(): JSX.Element {
         });
         await launchAndSend(created.taskId, text, photos);
       } catch (err) {
-        markPending(chat.chatId, agentId, text, 'failed', (err as Error).message);
+        markPending(chat.chatId, agentId, '', 'failed', (err as Error).message);
         throw err;
       }
       return;
     }
     const digest = laneDigest(lane, chat.lanes);
-    await launchAndSend(lane.task.id, withDigest(text, digest), photos);
+    try {
+      await launchAndSend(lane.task.id, withDigest(text, digest), photos);
+    } catch (err) {
+      markPending(chat.chatId, agentId, '', 'failed', (err as Error).message);
+      throw err;
+    }
   }
 
   async function launchAndSend(
@@ -576,6 +600,21 @@ export function App(): JSX.Element {
       const rest = current.filter((p) => !(p.chatId === chatId && p.agentId === agentId));
       return [...rest, { chatId, agentId, prompt, phase, error }];
     });
+  }
+
+  async function addContextRepo(chatId: string, _primaryRepoId: string): Promise<void> {
+    const folder = await window.osade?.chooseRepository();
+    if (!folder) return;
+    try {
+      const opened = await api.chatContextAdd(chatId, folder);
+      setRepoPaths((current) => ({ ...current, [opened.repoId]: opened.path }));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function removeContextRepo(chatId: string, repoId: string): void {
+    void api.chatContextRemove(chatId, repoId).catch((err: Error) => setActionError(err.message));
   }
 
   function onSidebarPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
@@ -624,9 +663,10 @@ export function App(): JSX.Element {
 
   return (
     <div
+      className="osade-shell"
       style={{
-        display: 'grid',
-        gridTemplateColumns: showDetail
+        display: sidebarVisible && showWorkspace ? 'grid' : 'block',
+        gridTemplateColumns: showWorkspace
           ? `${sidebarWidth}px 6px minmax(0, 1fr)`
           : 'minmax(0, 1fr)',
         height: '100%',
@@ -635,12 +675,16 @@ export function App(): JSX.Element {
         userSelect: sidebarDrag ? 'none' : undefined,
       }}
     >
+      {sidebarVisible && (
       <main
+        className="osade-sidebar"
         style={{
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
           background: 'var(--bg-1)',
+          minWidth: 0,
+          height: '100%',
         }}
       >
         <Header
@@ -659,6 +703,8 @@ export function App(): JSX.Element {
           view={view}
           onView={setView}
           onNew={() => void openDraftTab()}
+          onSearch={() => setPalette(true)}
+          onHide={showWorkspace ? () => setSidebarOpen(false) : undefined}
           settings={
             repo ? (
               <RepoSettings
@@ -703,6 +749,7 @@ export function App(): JSX.Element {
             />
           ) : (
             <>
+              <div className="sidebar-kicker">Conversations</div>
               {showPinnedNeedsYou(needsYou.length, groups.length) && (
                 <section>
                   <h2 style={groupHeadStyle('var(--st-needs)')}>Needs you · {needsYou.length}</h2>
@@ -850,6 +897,7 @@ export function App(): JSX.Element {
         </div>
 
         <SidebarFoot
+          className="osade-foot"
           working={working.length}
           total={groups.length}
           connected={connection === 'live'}
@@ -857,9 +905,11 @@ export function App(): JSX.Element {
           onGithubSignedIn={(login) => github.setStatus({ signedIn: true, login })}
         />
       </main>
+      )}
 
-      {showDetail && (
+      {showWorkspace && (
         <>
+          {sidebarOpen && (
           <div
             role="separator"
             aria-orientation="vertical"
@@ -880,12 +930,16 @@ export function App(): JSX.Element {
                 : 'linear-gradient(to right, transparent 2px, var(--line) 2px, var(--line) 3px, transparent 3px)',
             }}
           />
+          )}
 
-          <aside style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+          <aside className="workspace" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, height: '100%' }}>
         <TabStrip
           tabs={tabs}
           groups={groups}
           activeId={activeId}
+          sidebarHidden={!sidebarOpen}
+          onShowSidebar={() => setSidebarOpen(true)}
+          onNew={() => void openDraftTab()}
           onSelect={(id) => {
             setActiveId(id);
             setLane('transcript');
@@ -893,7 +947,13 @@ export function App(): JSX.Element {
           onClose={closeTab}
         />
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          {activeTab?.kind === 'draft' ? (
+          {!showDetail ? (
+            <NothingSelected
+              hasChats={groups.length > 0}
+              onNew={() => void openDraftTab()}
+              onSearch={() => setPalette(true)}
+            />
+          ) : activeTab?.kind === 'draft' ? (
             <DraftPane
               optimistic={activeTab.optimistic}
               submitting={Boolean(activeTab.submitting)}
@@ -917,6 +977,9 @@ export function App(): JSX.Element {
               isolatedNotice={activeTab?.kind === 'chat' ? activeTab.isolatedNotice : undefined}
               pending={pendingLanes.filter((p) => p.chatId === selectedChat.chatId)}
               onSend={(text, photos) => sendOnChat(selectedChat, text, photos)}
+              contextRepos={contextReposForChat(chats, selectedChat.chatId)}
+              onAddContextRepo={() => void addContextRepo(selectedChat.chatId, primaryLane(selectedChat).task.repo_id)}
+              onRemoveContextRepo={(repoId) => removeContextRepo(selectedChat.chatId, repoId)}
               onNewIsolatedChat={(opts) => {
                 const lane = primaryLane(selectedChat);
                 const repoPath = repoPaths[lane.task.repo_id] ?? repo?.path ?? undefined;
@@ -971,7 +1034,11 @@ export function App(): JSX.Element {
               }}
             />
           ) : (
-            <NothingSelected hasChats={groups.length > 0} />
+            <NothingSelected
+              hasChats={groups.length > 0}
+              onNew={() => void openDraftTab()}
+              onSearch={() => setPalette(true)}
+            />
           )}
         </div>
           </aside>
@@ -1044,84 +1111,73 @@ function TabStrip({
   tabs,
   groups,
   activeId,
+  sidebarHidden,
+  onShowSidebar,
+  onNew,
   onSelect,
   onClose,
 }: {
   tabs: Tab[];
   groups: ChatGroup[];
   activeId: string | null;
+  sidebarHidden?: boolean;
+  onShowSidebar?: () => void;
+  onNew: () => void;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
-}): JSX.Element | null {
-  if (tabs.length === 0) return null;
+}): JSX.Element {
   return (
-    <div
-      style={{
-        display: 'flex',
-        gap: 2,
-        overflowX: 'auto',
-        borderBottom: '0.5px solid var(--line)',
-        background: 'var(--bg-1)',
-        padding: '6px 8px 0',
-      }}
-    >
+    <div className="osade-tabs" role="tablist" aria-label="Open sessions">
+      {sidebarHidden && onShowSidebar && (
+        <button type="button" className="ghost-btn" onClick={onShowSidebar} style={{ marginBottom: 6 }}>
+          Sidebar
+        </button>
+      )}
       {tabs.map((tab) => {
         const chat = tab.kind === 'chat' ? groups.find((g) => g.chatId === tab.id) : null;
         const title = tab.kind === 'draft' ? 'New chat' : (chat?.title ?? 'Chat');
-        const dirty = tab.kind === 'draft';
+        const agentId =
+          tab.kind === 'draft' ? tab.agentId : chat ? primaryLane(chat).agentId : null;
+        const tone = chat ? STATUS[chat.status].tone : tab.kind === 'draft' ? 'needs' : 'rest';
         const active = tab.id === activeId;
         return (
           <button
             key={tab.id}
+            role="tab"
+            aria-selected={active}
+            title={title}
+            className="osade-tab"
             onClick={() => onSelect(tab.id)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              maxWidth: 180,
-              background: active ? 'var(--bg-0)' : 'transparent',
-              border: 'none',
-              borderBottom: active ? '1px solid var(--focus)' : '1px solid transparent',
-              borderRadius: 0,
-              marginBottom: 0,
-              padding: '7px 10px 8px',
-              fontSize: 'var(--t-s)',
-              color: active ? 'var(--ink)' : 'var(--ink-2)',
-            }}
           >
-            {dirty && (
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  background: 'var(--st-needs)',
-                  flexShrink: 0,
-                }}
-              />
+            {agentId ? <AgentMark name={agentId} size={14} /> : <span className="session-dot" data-tone={tone} />}
+            {(tone === 'live' || tone === 'fail' || tone === 'needs') && (
+              <span className="session-dot" data-tone={tone} title={chat ? STATUS[chat.status].label : 'Draft'} />
             )}
+            <span className="osade-tab-title">{title}</span>
             <span
-              style={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                minWidth: 0,
-              }}
-            >
-              {title}
-            </span>
-            <span
+              role="button"
+              aria-label={`Close ${title}`}
+              title={`Close ${title}`}
               onClick={(event) => {
                 event.stopPropagation();
                 onClose(tab.id);
               }}
-              style={{ marginLeft: 'auto', color: 'var(--ink-3)', fontSize: 'var(--t-xs)' }}
+              className="osade-tab-close"
             >
               ×
             </span>
           </button>
         );
       })}
+      {tabs.length === 0 ? (
+        <button type="button" className="ghost-btn" onClick={onNew} style={{ marginBottom: 6 }} aria-label="New chat">
+          + New chat
+        </button>
+      ) : (
+        <button type="button" className="osade-tab-add" onClick={onNew} aria-label="New chat" title="New chat">
+          +
+        </button>
+      )}
     </div>
   );
 }
@@ -1376,6 +1432,8 @@ function Header({
   view,
   onView,
   onNew,
+  onSearch,
+  onHide,
   settings,
 }: {
   repo: { name: string; slug: string | null } | null;
@@ -1384,70 +1442,53 @@ function Header({
   view: 'list' | 'board';
   onView: (view: 'list' | 'board') => void;
   onNew: () => void;
+  onSearch: () => void;
+  onHide?: () => void;
   settings: JSX.Element | null;
 }): JSX.Element {
   return (
     <header
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '12px 14px 12px 16px',
-        borderBottom: '0.5px solid var(--line)',
+        padding: '12px 12px 10px 16px',
+        borderBottom: '1px solid var(--line)',
         background: 'var(--bg-1)',
         minWidth: 0,
       }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'baseline',
-            minWidth: 0,
-          }}
-        >
-          <div
-            style={{
-              fontWeight: 600,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              minWidth: 0,
-            }}
-            title={repo?.slug ?? undefined}
-          >
-            {repo ? repo.name : 'Osade'}
-          </div>
-          {branch ? (
-            <span className="branch-tail" title={branch} style={{ marginLeft: 'auto', flexShrink: 0 }}>
-              {branch}
-            </span>
-          ) : null}
-        </div>
-        <div
-          style={{
-            color: 'var(--ink-2)',
-            fontSize: 'var(--t-xs)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {summary}
-        </div>
+      <div className="osade-brand">
+        <span className="osade-mark" aria-hidden="true">O</span>
+        <span className="osade-word">Osade</span>
+        {onHide && (
+          <button type="button" className="ghost-btn" onClick={onHide} style={{ marginLeft: 'auto' }} aria-label="Hide sidebar">
+            Hide
+          </button>
+        )}
       </div>
-      <button
-        type="button"
-        title={view === 'board' ? 'List' : 'Kanban'}
-        onClick={() => onView(view === 'board' ? 'list' : 'board')}
-        style={{ flexShrink: 0, fontSize: 'var(--t-xs)' }}
-      >
-        {view === 'board' ? 'List' : 'Kanban'}
-      </button>
-      {settings ? <div style={{ flexShrink: 0 }}>{settings}</div> : null}
-      <button data-new-task onClick={onNew} style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-        New chat <kbd>{chord('t')}</kbd>
-      </button>
+      <div className="osade-repo" title={repo?.slug ?? repo?.name ?? 'Osade'}>
+        {repo ? repo.name : 'No repository'}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+        <div className="osade-summary" style={{ flex: 1 }}>{summary}</div>
+        {branch ? (
+          <span className="branch-tail" title={branch}>{branch}</span>
+        ) : null}
+      </div>
+      <div className="osade-actions">
+        <button type="button" onClick={onSearch}>
+          Search <kbd>{chord('k')}</kbd>
+        </button>
+        <button
+          type="button"
+          title={view === 'board' ? 'List' : 'Kanban'}
+          onClick={() => onView(view === 'board' ? 'list' : 'board')}
+        >
+          {view === 'board' ? 'List' : 'Kanban'}
+        </button>
+        {settings}
+        <button data-new-task onClick={onNew} className="primary">
+          New chat <kbd>{chord('t')}</kbd>
+        </button>
+      </div>
     </header>
   );
 }
@@ -1458,41 +1499,34 @@ function SidebarFoot({
   connected,
   github,
   onGithubSignedIn,
+  className,
 }: {
   working: number;
   total: number;
   connected: boolean;
   github: { signedIn: boolean; login: string | null };
   onGithubSignedIn: (login: string) => void;
+  className?: string;
 }): JSX.Element {
   return (
-    <div
-      style={{
-        background: 'var(--bg-1)',
-        borderTop: '0.5px solid var(--line)',
-        padding: '6px 0',
-        position: 'relative',
-      }}
-    >
-      <FootRow label="Agents" value={working === 0 ? 'Idle' : `${working} running`} />
-      <FootRow label="Chats" value={String(total)} />
-      <FootRow
+    <div className={className} style={{ position: 'relative', background: 'var(--bg-1)' }}>
+      <div className="status-dock" aria-label="Application status">
+      <DockRow icon="agents" label="Agents" value={working === 0 ? 'Idle' : `${working} running`} tone={working === 0 ? undefined : 'var(--st-live)'} />
+      <DockRow icon="chats" label="Chats" value={String(total)} />
+      <DockRow
+        icon="daemon"
         label="Daemon"
         value={connected ? 'Connected' : 'Reconnecting'}
         tone={connected ? 'var(--st-live)' : 'var(--st-fail)'}
       />
       {github.signedIn ? (
-        <FootRow label="GitHub" value={github.login ?? 'Signed in'} />
+        <DockRow icon="github" label="GitHub" value={github.login ?? 'Signed in'} tone="var(--st-live)" />
       ) : (
         <details>
-          <summary
-            style={{
-              padding: '2px 16px',
-              fontSize: 'var(--t-xs)',
-              cursor: 'pointer',
-            }}
-          >
-            Sign in with GitHub
+          <summary className="dock-row">
+            <DockIcon name="github" />
+            <span className="dock-label">GitHub</span>
+            <span className="dock-value" style={{ color: 'var(--ink-3)' }}>Sign in</span>
           </summary>
           <div
             style={{
@@ -1512,44 +1546,67 @@ function SidebarFoot({
           </div>
         </details>
       )}
+      </div>
     </div>
   );
 }
 
-function FootRow({
+function DockRow({
+  icon,
   label,
   value,
   tone,
 }: {
+  icon: 'agents' | 'chats' | 'daemon' | 'github';
   label: string;
   value: string;
   tone?: string;
 }): JSX.Element {
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        padding: '2px 16px',
-        fontSize: 'var(--t-xs)',
-        color: 'var(--ink-2)',
-      }}
-    >
-      <span>{label}</span>
-      <span
-        className="mono"
-        style={{
-          color: tone ?? 'var(--ink)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          marginLeft: 12,
-          minWidth: 0,
-        }}
-      >
-        {value}
-      </span>
+    <div className="dock-row">
+      <DockIcon name={icon} />
+      <span className="dock-label">{label}</span>
+      <span className="dock-value" style={{ color: tone }}>{value}</span>
     </div>
+  );
+}
+
+function DockIcon({ name }: { name: 'agents' | 'chats' | 'daemon' | 'github' }): JSX.Element {
+  const common = {
+    className: 'dock-ico',
+    viewBox: '0 0 16 16',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.4,
+    'aria-hidden': true as const,
+  };
+  if (name === 'chats') {
+    return (
+      <svg {...common}>
+        <path d="M3 4.5h10v6.2H6.2L3 12.8z" />
+      </svg>
+    );
+  }
+  if (name === 'daemon') {
+    return (
+      <svg {...common}>
+        <rect x="3" y="3" width="10" height="7" rx="1" />
+        <path d="M6 12.5h4M8 10v2.5" />
+      </svg>
+    );
+  }
+  if (name === 'github') {
+    return (
+      <svg {...common} fill="currentColor" stroke="none">
+        <path d="M8 2.2a5.8 5.8 0 0 0-1.83 11.3c.29.05.4-.12.4-.28v-1.02c-1.62.35-1.96-.7-1.96-.7-.26-.67-.64-.85-.64-.85-.53-.36.04-.35.04-.35.58.04.89.6.89.6.52.88 1.36.63 1.69.48.05-.38.2-.63.37-.78-1.3-.15-2.66-.65-2.66-2.9 0-.64.23-1.16.6-1.57-.06-.15-.26-.75.06-1.56 0 0 .5-.16 1.62.6a5.6 5.6 0 0 1 2.94 0c1.12-.76 1.62-.6 1.62-.6.32.81.12 1.41.06 1.56.38.41.6.93.6 1.57 0 2.26-1.37 2.75-2.67 2.9.21.18.4.53.4 1.07v1.58c0 .16.1.34.4.28A5.8 5.8 0 0 0 8 2.2z" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <circle cx="8" cy="8" r="2.2" />
+      <path d="M8 2.4v1.6M8 12v1.6M2.4 8h1.6M12 8h1.6M4 4l1.1 1.1M10.9 10.9 12 12M12 4l-1.1 1.1M5.1 10.9 4 12" />
+    </svg>
   );
 }
 
@@ -1589,14 +1646,44 @@ function Empty({
   );
 }
 
-function NothingSelected({ hasChats }: { hasChats: boolean }): JSX.Element {
+function NothingSelected({
+  hasChats,
+  onNew,
+  onSearch,
+}: {
+  hasChats: boolean;
+  onNew?: () => void;
+  onSearch?: () => void;
+}): JSX.Element {
   return (
-    <div style={{ padding: '48px 28px', color: 'var(--ink-2)', maxWidth: 420 }}>
-      <p style={{ margin: 0, lineHeight: 1.5, fontSize: 'var(--t-m)' }}>
-        {hasChats
-          ? 'Pick a chat to see what it has done, and what it needs from you.'
-          : 'Nothing to show yet.'}
-      </p>
+    <div className="workspace-empty">
+      <div className="workspace-empty-card">
+        <span className="osade-mark" aria-hidden="true">O</span>
+        <h1>Agent workspace</h1>
+        <p>
+          {hasChats
+            ? 'Open a session from the sidebar, or start one and direct an agent from here.'
+            : 'Start a session to direct an agent, watch the work, and review what changed.'}
+        </p>
+        <div className="workspace-empty-actions">
+          {onNew && (
+            <button type="button" className="primary" onClick={onNew}>
+              New chat <kbd>{chord('t')}</kbd>
+            </button>
+          )}
+          {onSearch && (
+            <button type="button" onClick={onSearch}>
+              Search <kbd>{chord('k')}</kbd>
+            </button>
+          )}
+        </div>
+        <div className="workspace-empty-agents">
+          <span>@claude</span>
+          <span>@codex</span>
+          <span>@opencode</span>
+          <span>@pi</span>
+        </div>
+      </div>
     </div>
   );
 }

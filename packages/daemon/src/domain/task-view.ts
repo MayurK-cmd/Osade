@@ -4,6 +4,8 @@ import { isNeedsYou } from '@osade/contract';
 import type { Db } from '../db/index.js';
 import { getTaskFacts } from '../db/task-repo.js';
 import { DAEMON_DEFAULT_AGENT } from './agent-catalog.js';
+import { normalizeAgentOutput } from './agent-output.js';
+import { listChatContext } from './chat-context.js';
 import { isAttached, taskCwd } from './cwd.js';
 import { deriveStatus } from './derive-status.js';
 import { listTurns } from './chat-turns.js';
@@ -30,5 +32,7 @@ export function toTaskView(db: Db, taskId: string, now: number): TaskView | null
     branch: facts.task.branch,
     cwd: repo ? taskCwd(facts.task, repo.path) : facts.task.worktree_path ?? '',
     turns: listTurns(db, taskId),
+    contextRepos: listChatContext(db, facts.task.chat_id),
+    output: normalizeAgentOutput(facts.agent),
   };
 }

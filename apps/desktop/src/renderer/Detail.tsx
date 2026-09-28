@@ -3,6 +3,7 @@ import { useEffect, useState, type JSX } from 'react';
 import type { VerifyRun } from '@osade/contract';
 
 import { agentColor } from './agent-color.js';
+import { AgentMark } from './agent-icon.js';
 import { api } from './api.js';
 import { attachCheckoutHint, isolatedWorktreeHint } from './branch-copy.js';
 import { BranchControl } from './BranchControl.js';
@@ -11,7 +12,7 @@ import { Composer } from './Composer.js';
 import { prependAttach, type ComposerAttach } from './compose-attach.js';
 import type { ComposerPhoto } from './compose-photos.js';
 import { Conventions } from './Conventions.js';
-import { lanePhase, startingLine, type PendingLane } from './delivery.js';
+import { lanePhase, type PendingLane } from './delivery.js';
 import { Files } from './Files.js';
 import { GateCard } from './GateCard.js';
 import { LaneTerminal } from './LaneTerminal.js';
@@ -23,6 +24,7 @@ import {
 import { chatLabel, type ChatGroup } from './lanes.js';
 import type { CatalogAgent } from './RepoSettings.js';
 import { GLYPH, STATUS, TONE_COLOUR, ago, statusCopyFor } from './status.js';
+import type { ContextRepo } from './repo-context.js';
 import { Transcript } from './Transcript.js';
 import { VerifyPlanReview } from './VerifyPlanReview.js';
 
@@ -50,6 +52,9 @@ export function Detail({
   onNewIsolatedChat,
   onMoveToBranch,
   onOpenPrLane,
+  contextRepos = [],
+  onAddContextRepo,
+  onRemoveContextRepo,
 }: {
   chat: ChatGroup;
   focusId: string;
@@ -64,6 +69,9 @@ export function Detail({
   onNewIsolatedChat: (opts: { checkoutRef?: string; baseRef?: string }) => void;
   onMoveToBranch: (checkoutRef: string) => void;
   onOpenPrLane: () => void;
+  contextRepos?: ContextRepo[];
+  onAddContextRepo?: () => void;
+  onRemoveContextRepo?: (repoId: string) => void;
 }): JSX.Element {
   const [filter, setFilter] = useState<string | null>(null);
   const [chatSurface, setChatSurface] = useState<'chat' | 'terminal'>('chat');
@@ -134,44 +142,23 @@ export function Detail({
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        minHeight: 0,
-        background: 'var(--bg-0)',
-      }}
-    >
-      <header style={{ padding: '14px 16px 12px', borderBottom: '0.5px solid var(--line)' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-          <h1
-            style={{
-              fontSize: 'var(--t-l)',
-              fontWeight: 600,
-              lineHeight: 1.3,
-              margin: 0,
-              flex: 1,
-              minWidth: 0,
-            }}
-          >
-            {chatLabel(chat)}
-          </h1>
-          <span
-            style={{
-              flexShrink: 0,
-              fontSize: 'var(--t-xs)',
-              color: colour,
-              border: '0.5px solid var(--line)',
-              background: 'var(--bg-2)',
-              borderRadius: 'var(--radius)',
-              padding: '2px 8px',
-            }}
-          >
+    <div className="workspace" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      <header className="workspace-head">
+        <div className="workspace-title-row">
+          <AgentMark name={focused.agentId} size={22} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 className="workspace-title">{chatLabel(chat)}</h1>
+            <p className="session-meta">
+              {focused.agentId}
+              {focused.branch ? ` · ${focused.branch}` : ''}
+            </p>
+          </div>
+          <span className="workspace-status" style={{ color: colour }}>
             {copy.label}
           </span>
           <BranchControl
             task={focused}
+            focusTaskId={focusId}
             onNewIsolatedChat={onNewIsolatedChat}
             onMoveToBranch={onMoveToBranch}
           />
@@ -264,14 +251,7 @@ export function Detail({
         </section>
       )}
 
-      <nav
-        style={{
-          display: 'flex',
-          gap: 2,
-          padding: '8px 12px 0',
-          borderBottom: '0.5px solid var(--line)',
-        }}
-      >
+      <nav className="workspace-tabs" aria-label="Workspace views">
         {PANES.map((item) => {
           const selected = lane === item.id;
           const count =
@@ -284,25 +264,18 @@ export function Detail({
             <button
               key={item.id}
               data-lane={item.id}
+              role="tab"
+              aria-selected={selected}
+              className="workspace-tab"
               onClick={() => onLane(item.id)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                borderBottom: selected ? '1px solid var(--focus)' : '1px solid transparent',
-                borderRadius: 0,
-                marginBottom: -1,
-                color: selected ? 'var(--ink)' : 'var(--ink-2)',
-                padding: '6px 10px 8px',
-              }}
             >
+              <LaneIcon id={item.id} />
               {item.label}
               {count > 0 ? (
-                <span style={{ marginLeft: 6, color: 'var(--st-fail)', fontSize: 'var(--t-xs)' }}>
-                  {count}
-                </span>
+                <span className="lane-count">{count}</span>
               ) : (
                 modHeld && (
-                  <kbd style={{ marginLeft: 6, border: 'none', padding: 0, color: 'var(--ink-3)' }}>
+                  <kbd style={{ border: 'none', padding: 0, color: 'var(--ink-3)' }}>
                     ⌘{item.chord}
                   </kbd>
                 )
@@ -320,19 +293,11 @@ export function Detail({
           display: 'flex',
           flexDirection: 'column',
           overflow: lane === 'files' || lane === 'diff' || terminalVisible ? 'hidden' : 'auto',
-          padding: lane === 'files' || lane === 'diff' || terminalVisible ? 0 : '14px 16px',
+          padding: lane === 'files' || lane === 'diff' || terminalVisible ? 0 : '32px 28px 40px',
         }}
       >
         {lane === 'transcript' && (
-          <div
-            style={{
-              display: 'flex',
-              gap: 6,
-              flexShrink: 0,
-              padding: terminalVisible ? '8px 12px 0' : 0,
-              marginBottom: 12,
-            }}
-          >
+          <div className="reading-tools" style={{ padding: terminalVisible ? '8px 12px 0' : 0 }}>
             <FilterChip label="Chat" active={chatSurface === 'chat'} onClick={() => setChatSurface('chat')} />
             <FilterChip
               label="Terminal"
@@ -344,7 +309,7 @@ export function Detail({
         {lane === 'transcript' && chatSurface === 'chat' && (
           <>
             {chat.lanes.length > 1 && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+              <div className="reading-tools">
                 <FilterChip label="All" active={filter == null} onClick={() => setFilter(null)} />
                 {chat.lanes.map((task) => (
                   <FilterChip
@@ -357,28 +322,49 @@ export function Detail({
                 ))}
               </div>
             )}
-            {pending.map((p) => (
-              <div key={`pending-${p.agentId}`} style={{ marginBottom: 12 }}>
-                <div className="mono" style={{ fontSize: 'var(--t-xs)', color: agentColor(p.agentId) }}>
-                  {p.agentId}
-                </div>
-                <p style={{ margin: '4px 0', fontSize: 'var(--t-s)' }}>{p.prompt}</p>
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 'var(--t-s)',
-                    color: p.phase === 'failed' ? 'var(--st-fail)' : 'var(--ink-2)',
-                  }}
-                >
-                  {p.phase === 'failed' ? (p.error ?? 'failed') : startingLine(p.agentId)}
+            {contextRepos.length > 0 && (
+              <div
+                style={{
+                  marginBottom: 12,
+                  padding: '8px 10px',
+                  background: 'var(--bg-2)',
+                  border: '0.5px solid var(--line)',
+                  borderRadius: 8,
+                  fontSize: 'var(--t-xs)',
+                  color: 'var(--ink-2)',
+                }}
+              >
+                <p style={{ margin: '0 0 6px', color: 'var(--ink)' }}>
+                  Read-only context repos (agents edit only the primary worktree):
                 </p>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {contextRepos.map((repo) => (
+                    <li key={repo.repoId} style={{ marginBottom: 4 }}>
+                      <span className="mono">{repo.name}</span>
+                      {onRemoveContextRepo && (
+                        <button
+                          type="button"
+                          onClick={() => onRemoveContextRepo(repo.repoId)}
+                          style={{ marginLeft: 8, fontSize: 'var(--t-xs)' }}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </div>
-            ))}
+            )}
             <Transcript
               tasks={filter ? chat.lanes.filter((t) => t.agentId === filter) : chat.lanes}
               extraUser={optimistic}
               followTaskId={focused.task.id}
               isolatedNotice={isolatedNotice}
+              pending={pending}
+              onOpenDiff={(taskId) => {
+                onFocus(taskId);
+                onLane('diff');
+              }}
             />
           </>
         )}
@@ -416,6 +402,15 @@ export function Detail({
       </div>
 
       {!terminalVisible && (
+      <>
+        {onAddContextRepo && (
+          <div className="context-note">
+            <span>Agents edit only this chat&apos;s primary worktree.</span>
+            <button type="button" onClick={onAddContextRepo}>
+              Add read-only context repo
+            </button>
+          </div>
+        )}
       <Composer
         key={chat.chatId}
         autoFocus={lane === 'transcript'}
@@ -430,6 +425,7 @@ export function Detail({
         placeholder="Message. Enter to send, Shift+Enter for a new line. @name to pick a lane."
         onSend={handleSend}
       />
+      </>
       )}
     </div>
   );
@@ -524,18 +520,60 @@ function FilterChip({
 }): JSX.Element {
   return (
     <button
+      type="button"
+      className="chip"
+      aria-pressed={active}
       onClick={onClick}
-      style={{
-        padding: '2px 8px',
-        fontSize: 'var(--t-xs)',
-        border: '0.5px solid',
-        borderColor: active ? (color ?? 'var(--line)') : 'var(--line)',
-        color: color ?? 'var(--ink-2)',
-        background: active ? 'var(--bg-2)' : 'transparent',
-      }}
+      style={{ borderColor: active && color ? color : undefined, color: color ?? undefined }}
     >
       {label}
     </button>
+  );
+}
+
+function LaneIcon({ id }: { id: Lane }): JSX.Element {
+  const common = {
+    width: 14,
+    height: 14,
+    viewBox: '0 0 16 16',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.4,
+    'aria-hidden': true as const,
+  };
+  if (id === 'files') {
+    return (
+      <svg {...common}>
+        <path d="M3 2.5h6l4 4V13.5H3z" />
+        <path d="M9 2.5V6.5h4" />
+      </svg>
+    );
+  }
+  if (id === 'checks') {
+    return (
+      <svg {...common}>
+        <path d="M3 8.5 6.2 12 13 4.5" />
+      </svg>
+    );
+  }
+  if (id === 'diff') {
+    return (
+      <svg {...common}>
+        <path d="M5 3.5v9M11 3.5v9M5 8h6" />
+      </svg>
+    );
+  }
+  if (id === 'rules') {
+    return (
+      <svg {...common}>
+        <path d="M3.5 4h9M3.5 8h9M3.5 12h6" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <path d="M3 4.5h10M3 8h7M3 11.5h5" />
+    </svg>
   );
 }
 
@@ -555,49 +593,21 @@ export function DraftPane({
   onSend: (text: string, photos?: ComposerPhoto[]) => Promise<void>;
 }): JSX.Element {
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        minHeight: 0,
-        background: 'var(--bg-0)',
-      }}
-    >
-      <header style={{ padding: '14px 16px 12px', borderBottom: '0.5px solid var(--line)' }}>
-        <h1 style={{ fontSize: 'var(--t-l)', fontWeight: 600, margin: 0 }}>New chat</h1>
+    <div className="workspace" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      <header className="workspace-head">
+        <h1 className="workspace-title">New chat</h1>
         {agentId && (
-          <div
-            className="mono"
-            style={{ marginTop: 6, fontSize: 'var(--t-s)', color: agentColor(agentId) }}
-          >
+          <div className="mono" style={{ marginTop: 6, fontSize: 'var(--t-s)', color: agentColor(agentId) }}>
             {agentId}
           </div>
         )}
         <p style={{ margin: '6px 0 0', color: 'var(--ink-2)', fontSize: 'var(--t-s)' }}>
-          {attachCheckoutHint()} {isolatedWorktreeHint()} @mention an agent on its own line to
-          pick a lane.
+          {attachCheckoutHint()} {isolatedWorktreeHint()} Use @claude, @codex, @opencode, or @pi inline or on
+          their own line.
         </p>
       </header>
-      <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
-        {pending.map((p) => (
-          <div key={`pending-${p.agentId}`} style={{ marginBottom: 12 }}>
-            <div className="mono" style={{ fontSize: 'var(--t-xs)', color: agentColor(p.agentId) }}>
-              {p.agentId}
-            </div>
-            <p style={{ margin: '4px 0', fontSize: 'var(--t-s)' }}>{p.prompt}</p>
-            <p
-              style={{
-                margin: 0,
-                fontSize: 'var(--t-s)',
-                color: p.phase === 'failed' ? 'var(--st-fail)' : 'var(--ink-2)',
-              }}
-            >
-              {p.phase === 'failed' ? (p.error ?? 'failed') : startingLine(p.agentId)}
-            </p>
-          </div>
-        ))}
-        <Transcript tasks={[]} extraUser={optimistic} />
+      <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }} data-chat-scroll="">
+        <Transcript tasks={[]} extraUser={optimistic} pending={pending} />
       </div>
       <Composer
         autoFocus

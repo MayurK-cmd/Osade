@@ -38,8 +38,9 @@
   --ink-soft: var(--ink-2);
   --accent: var(--focus);
 
-  --sans: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
-  --mono: var(--sans);
+  --ui: 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+  --sans: var(--ui);
+  --mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
 
   --t-xs: 11px;
   --t-s: 12.5px;
@@ -64,7 +65,7 @@ body,
 body {
   background: var(--bg-0);
   color: var(--ink);
-  font-family: var(--mono);
+  font-family: var(--ui);
   font-size: var(--t-m);
   line-height: 1.45;
   font-variant-numeric: tabular-nums;

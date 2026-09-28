@@ -46,6 +46,22 @@ describe('chatLines', () => {
     expect(lines.find((l) => l.text === 'also write tests')?.held).toBe(true);
   });
 
+  it('shows the pane stream while the agent is still working', () => {
+    const lines = chatLines(
+      view({
+        intent: 'fix the header',
+        status: 'implementing',
+        activity: 'Claude',
+        stream: 'The header now stays visible.',
+        turns: [turn(1, 'user', 'fix the header')],
+      }),
+    );
+    expect(lines.at(-1)).toMatchObject({
+      role: 'agent',
+      text: 'The header now stays visible.',
+      live: true,
+    });
+  });
   it('uses the agent final_message when there is one', () => {
     const lines = chatLines(
       view({ intent: 'ping', status: 'awaiting_review', final: 'PONG' }),
@@ -57,6 +73,43 @@ describe('chatLines', () => {
     const lines = chatLines(view({ intent: 'list the files', status: 'awaiting_review' }));
     expect(lines.map((l) => l.role)).toEqual(['user']);
     expect(lines[0]!.text).toBe('list the files');
+  });
+
+  it('does not repeat a settled reply as a second live line', () => {
+    const lines = chatLines(
+      view({
+        intent: 'fix auth',
+        status: 'awaiting_review',
+        stream: 'Fixed auth.ts',
+        turns: [turn(1, 'user', 'fix auth'), turn(2, 'agent', 'Fixed auth.ts')],
+      }),
+    );
+    expect(lines.map((line) => line.text)).toEqual(['fix auth', 'Fixed auth.ts']);
+  });
+
+  it('shows a reported tool name without mixing another lane', () => {
+    const claude = chatLines(
+      view({
+        intent: 'fix auth',
+        status: 'implementing',
+        turns: [turn(1, 'user', 'fix auth')],
+        output: { kind: 'tool', source: 'provider', text: null, tool: 'read_file' },
+      }),
+    );
+    const codex = chatLines(
+      view({
+        intent: 'review',
+        status: 'implementing',
+        agentId: 'codex',
+        taskId: 't2',
+        stream: 'Looking at api.ts',
+        turns: [turn(1, 'user', 'review', 't2')],
+      }),
+    );
+    expect(claude.at(-1)).toMatchObject({ agentId: 'claude', taskId: 't1', text: 'Using read_file' });
+    expect(codex.at(-1)).toMatchObject({ agentId: 'codex', taskId: 't2', text: 'Looking at api.ts' });
+    expect(claude.some((line) => line.text.includes('api.ts'))).toBe(false);
+    expect(codex.some((line) => line.text.includes('read_file'))).toBe(false);
   });
 
   it('is user, reply, user, reply from durable turns — not a pane scrape', () => {
@@ -140,10 +193,10 @@ describe('lanePhase', () => {
   });
 });
 
-function turn(seq: number, role: ChatTurn['role'], text: string): ChatTurn {
+function turn(seq: number, role: ChatTurn['role'], text: string, taskId = 't1'): ChatTurn {
   return {
-    id: `ct_${seq}`,
-    task_id: 't1',
+    id: `ct_${taskId}_${seq}`,
+    task_id: taskId,
     seq,
     role,
     origin: role === 'user' ? 'human' : 'provider',
@@ -158,18 +211,24 @@ function view(over: {
   status?: TaskView['status'];
   activity?: string;
   final?: string;
+  stream?: string;
   turns?: ChatTurn[];
+  agentId?: string;
+  taskId?: string;
+  output?: TaskView['output'];
 }): TaskView {
+  const taskId = over.taskId ?? 't1';
+  const agentId = over.agentId ?? 'claude';
   return {
     task: {
-      id: 't1',
+      id: taskId,
       repo_id: 'r1',
       chat_id: 'c1',
       title: 'Token refresh',
       intent: over.intent ?? 'x',
       origin_kind: 'manual',
       origin_ref: null,
-      agent_id: 'claude',
+      agent_id: agentId,
       base_ref: 'main',
       base_sha: 'abc',
       branch: 'osade/token-refresh/claude',
@@ -180,10 +239,10 @@ function view(over: {
     },
     status: over.status ?? 'queued',
     agent:
-      over.activity == null && over.final == null
+      over.activity == null && over.final == null && over.stream == null
         ? null
         : {
-            task_id: 't1',
+            task_id: taskId,
             substrate_pane_id: null,
             substrate_state: 'working',
             last_event: 'activity',
@@ -191,6 +250,7 @@ function view(over: {
             activity_text: over.activity ?? null,
             tool_name: null,
             final_message: over.final ?? null,
+            stream_text: over.stream ?? null,
             agent_session_id: null,
             pane_alive: true,
             last_probe_at: null,
@@ -205,7 +265,8 @@ function view(over: {
     latestVerifyRuns: [],
     needsYou: false,
     chatId: 'c1',
-    agentId: 'claude',
+    agentId,
+    output: over.output,
     attachment: 'worktree',
     branch: 'osade/token-refresh/claude',
     cwd: '/wt',

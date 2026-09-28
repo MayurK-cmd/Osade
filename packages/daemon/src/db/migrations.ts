@@ -444,6 +444,40 @@ CREATE TRIGGER memory_au AFTER UPDATE ON memory BEGIN
 END;
 `;
 
+const M012_STREAM_TEXT = `
+ALTER TABLE agent_fact ADD COLUMN stream_text TEXT;
+`;
+
+/**
+ * Context repositories belong to a chat, not a renderer session.
+ *
+ * `repo_id` is the identity. Path and GitHub remote stay on `repo` and are joined at read time.
+ * `access` is `read` for every attachment this version creates. `edit` is reserved so a later
+ * explicit promotion can open a lane without a new table. Cross-repo pull requests stay on the
+ * primary task; this row does not open one.
+ */
+const M013_CHAT_CONTEXT = `
+CREATE TABLE chat_context (
+  chat_id    TEXT NOT NULL,
+  repo_id    TEXT NOT NULL REFERENCES repo(id) ON DELETE CASCADE,
+  access     TEXT NOT NULL CHECK (access IN ('read', 'edit')),
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (chat_id, repo_id)
+);
+CREATE INDEX chat_context_repo_idx ON chat_context(repo_id);
+
+CREATE TRIGGER chat_context_fanout_insert AFTER INSERT ON chat_context BEGIN
+  INSERT INTO change_log (table_name, row_id, op, at)
+  SELECT 'chat_context', task.id, 'update', CAST(strftime('%s','now') AS INTEGER) * 1000
+  FROM task WHERE task.chat_id = NEW.chat_id;
+END;
+CREATE TRIGGER chat_context_fanout_delete AFTER DELETE ON chat_context BEGIN
+  INSERT INTO change_log (table_name, row_id, op, at)
+  SELECT 'chat_context', task.id, 'update', CAST(strftime('%s','now') AS INTEGER) * 1000
+  FROM task WHERE task.chat_id = OLD.chat_id;
+END;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     id: 1,
@@ -499,5 +533,15 @@ export const MIGRATIONS: readonly Migration[] = [
     id: 11,
     name: 'memory with FTS5 retrieval, no vector store',
     sql: M011_MEMORY_FTS,
+  },
+  {
+    id: 12,
+    name: 'live pane-delta text for terminal agents',
+    sql: M012_STREAM_TEXT,
+  },
+  {
+    id: 13,
+    name: 'chat context repositories, read-only unless promoted',
+    sql: M013_CHAT_CONTEXT,
   },
 ];

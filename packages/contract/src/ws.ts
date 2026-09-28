@@ -54,6 +54,34 @@ export const TaskView = z.object({
   cwd: z.string(),
   /** Durable conversation. Absent on older snapshots until the daemon is rebuilt. */
   turns: z.array(ChatTurn).optional(),
+  /**
+   * Other repositories attached to this chat. Identity is `repoId`; path is joined from `repo`.
+   * `read` may be inspected. `edit` is reserved for an explicit promotion and is not assigned yet.
+   */
+  contextRepos: z
+    .array(
+      z.object({
+        repoId: z.string(),
+        path: z.string(),
+        name: z.string(),
+        remote: z.string().nullable(),
+        branch: z.string(),
+        access: z.enum(['read', 'edit']),
+      }),
+    )
+    .optional(),
+  /**
+   * What the lane is showing right now, derived from facts. Pane text stays `partial_output`.
+   * `tool` is set only when `tool_name` was reported. Absent on older snapshots.
+   */
+  output: z
+    .object({
+      kind: z.enum(['partial_output', 'final_output', 'activity', 'tool', 'idle']),
+      source: z.enum(['pane', 'provider', 'title', 'none']),
+      text: z.string().nullable(),
+      tool: z.string().nullable(),
+    })
+    .optional(),
 });
 export type TaskView = z.infer<typeof TaskView>;
 
