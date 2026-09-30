@@ -242,40 +242,7 @@ export function Composer({
         </div>
       )}
       <div className="composer-frame">
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-        <button
-          type="button"
-          disabled={disabled || busy || photos.length >= MAX_COMPOSER_PHOTOS}
-          onClick={() => fileRef.current?.click()}
-          title="Attach photos"
-          aria-label="Attach photos"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 36,
-            height: 36,
-            padding: 0,
-            flexShrink: 0,
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--ink-2)',
-          }}
-        >
-          <PaperclipIcon />
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"
-          multiple
-          hidden
-          onChange={(event) => {
-            addFiles(Array.from(event.target.files ?? []));
-            event.target.value = '';
-          }}
-        />
-        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+        <div style={{ position: 'relative', width: '100%' }}>
           <textarea
             ref={ref}
             rows={1}
@@ -283,6 +250,7 @@ export function Composer({
             value={text}
             placeholder={hintText}
             autoFocus={autoFocus}
+            className="composer-textarea"
             onChange={(event) => setText(event.target.value)}
             onKeyDown={(event) => {
               if (suggestions.length > 0 && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
@@ -313,11 +281,11 @@ export function Composer({
             }}
             style={{
               fontSize: 'var(--t-m)',
-              minHeight: 36,
+              minHeight: 44,
               overflow: 'hidden',
               resize: 'none',
-              padding: '7px 10px',
-              lineHeight: '20px',
+              padding: '6px 8px',
+              lineHeight: '22px',
             }}
           />
           {suggestions.length > 0 && (
@@ -327,13 +295,14 @@ export function Composer({
                 left: 0,
                 right: 0,
                 bottom: '100%',
-                margin: 0,
+                marginBottom: 6,
                 padding: '4px 0',
                 listStyle: 'none',
-                background: 'var(--bg-2)',
-                border: '0.5px solid var(--line)',
+                background: 'var(--bg-1)',
+                border: '1px solid var(--line)',
                 borderRadius: 'var(--radius)',
-                zIndex: 5,
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+                zIndex: 25,
               }}
             >
               {suggestions.map((agent, i) => (
@@ -349,16 +318,18 @@ export function Composer({
                     style={{
                       display: 'flex',
                       width: '100%',
+                      alignItems: 'center',
                       justifyContent: 'space-between',
-                      background: i === hint ? 'var(--bg-3)' : 'transparent',
+                      background: i === hint ? 'var(--bg-2)' : 'transparent',
                       border: 'none',
                       borderRadius: 0,
                       color: agent.installed ? agentColor(agent.id) : 'var(--ink-3)',
                       textAlign: 'left',
-                      padding: '5px 10px',
+                      padding: '6px 12px',
+                      cursor: agent.installed ? 'pointer' : 'not-allowed',
                     }}
                   >
-                    <span>@{agent.id}</span>
+                    <span style={{ fontWeight: 600 }}>@{agent.id}</span>
                     <span style={{ color: 'var(--ink-3)', fontSize: 'var(--t-xs)' }}>
                       {agent.installed ? agent.displayName : 'Not on PATH'}
                     </span>
@@ -368,16 +339,59 @@ export function Composer({
             </ul>
           )}
         </div>
-        <button
-          type="button"
-          className="primary"
-          disabled={!ready}
-          onClick={send}
-          style={{ height: 36, padding: '0 12px', flexShrink: 0 }}
-        >
-          {busy ? 'Sending…' : held ? 'Hold' : 'Send'}
-        </button>
-      </div>
+        <div className="composer-bar">
+          <div className="composer-bar-left">
+            <button
+              type="button"
+              className="composer-icon-btn"
+              disabled={disabled || busy || photos.length >= MAX_COMPOSER_PHOTOS}
+              onClick={() => fileRef.current?.click()}
+              title="Attach photos"
+              aria-label="Attach photos"
+            >
+              <PaperclipIcon />
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"
+              multiple
+              hidden
+              onChange={(event) => {
+                addFiles(Array.from(event.target.files ?? []));
+                event.target.value = '';
+              }}
+            />
+          </div>
+          <div className="composer-bar-right">
+            <span className="composer-hint-tag">↵ send · ⇧↵ newline</span>
+            <button
+              type="button"
+              className={`composer-send-btn ${held ? 'held' : ''}`}
+              disabled={!ready}
+              onClick={send}
+              title={held ? 'Queues after turn completes' : 'Send message (Enter)'}
+            >
+              {busy ? (
+                <span>Sending…</span>
+              ) : held ? (
+                <>
+                  <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M4 3h3v10H4zM9 3h3v10H9z" />
+                  </svg>
+                  <span>Hold</span>
+                </>
+              ) : (
+                <>
+                  <span>Send</span>
+                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path d="M8 12.5V3.5M3.5 8l4.5-4.5 4.5 4.5" />
+                  </svg>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
       <p className="composer-hint">@agent to choose a lane. Enter sends. Shift+Enter adds a line.</p>
       {error && (

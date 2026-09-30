@@ -8,6 +8,23 @@ export interface ParsedMentions {
   targets: MentionTarget[];
 }
 
+/**
+ * A mentioned agent that was not installed when the message was composed.
+ *
+ * Validation runs before any task is created so the user sees the problem
+ * before a broken lane appears in the sidebar.
+ */
+export interface UnavailableAgent {
+  agentId: string;
+}
+
+export interface MentionValidation {
+  /** Agents present in the parsed mention set that are not installed. */
+  unavailable: UnavailableAgent[];
+  /** Agents present in the catalog that are not installed, indexed by id. */
+  ok: boolean;
+}
+
 function isMentionBoundary(before: string): boolean {
   return before.length === 0 || /\s/u.test(before.at(-1)!);
 }
@@ -108,4 +125,57 @@ export function lanePrompt(parsed: ParsedMentions, target: MentionTarget, raw: s
   const composed = composeLanePrompt(parsed.shared, target.text).trim();
   if (composed.length > 0) return composed;
   return raw.replace(/^@[a-z][a-z0-9_-]*\s*/iu, '').trim();
+}
+
+/**
+ * Validate mentioned agents against the installed catalog BEFORE creating any task.
+ *
+ * The catalog carries `installed: boolean` from the daemon's `agentCatalogList` query,
+ * which probes PATH at call time (§8.1). A mentioned agent that has a valid catalog id
+ * but is not installed should be reported here so the compositor can show a clear error
+ * rather than letting the launch fail silently later.
+ *
+ * If no mentions are present the validation is vacuously successful — the primary lane
+ * uses whatever default agent is configured for the repo, and that is validated separately
+ * at launch time by the daemon.
+ *
+ * Unknown @names (not in catalog at all) are not in `parsed.targets` — parseMentions
+ * already filters them to shared text — so they cannot trigger this path.
+ */
+export function validateMentionedAgents(
+  parsed: ParsedMentions,
+  catalog: ReadonlyArray<{ id: string; installed: boolean }>,
+): MentionValidation {
+  if (parsed.targets.length === 0) return { unavailable: [], ok: true };
+
+  const byId = new Map(catalog.map((a) => [a.id, a]));
+  const unavailable: UnavailableAgent[] = [];
+
+  for (const target of parsed.targets) {
+    const entry = byId.get(target.agentId);
+    // entry will always be present because parseMentions only accepts known catalog IDs,
+    // but guard defensively.
+    if (entry && !entry.installed) {
+      unavailable.push({ agentId: target.agentId });
+    }
+  }
+
+  return { unavailable, ok: unavailable.length === 0 };
+}
+
+/**
+ * Human-readable error for one or more unavailable agents.
+ *
+ * When some agents in a multi-mention message are available and some are not, the caller
+ * decides whether to proceed with the available ones or block the whole send. This function
+ * formats the diagnostic that is surfaced to the user either way.
+ */
+export function unavailableAgentMessage(unavailable: UnavailableAgent[]): string {
+  if (unavailable.length === 0) return '';
+  const names = unavailable.map((u) => `@${u.agentId}`).join(', ');
+  const verb = unavailable.length === 1 ? 'is' : 'are';
+  return (
+    `${names} ${verb} not installed. Install the agent binary and ensure it is on PATH, ` +
+    `then try again.`
+  );
 }

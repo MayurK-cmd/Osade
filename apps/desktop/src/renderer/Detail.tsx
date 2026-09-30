@@ -145,16 +145,40 @@ export function Detail({
     <div className="workspace" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <header className="workspace-head">
         <div className="workspace-title-row">
-          <AgentMark name={focused.agentId} size={22} />
+          <div className="workspace-agent-frame" title={`Agent: ${focused.agentId}`}>
+            <AgentMark name={focused.agentId} size={18} />
+          </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 className="workspace-title">{chatLabel(chat)}</h1>
-            <p className="session-meta">
-              {focused.agentId}
-              {focused.branch ? ` · ${focused.branch}` : ''}
-            </p>
+            <div className="session-meta-row">
+              <span className="meta-pill" style={{ color: agentColor(focused.agentId), borderColor: 'rgba(255, 255, 255, 0.08)' }}>
+                {focused.agentId}
+              </span>
+              {focused.branch && (
+                <span className="meta-pill mono" title={focused.branch}>
+                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                    <circle cx="4" cy="4" r="2" />
+                    <circle cx="4" cy="12" r="2" />
+                    <circle cx="12" cy="7" r="2" />
+                    <path d="M4 6v4M4 8a4 4 0 0 1 4-4h2" />
+                  </svg>
+                  <span>{focused.branch}</span>
+                </span>
+              )}
+              {focused.attachment === 'repo' && (
+                <span className="meta-pill" style={{ color: 'var(--ink-3)' }}>
+                  checkout
+                </span>
+              )}
+            </div>
           </div>
-          <span className="workspace-status" style={{ color: colour }}>
-            {copy.label}
+          <span className="workspace-status-badge" style={{ color: colour }}>
+            <span
+              className={`status-badge-dot ${copy.tone === 'live' ? 'dock-status-live' : ''}`}
+              style={{ background: colour }}
+              aria-hidden="true"
+            />
+            <span>{copy.label}</span>
           </span>
           <BranchControl
             task={focused}

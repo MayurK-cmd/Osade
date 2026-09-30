@@ -4,6 +4,7 @@ import type { TaskView } from '@osade/contract';
 
 import { AgentMark } from './agent-icon.js';
 import { AgentPicker, resolveNewChatAgent } from './AgentPicker.js';
+import osadeLogo from './assets/osade.png';
 import { Board } from './Board.js';
 import { CommandPalette } from './CommandPalette.js';
 import { photosPrompt, type ComposerPhoto } from './compose-photos.js';
@@ -24,7 +25,13 @@ import {
   withDigest,
   type ChatGroup,
 } from './lanes.js';
-import { lanePrompt, laneTarget, parseMentions } from './mentions.js';
+import {
+  lanePrompt,
+  laneTarget,
+  parseMentions,
+  unavailableAgentMessage,
+  validateMentionedAgents,
+} from './mentions.js';
 import { contextReposForChat } from './repo-context.js';
 import { RepoSettings, useAgentCatalog } from './RepoSettings.js';
 import { STATUS, TONE_COLOUR, ago, summarise } from './status.js';
@@ -396,6 +403,13 @@ export function App(): JSX.Element {
     try {
       const ids = catalog.map((a) => a.id);
       const parsed = parseMentions(message, ids);
+      // Agent availability validation — §OSADE §8.1.
+      // Runs before any task is created so the user sees a clear error
+      // rather than a broken lane appearing in the sidebar.
+      const availability = validateMentionedAgents(parsed, catalog);
+      if (!availability.ok) {
+        throw new Error(unavailableAgentMessage(availability.unavailable));
+      }
       const targets =
         parsed.targets.length > 0
           ? parsed.targets
@@ -497,6 +511,12 @@ export function App(): JSX.Element {
     );
     const ids = catalog.map((a) => a.id);
     const parsed = parseMentions(message, ids);
+    // Agent availability pre-flight (same guard as submitDraft).
+    const availability = validateMentionedAgents(parsed, catalog);
+    if (!availability.ok) {
+      setActionError(unavailableAgentMessage(availability.unavailable));
+      return;
+    }
     const primary = primaryLane(chat);
     if (chat.title === 'New chat') {
       const next = titleFrom(message);
@@ -1129,8 +1149,18 @@ function TabStrip({
   return (
     <div className="osade-tabs" role="tablist" aria-label="Open sessions">
       {sidebarHidden && onShowSidebar && (
-        <button type="button" className="ghost-btn" onClick={onShowSidebar} style={{ marginBottom: 6 }}>
-          Sidebar
+        <button
+          type="button"
+          className="tab-sidebar-toggle"
+          onClick={onShowSidebar}
+          title="Show sidebar"
+          aria-label="Show sidebar"
+        >
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <rect x="2.5" y="2.5" width="11" height="11" rx="2" />
+            <path d="M6 2.5v11" />
+          </svg>
+          <span>Sidebar</span>
         </button>
       )}
       {tabs.map((tab) => {
@@ -1149,9 +1179,13 @@ function TabStrip({
             className="osade-tab"
             onClick={() => onSelect(tab.id)}
           >
-            {agentId ? <AgentMark name={agentId} size={14} /> : <span className="session-dot" data-tone={tone} />}
-            {(tone === 'live' || tone === 'fail' || tone === 'needs') && (
-              <span className="session-dot" data-tone={tone} title={chat ? STATUS[chat.status].label : 'Draft'} />
+            {agentId ? (
+              <AgentMark name={agentId} size={14} />
+            ) : (
+              <span className="session-dot" data-tone={tone} />
+            )}
+            {tone === 'live' && (
+              <span className="dock-status-dot dock-status-live" data-tone="live" title="Agent active" />
             )}
             <span className="osade-tab-title">{title}</span>
             <span
@@ -1170,12 +1204,14 @@ function TabStrip({
         );
       })}
       {tabs.length === 0 ? (
-        <button type="button" className="ghost-btn" onClick={onNew} style={{ marginBottom: 6 }} aria-label="New chat">
+        <button type="button" className="tab-sidebar-toggle" onClick={onNew} aria-label="New chat">
           + New chat
         </button>
       ) : (
-        <button type="button" className="osade-tab-add" onClick={onNew} aria-label="New chat" title="New chat">
-          +
+        <button type="button" className="osade-tab-add" onClick={onNew} aria-label="New chat" title="New chat (⌘T)">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M8 3v10M3 8h10" />
+          </svg>
         </button>
       )}
     </div>
@@ -1222,13 +1258,13 @@ function ChatRow({
       }}
       style={{
         display: 'grid',
-        gridTemplateColumns: '2px 22px minmax(0, 1fr)',
+        gridTemplateColumns: '3px 22px minmax(0, 1fr)',
         gridTemplateRows: 'auto auto',
-        columnGap: 8,
-        rowGap: 2,
+        columnGap: 9,
+        rowGap: 3,
         alignItems: 'center',
         minHeight: 52,
-        padding: '8px 14px 8px 0',
+        padding: '8px 12px 8px 10px',
         borderBottom: '0.5px solid var(--line)',
         cursor: 'default',
       }}
@@ -1239,7 +1275,8 @@ function ChatRow({
           gridRow: '1 / 3',
           background: colour,
           alignSelf: 'stretch',
-          borderRadius: 1,
+          borderRadius: 2,
+          opacity: copy.tone === 'rest' ? 0.35 : 1,
         }}
         aria-hidden="true"
       />
@@ -1258,18 +1295,19 @@ function ChatRow({
           <span
             style={{
               position: 'absolute',
-              right: 0,
-              bottom: 0,
-              width: 16,
-              height: 16,
+              right: -2,
+              bottom: -2,
+              width: 15,
+              height: 15,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               background: 'var(--bg-2)',
-              borderRadius: 2,
+              border: '1px solid var(--bg-1)',
+              borderRadius: 3,
             }}
           >
-            <AgentMark name={behind.agentId} size={14} />
+            <AgentMark name={behind.agentId} size={13} />
           </span>
         )}
         <span
@@ -1277,17 +1315,17 @@ function ChatRow({
             position: 'absolute',
             left: 0,
             top: 0,
-            width: 16,
-            height: 16,
+            width: 17,
+            height: 17,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             background: 'var(--bg-2)',
-            borderRadius: 2,
-            boxShadow: stacked ? '0 0 0 1px var(--bg-0)' : undefined,
+            border: '1px solid var(--line)',
+            borderRadius: 3,
           }}
         >
-          <AgentMark name={primary.agentId} size={14} />
+          <AgentMark name={primary.agentId} size={15} />
         </span>
       </span>
       <div
@@ -1307,9 +1345,10 @@ function ChatRow({
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
-            fontSize: 'var(--t-m)',
+            fontSize: '13px',
+            fontWeight: selected ? 600 : 500,
             lineHeight: 1.3,
-            fontFamily: "ui-sans-serif, system-ui, 'Segoe UI', sans-serif",
+            color: 'var(--ink)',
           }}
         >
           {chatLabel(chat)}
@@ -1319,7 +1358,7 @@ function ChatRow({
             className="mono"
             style={{
               flexShrink: 0,
-              fontSize: 'var(--t-xs)',
+              fontSize: '11px',
               color: 'var(--ink-3)',
               lineHeight: 1.3,
             }}
@@ -1337,7 +1376,7 @@ function ChatRow({
           minWidth: 0,
         }}
       >
-        <span className="branch-clip" title={primary.branch}>
+        <span className="branch-clip" title={primary.branch} style={{ fontSize: '11px' }}>
           <span>{branch}</span>
         </span>
         {stacked && (
@@ -1449,44 +1488,79 @@ function Header({
   return (
     <header
       style={{
-        padding: '12px 12px 10px 16px',
+        padding: '12px 14px 10px 14px',
         borderBottom: '1px solid var(--line)',
         background: 'var(--bg-1)',
         minWidth: 0,
       }}
     >
       <div className="osade-brand">
-        <span className="osade-mark" aria-hidden="true">O</span>
-        <span className="osade-word">Osade</span>
+        <div className="osade-mark" title="Osade">
+          <img src={osadeLogo} alt="Osade" className="osade-logo" />
+        </div>
         {onHide && (
-          <button type="button" className="ghost-btn" onClick={onHide} style={{ marginLeft: 'auto' }} aria-label="Hide sidebar">
-            Hide
+          <button
+            type="button"
+            className="osade-hide-btn"
+            onClick={onHide}
+            aria-label="Hide sidebar"
+            title="Hide sidebar"
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+              <rect x="2.5" y="2.5" width="11" height="11" rx="2" />
+              <path d="M6 2.5v11" />
+            </svg>
+            <span>Hide</span>
           </button>
         )}
       </div>
-      <div className="osade-repo" title={repo?.slug ?? repo?.name ?? 'Osade'}>
-        {repo ? repo.name : 'No repository'}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
-        <div className="osade-summary" style={{ flex: 1 }}>{summary}</div>
+      <div className="osade-repo-row">
+        <svg className="repo-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+          <path d="M2 3.5h4.5l1.5 2H14v7.5H2z" />
+        </svg>
+        <div className="osade-repo" title={repo?.slug ?? repo?.name ?? 'Osade'}>
+          {repo ? repo.name : 'No repository'}
+        </div>
         {branch ? (
-          <span className="branch-tail" title={branch}>{branch}</span>
+          <span className="branch-tail" title={branch}>
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+              <circle cx="4" cy="4" r="2" />
+              <circle cx="4" cy="12" r="2" />
+              <circle cx="12" cy="7" r="2" />
+              <path d="M4 6v4M4 8a4 4 0 0 1 4-4h2" />
+            </svg>
+            <span>{branch}</span>
+          </span>
         ) : null}
       </div>
+      <div className="osade-summary">{summary}</div>
       <div className="osade-actions">
-        <button type="button" onClick={onSearch}>
-          Search <kbd>{chord('k')}</kbd>
+        <button type="button" className="osade-action-btn" onClick={onSearch} title="Search chats">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+            <circle cx="7" cy="7" r="4.5" />
+            <path d="M10.5 10.5 14 14" />
+          </svg>
+          <span>Search</span>
+          <kbd>{chord('k')}</kbd>
         </button>
         <button
           type="button"
-          title={view === 'board' ? 'List' : 'Kanban'}
+          className="osade-action-btn"
+          title={view === 'board' ? 'Switch to List view' : 'Switch to Kanban board'}
           onClick={() => onView(view === 'board' ? 'list' : 'board')}
         >
-          {view === 'board' ? 'List' : 'Kanban'}
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+            {view === 'board' ? <path d="M3 4.5h10M3 8h10M3 11.5h10" /> : <path d="M3 3h4v10H3zM9 3h4v6H9z" />}
+          </svg>
+          <span>{view === 'board' ? 'List' : 'Kanban'}</span>
         </button>
         {settings}
-        <button data-new-task onClick={onNew} className="primary">
-          New chat <kbd>{chord('t')}</kbd>
+        <button data-new-task onClick={onNew} className="primary osade-new-chat-btn" title="New chat">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M8 3.5v9M3.5 8h9" />
+          </svg>
+          <span>New chat</span>
+          <kbd>{chord('t')}</kbd>
         </button>
       </div>
     </header>
@@ -1511,41 +1585,63 @@ function SidebarFoot({
   return (
     <div className={className} style={{ position: 'relative', background: 'var(--bg-1)' }}>
       <div className="status-dock" aria-label="Application status">
-      <DockRow icon="agents" label="Agents" value={working === 0 ? 'Idle' : `${working} running`} tone={working === 0 ? undefined : 'var(--st-live)'} />
-      <DockRow icon="chats" label="Chats" value={String(total)} />
-      <DockRow
-        icon="daemon"
-        label="Daemon"
-        value={connected ? 'Connected' : 'Reconnecting'}
-        tone={connected ? 'var(--st-live)' : 'var(--st-fail)'}
-      />
-      {github.signedIn ? (
-        <DockRow icon="github" label="GitHub" value={github.login ?? 'Signed in'} tone="var(--st-live)" />
-      ) : (
-        <details>
-          <summary className="dock-row">
-            <DockIcon name="github" />
-            <span className="dock-label">GitHub</span>
-            <span className="dock-value" style={{ color: 'var(--ink-3)' }}>Sign in</span>
-          </summary>
-          <div
-            style={{
-              position: 'absolute',
-              left: 8,
-              right: 8,
-              bottom: '100%',
-              marginBottom: 6,
-              zIndex: 20,
-              background: 'var(--bg-1)',
-              border: '0.5px solid var(--line)',
-              borderRadius: 'var(--radius)',
-              padding: 12,
-            }}
-          >
-            <GitHubSignIn status={github} onSignedIn={onGithubSignedIn} />
-          </div>
-        </details>
-      )}
+        <DockRow
+          icon="agents"
+          label="Agents"
+          value={working === 0 ? 'Idle' : `${working} running`}
+          tone={working === 0 ? 'var(--ink-3)' : 'var(--st-live)'}
+          statusDot={working > 0 ? 'live' : 'idle'}
+        />
+        <DockRow
+          icon="chats"
+          label="Chats"
+          value={String(total)}
+        />
+        <DockRow
+          icon="daemon"
+          label="Daemon"
+          value={connected ? 'Connected' : 'Reconnecting'}
+          tone={connected ? 'var(--st-live)' : 'var(--st-fail)'}
+          statusDot={connected ? 'live' : 'fail'}
+        />
+        {github.signedIn ? (
+          <DockRow
+            icon="github"
+            label="GitHub"
+            value={github.login ?? 'Signed in'}
+            tone="var(--ink)"
+            statusDot="live"
+          />
+        ) : (
+          <details>
+            <summary className="dock-row">
+              <div className="dock-row-lead">
+                <DockIcon name="github" />
+                <span className="dock-label">GitHub</span>
+              </div>
+              <div className="dock-row-val">
+                <span className="dock-badge-action">Sign in</span>
+              </div>
+            </summary>
+            <div
+              style={{
+                position: 'absolute',
+                left: 8,
+                right: 8,
+                bottom: '100%',
+                marginBottom: 6,
+                zIndex: 20,
+                background: 'var(--bg-1)',
+                border: '0.5px solid var(--line)',
+                borderRadius: 'var(--radius)',
+                padding: 12,
+                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.4)',
+              }}
+            >
+              <GitHubSignIn status={github} onSignedIn={onGithubSignedIn} />
+            </div>
+          </details>
+        )}
       </div>
     </div>
   );
@@ -1556,17 +1652,30 @@ function DockRow({
   label,
   value,
   tone,
+  statusDot,
 }: {
   icon: 'agents' | 'chats' | 'daemon' | 'github';
   label: string;
   value: string;
   tone?: string;
+  statusDot?: 'live' | 'fail' | 'idle';
 }): JSX.Element {
   return (
     <div className="dock-row">
-      <DockIcon name={icon} />
-      <span className="dock-label">{label}</span>
-      <span className="dock-value" style={{ color: tone }}>{value}</span>
+      <div className="dock-row-lead">
+        <DockIcon name={icon} />
+        <span className="dock-label">{label}</span>
+      </div>
+      <div className="dock-row-val">
+        {statusDot && (
+          <span
+            className={`dock-status-dot ${statusDot === 'live' ? 'dock-status-live' : ''}`}
+            data-tone={statusDot}
+            aria-hidden="true"
+          />
+        )}
+        <span className="dock-value" style={{ color: tone }}>{value}</span>
+      </div>
     </div>
   );
 }
@@ -1577,21 +1686,23 @@ function DockIcon({ name }: { name: 'agents' | 'chats' | 'daemon' | 'github' }):
     viewBox: '0 0 16 16',
     fill: 'none',
     stroke: 'currentColor',
-    strokeWidth: 1.4,
+    strokeWidth: 1.5,
     'aria-hidden': true as const,
   };
   if (name === 'chats') {
     return (
       <svg {...common}>
-        <path d="M3 4.5h10v6.2H6.2L3 12.8z" />
+        <path d="M2.5 4h11v6.2H5.8L2.5 13z" />
       </svg>
     );
   }
   if (name === 'daemon') {
     return (
       <svg {...common}>
-        <rect x="3" y="3" width="10" height="7" rx="1" />
-        <path d="M6 12.5h4M8 10v2.5" />
+        <rect x="2.5" y="3" width="11" height="4.5" rx="1" />
+        <rect x="2.5" y="9" width="11" height="4.5" rx="1" />
+        <circle cx="5" cy="5.25" r="0.8" fill="currentColor" />
+        <circle cx="5" cy="11.25" r="0.8" fill="currentColor" />
       </svg>
     );
   }
@@ -1604,8 +1715,9 @@ function DockIcon({ name }: { name: 'agents' | 'chats' | 'daemon' | 'github' }):
   }
   return (
     <svg {...common}>
-      <circle cx="8" cy="8" r="2.2" />
-      <path d="M8 2.4v1.6M8 12v1.6M2.4 8h1.6M12 8h1.6M4 4l1.1 1.1M10.9 10.9 12 12M12 4l-1.1 1.1M5.1 10.9 4 12" />
+      <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" />
+      <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+      <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2" />
     </svg>
   );
 }
@@ -1658,7 +1770,9 @@ function NothingSelected({
   return (
     <div className="workspace-empty">
       <div className="workspace-empty-card">
-        <span className="osade-mark" aria-hidden="true">O</span>
+        <div className="workspace-empty-logo" aria-hidden="true">
+          <img src={osadeLogo} alt="Osade" className="workspace-empty-logo-img" />
+        </div>
         <h1>Agent workspace</h1>
         <p>
           {hasChats
