@@ -73,6 +73,11 @@ isolated worktrees automatically, so two agents are never writing to the same tr
 chat. The composer stays live on all of them and attaches what you're looking at, so "why did you
 change this" works while you're reading a hunk.
 
+**Show the agent the screen, not a description of it.** Open the browser pane beside the chat, point
+it at whatever you are running, and screenshot it. Click the thing you mean: it is boxed, named, and
+the next message you send carries the annotated screenshot and a note saying which page it came from
+and which element it is. The agent opens the file and looks at it.
+
 **Approve anything that leaves the machine.** Commits, pushes, PRs and comments are gated. Osade
 never merges.
 
@@ -121,6 +126,12 @@ The long version is in [docs/OSADE.md](docs/OSADE.md).
 ## Status
 
 Early and moving fast. Usable, not stable.
+
+The **browser view** is new: a pane beside the chat (`Ctrl+Shift+B`) that shows whatever you are
+running, screenshots on demand, and lets you click an element in the capture to tag it. The next
+message you send carries the annotated screenshot plus a note naming the page and the element, and
+the agent opens the file and looks at it. It runs in its own `WebContentsView` — no bridge, no
+Node, its own cookie jar — and it opens `http` and `https` only.
 
 ## Docs
 
