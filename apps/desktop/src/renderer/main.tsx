@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import { App } from './App.js';
 import './tokens.css';
+import './workspace.css';
 
 let wheelAcc = 0;
 window.addEventListener(

@@ -60,6 +60,11 @@ export const AgentFact = z.object({
   tool_name: z.string().nullable(),
   /** No source for claude or codex — see §7.1. */
   final_message: z.string().nullable(),
+  /**
+   * Pane-delta text while a turn is still running. Claude, Codex, and OpenCode do not
+   * stream a final message, so this is what the chat shows until the turn settles.
+   */
+  stream_text: z.string().nullable().optional(),
   /** From `AgentInfo.agent_session`, for resume after a substrate restart (§8.2.1). */
   agent_session_id: z.string().nullable(),
   pane_alive: z.boolean(),

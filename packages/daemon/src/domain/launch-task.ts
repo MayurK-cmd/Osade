@@ -36,6 +36,9 @@ import {
   sendTurn as recordTurn,
   settleAgentReply,
 } from './chat-turns.js';
+import { assertCanEditRepo, contextEnv, listChatContext } from './chat-context.js';
+import { promptWithCollab } from './collab-context.js';
+import { chooseFinalReply, nextStreamText } from './agent-output.js';
 import { paneDelta } from './pane-delta.js';
 import type { Checkpoints } from './checkpoints.js';
 import {
@@ -238,6 +241,7 @@ export class LaunchTask {
   readonly #onWarning: (message: string) => void;
   readonly #checkpoints: Checkpoints | null;
   readonly #readyTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  readonly #replyStreams = new Map<string, ReturnType<typeof setInterval>>();
   readonly #promptAt = new Map<string, string>();
 
   constructor(
@@ -260,6 +264,7 @@ export class LaunchTask {
     if (input.agentId) requireAgent(input.agentId);
 
     const repoId = await this.ensureRepo(input.repoPath);
+    if (input.chatId) assertCanEditRepo(this.#db, input.chatId, repoId);
     const repo = this.#db.prepare('SELECT * FROM repo WHERE id = ?').get(repoId) as {
       path: string;
       default_agent: string | null;
@@ -452,6 +457,7 @@ export class LaunchTask {
         env: {
           OSADE_TASK_ID: taskId,
           OSADE_REPO_PATH: repo.path,
+          ...contextEnv(this.#db, task.chat_id),
         },
       });
 
@@ -982,15 +988,19 @@ export class LaunchTask {
     options: { wait?: boolean; origin?: 'human' | 'automation' } = {},
   ): Promise<void> {
     const agentId = this.#agentIdFor(taskId);
-    const turn = await recordTurn(this.#db, (id, body, wait) => this.prompt(id, body, wait), {
-      taskId,
-      text,
-      origin: options.origin ?? 'human',
-      now: this.#now(),
-      wait: options.wait,
-      agentId,
-      readyTimeoutMs: readyTimeoutMs(agentId),
-    });
+    const turn = await recordTurn(
+      this.#db,
+      (id, body, wait) => promptWithCollab(this.#db, id, body, (full) => this.prompt(id, full, wait)),
+      {
+        taskId,
+        text,
+        origin: options.origin ?? 'human',
+        now: this.#now(),
+        wait: options.wait,
+        agentId,
+        readyTimeoutMs: readyTimeoutMs(agentId),
+      },
+    );
     if (turn.delivery === 'queued' && !composerReady(this.#db, taskId)) this.#armReadyTimeout(taskId);
     else this.#disarmReadyTimeout(taskId);
   }
@@ -1000,7 +1010,7 @@ export class LaunchTask {
     const agentId = this.#agentIdFor(taskId);
     await dispatchQueued(
       this.#db,
-      (id, body, wait) => this.prompt(id, body, wait),
+      (id, body, wait) => promptWithCollab(this.#db, id, body, (full) => this.prompt(id, full, wait)),
       taskId,
       false,
       this.#now(),
@@ -1011,12 +1021,9 @@ export class LaunchTask {
 
   /** Persist whatever the agent said when the pane went quiet. */
   async settle(taskId: string): Promise<void> {
+    this.#stopReplyStream(taskId);
     const task = getTask(this.#db, taskId);
     const entry = agentEntry(task?.agent_id ?? this.#agentIdFor(taskId));
-    if (entry && hasCapability(entry, 'reports-final-message')) {
-      settleAgentReply(this.#db, taskId, this.#now());
-      return;
-    }
     const before = this.#promptAt.get(taskId) ?? this.#promptSurface(taskId);
     const after = await this.readTranscript(taskId, 80);
     const lastUser = this.#db
@@ -1026,14 +1033,22 @@ export class LaunchTask {
            ORDER BY seq DESC LIMIT 1`,
       )
       .get(taskId) as { text: string } | undefined;
-    settleAgentReply(this.#db, taskId, this.#now(), {
-      body: paneDelta(
-        before,
-        after?.text ?? '',
-        lastUser?.text ?? '',
-        entry?.transcriptTrim ?? [],
-      ),
+    const fact = this.#db
+      .prepare('SELECT stream_text, final_message FROM agent_fact WHERE task_id = ?')
+      .get(taskId) as { stream_text: string | null; final_message: string | null } | undefined;
+    const delta = paneDelta(
+      before,
+      after?.text ?? '',
+      lastUser?.text ?? '',
+      entry?.transcriptTrim ?? [],
+    );
+    const reply = chooseFinalReply({
+      finalMessage: fact?.final_message,
+      paneText: delta,
+      streamText: fact?.stream_text,
     });
+    settleAgentReply(this.#db, taskId, this.#now(), { body: reply.text });
+    this.#clearStreamText(taskId);
   }
 
   /**
@@ -1059,8 +1074,9 @@ export class LaunchTask {
     const surface = before?.text ?? '';
     this.#promptAt.set(taskId, surface);
     this.#db
-      .prepare('UPDATE agent_fact SET prompt_surface = ? WHERE task_id = ?')
+      .prepare('UPDATE agent_fact SET prompt_surface = ?, stream_text = NULL WHERE task_id = ?')
       .run(surface, taskId);
+    this.#startReplyStream(taskId);
 
     // §4.2 — prefer one blocking call over prompt-then-poll: each connection is a substrate thread.
     const params: SubstrateMethodParams['agent.prompt'] = wait
@@ -1079,10 +1095,66 @@ export class LaunchTask {
         return;
       } catch (err) {
         const stalled = err instanceof SubstrateApiError && err.code === 'agent_prompt_stalled';
-        if (!stalled || attempt === 2) throw err;
+        if (!stalled || attempt === 2) {
+          this.#stopReplyStream(taskId);
+          throw err;
+        }
         this.#onWarning(`prompt to ${taskId} stalled on submission; retrying once`);
         await new Promise((resolve) => setTimeout(resolve, 1_000));
       }
+    }
+  }
+
+  /**
+   * While a turn is open, read the pane at 1 Hz and store the delta.
+   * Claude, Codex, and OpenCode are terminal UIs: nothing else pushes their words into the chat.
+   */
+  #startReplyStream(taskId: string): void {
+    this.#stopReplyStream(taskId);
+    const timer = setInterval(() => {
+      void this.#tickReplyStream(taskId);
+    }, 1_000);
+    timer.unref?.();
+    this.#replyStreams.set(taskId, timer);
+  }
+
+  #stopReplyStream(taskId: string): void {
+    const timer = this.#replyStreams.get(taskId);
+    if (!timer) return;
+    clearInterval(timer);
+    this.#replyStreams.delete(taskId);
+  }
+
+  #clearStreamText(taskId: string): void {
+    this.#db.prepare('UPDATE agent_fact SET stream_text = NULL WHERE task_id = ?').run(taskId);
+  }
+
+  async #tickReplyStream(taskId: string): Promise<void> {
+    try {
+      const task = getTask(this.#db, taskId);
+      const entry = agentEntry(task?.agent_id ?? this.#agentIdFor(taskId));
+      if (entry && hasCapability(entry, 'reports-final-message')) {
+        this.#stopReplyStream(taskId);
+        return;
+      }
+      const before = this.#promptAt.get(taskId) ?? this.#promptSurface(taskId);
+      const after = await this.readTranscript(taskId, 80);
+      const lastUser = this.#db
+        .prepare(
+          `SELECT text FROM chat_turn
+             WHERE task_id = ? AND role = 'user' AND delivery IN ('accepted', 'sending')
+             ORDER BY seq DESC LIMIT 1`,
+        )
+        .get(taskId) as { text: string } | undefined;
+      const body = paneDelta(before, after?.text ?? '', lastUser?.text ?? '', entry?.transcriptTrim ?? []);
+      const current = this.#db
+        .prepare('SELECT stream_text FROM agent_fact WHERE task_id = ?')
+        .get(taskId) as { stream_text: string | null } | undefined;
+      const next = nextStreamText(current?.stream_text, body);
+      if (next == null) return;
+      this.#db.prepare('UPDATE agent_fact SET stream_text = ? WHERE task_id = ?').run(next, taskId);
+    } catch (err) {
+      this.#onWarning(`reply stream for ${taskId}: ${(err as Error).message}`);
     }
   }
 
@@ -1163,7 +1235,14 @@ export class LaunchTask {
    * a separate, explicit action (§13.4), and launching must never block on it.
    */
   async #writeContext(
-    task: { id: string; worktree_path: string | null; intent: string; base_ref: string; base_sha: string },
+    task: {
+      id: string;
+      chat_id: string;
+      worktree_path: string | null;
+      intent: string;
+      base_ref: string;
+      base_sha: string;
+    },
     repo: { id: string; path: string; gh_owner: string | null; gh_name: string | null },
   ): Promise<string> {
     const dir = task.worktree_path
@@ -1206,7 +1285,18 @@ export class LaunchTask {
       .run(task.id, rendered.included, rendered.omitted, this.#now());
 
     await mkdir(dir, { recursive: true });
-    await writeFile(path, rendered.body, 'utf8');
+    const contexts = listChatContext(this.#db, task.chat_id);
+    const suffix =
+      contexts.length === 0
+        ? ''
+        : [
+            '',
+            '## Context repositories',
+            'These checkouts are read-only for this chat. Inspect them in place. Edit only this worktree.',
+            ...contexts.map((repo) => `- ${repo.name} (${repo.access}): ${repo.path}`),
+            '',
+          ].join('\n');
+    await writeFile(path, `${rendered.body}${suffix}`, 'utf8');
     return path;
   }
 

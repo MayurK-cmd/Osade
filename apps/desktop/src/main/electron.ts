@@ -350,11 +350,30 @@ async function runSmokeShot(target: BrowserWindow): Promise<void> {
     // without this the only thing a smoke run can ever see is the ledger.
     const clickSelector = process.env.OSADE_SMOKE_CLICK;
     if (clickSelector) {
-      const clicked = await target.webContents.executeJavaScript(
-        `(() => { const el = document.querySelector(${JSON.stringify(clickSelector)});
-                  if (!el) return false; el.click(); return true; })()`,
-      );
-      if (!clicked) throw new Error(`nothing matched ${clickSelector}`);
+      let clicked = false;
+      for (let attempt = 0; attempt < 25; attempt++) {
+        // If first-run onboarding screen is showing, dismiss it
+        await target.webContents.executeJavaScript(`(() => {
+          localStorage.setItem('osade.github-skipped', '1');
+          for (const b of document.querySelectorAll('button')) {
+            if (b.textContent && b.textContent.includes('Not now')) b.click();
+          }
+        })()`);
+
+        clicked = await target.webContents.executeJavaScript(
+          `(() => { const el = document.querySelector(${JSON.stringify(clickSelector)});
+                    if (!el) return false; el.click(); return true; })()`,
+        );
+        if (clicked) break;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      if (!clicked) {
+        const html = await target.webContents.executeJavaScript('document.body.innerHTML');
+        console.log('[smoke debug html]:', html.slice(0, 1000));
+        const image = await target.webContents.capturePage();
+        writeFileSync(path, new Uint8Array(image.toPNG()));
+        throw new Error(`nothing matched ${clickSelector}`);
+      }
       await new Promise((resolve) => setTimeout(resolve, 1_500));
     }
 

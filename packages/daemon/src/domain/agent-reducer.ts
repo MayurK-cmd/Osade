@@ -166,6 +166,7 @@ export function emptyAgentFact(taskId: string): AgentFact {
     activity_text: null,
     tool_name: null,
     final_message: null,
+    stream_text: null,
     agent_session_id: null,
     pane_alive: false,
     last_probe_at: null,

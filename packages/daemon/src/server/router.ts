@@ -22,6 +22,12 @@ import {
   UnknownAgentError,
 } from '../domain/agent-catalog.js';
 import type { Gates } from '../domain/gates.js';
+import {
+  ContextReadOnlyError,
+  assertWritablePath,
+  attachContextRepo,
+  detachContextRepo,
+} from '../domain/chat-context.js';
 import { AgentLiveError, BranchHeldError, LaneIsolatedError, type LaunchTask } from '../domain/launch-task.js';
 import { TaskShells } from '../domain/task-shell.js';
 import { NoHeadlessAgentError, type HeadlessRuns } from '../domain/headless-run.js';
@@ -50,6 +56,7 @@ import {
   listWorkingChanges,
   readChangeDiff,
   readFile as readTaskFile,
+  safeResolve,
   writeFile as writeTaskFile,
 } from '../domain/files.js';
 import type { Triage, TriageKind } from '../domain/triage.js';
@@ -179,6 +186,9 @@ export const appRouter = t.router({
         if (input.agentId) requireAgent(input.agentId);
         return await ctx.launcher.createTask(input);
       } catch (err) {
+        if (err instanceof ContextReadOnlyError) {
+          throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message });
+        }
         unknownAgent(err);
       }
     }),
@@ -394,8 +404,12 @@ export const appRouter = t.router({
     .mutation(({ ctx, input }) => {
       const located = locateTaskCwd(ctx, input.taskId);
       try {
+        assertWritablePath(ctx.db, input.taskId, safeResolve(located.cwd, input.path));
         return writeTaskFile(located.cwd, input.path, input.text);
       } catch (err) {
+        if (err instanceof ContextReadOnlyError) {
+          throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message });
+        }
         throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message });
       }
     }),
@@ -688,6 +702,42 @@ export const appRouter = t.router({
         defaultAgent: repo.default_agent,
         taskCount: counted.n,
       };
+    }),
+
+  chatContextAdd: t.procedure
+    .input(z.object({ chatId: z.string().min(1), path: z.string().min(1) }))
+    .output(
+      z.object({
+        repoId: z.string(),
+        path: z.string(),
+        name: z.string(),
+        remote: z.string().nullable(),
+        branch: z.string(),
+        access: z.enum(['read', 'edit']),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const root = await repoRoot(input.path);
+      if (!root) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: `${input.path} is not inside a git repository.`,
+        });
+      }
+      try {
+        const repoId = await ctx.launcher.ensureRepo(root);
+        return attachContextRepo(ctx.db, input.chatId, repoId, ctx.now());
+      } catch (err) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: (err as Error).message });
+      }
+    }),
+
+  chatContextRemove: t.procedure
+    .input(z.object({ chatId: z.string().min(1), repoId: z.string().min(1) }))
+    .output(z.object({ ok: z.literal(true) }))
+    .mutation(({ ctx, input }) => {
+      detachContextRepo(ctx.db, input.chatId, input.repoId);
+      return { ok: true as const };
     }),
 
   repoRulesGet: t.procedure

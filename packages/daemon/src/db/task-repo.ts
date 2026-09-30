@@ -69,6 +69,7 @@ export function getAgentFact(db: Db, taskId: string): AgentFact | null {
     activity_text: (r.activity_text as string | null) ?? null,
     tool_name: (r.tool_name as string | null) ?? null,
     final_message: (r.final_message as string | null) ?? null,
+    stream_text: (r.stream_text as string | null) ?? null,
     agent_session_id: (r.agent_session_id as string | null) ?? null,
     pane_alive: int2bool(r.pane_alive),
     last_probe_at: (r.last_probe_at as number | null) ?? null,

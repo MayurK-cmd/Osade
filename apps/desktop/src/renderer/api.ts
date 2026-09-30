@@ -230,6 +230,19 @@ export const api = {
   taskSend: (taskId: string, text: string, wait?: boolean) =>
     call('mutation', 'taskSend', { taskId, text, wait }) as Promise<{ ok: true }>,
 
+  chatContextAdd: (chatId: string, path: string) =>
+    call('mutation', 'chatContextAdd', { chatId, path }) as Promise<{
+      repoId: string;
+      path: string;
+      name: string;
+      remote: string | null;
+      branch: string;
+      access: 'read' | 'edit';
+    }>,
+
+  chatContextRemove: (chatId: string, repoId: string) =>
+    call('mutation', 'chatContextRemove', { chatId, repoId }) as Promise<{ ok: true }>,
+
   taskDropImages: (
     taskId: string,
     files: { name: string; mime: string; data: string }[],

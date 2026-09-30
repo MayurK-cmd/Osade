@@ -4,6 +4,7 @@ import type { Db } from '../db/index.js';
 import { getAgentFact } from '../db/task-repo.js';
 import { reduceAgentInput, type AgentInput } from '../domain/agent-reducer.js';
 import { classifyExternalBlock } from '../domain/external-block.js';
+import { activityFromStatus } from '../domain/agent-output.js';
 import type { SubstrateClient } from './client.js';
 import { SubstrateEventStream, type SubstrateEventEnvelope, type Subscription } from './event-stream.js';
 
@@ -240,6 +241,7 @@ export class SubstrateEventSubscriber {
       agent_status?: SubstrateAgentStatus;
       title?: string | null;
       state_change_seq?: number;
+      state_labels?: Record<string, string> | null;
     };
     if (!data.agent_status) return;
 
@@ -251,7 +253,11 @@ export class SubstrateEventSubscriber {
       // reconcile is what re-anchors to the substrate's authoritative counter.
       seq: this.#nextSeqFor(taskId),
       at: this.#now(),
-      activityText: data.title ?? undefined,
+      activityText: activityFromStatus({
+        title: data.title,
+        status: data.agent_status,
+        stateLabels: data.state_labels,
+      }),
     });
 
     // Session-limit / auth copy lives in the pane dump, not the title. Classify after `done`
