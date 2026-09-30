@@ -50,3 +50,4 @@ vendor/runtime/*/aarch64-*/
 packages/*/dist/
 vendor/node/
 release/
+vendor/
